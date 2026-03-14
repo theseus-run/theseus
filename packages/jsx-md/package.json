@@ -43,7 +43,7 @@
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5"
+    "@types/bun": "1.3.10",
+    "typescript": "5.9.3"
   }
 }

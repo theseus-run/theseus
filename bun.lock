@@ -4,15 +4,19 @@
   "workspaces": {
     "": {
       "name": "theseus",
+    },
+    "packages/jsx-md": {
+      "name": "@theseus.run/jsx-md",
+      "version": "0.1.2",
       "devDependencies": {
-        "@types/bun": "latest",
-      },
-      "peerDependencies": {
-        "typescript": "^5",
+        "@types/bun": "1.3.10",
+        "typescript": "5.9.3",
       },
     },
   },
   "packages": {
+    "@theseus.run/jsx-md": ["@theseus.run/jsx-md@workspace:packages/jsx-md"],
+
     "@types/bun": ["@types/bun@1.3.10", "", { "dependencies": { "bun-types": "1.3.10" } }, "sha512-0+rlrUrOrTSskibryHbvQkDOWRJwJZqZlxrUs1u4oOoTln8+WIXBPmAuCF35SWB2z4Zl3E84Nl/D0P7803nigQ=="],
 
     "@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
