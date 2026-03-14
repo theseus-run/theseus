@@ -5,11 +5,11 @@ import { render, createContext, withContext, useContext } from '../index.ts';
 import type { VNode } from '../index.ts';
 
 // ---------------------------------------------------------------------------
-// Basic round-trip
+// Basic round-trip — withContext (lower-level API)
 // ---------------------------------------------------------------------------
 
 describe('createContext / useContext / withContext', () => {
-  test('useContext returns the default value outside any withContext', () => {
+  test('useContext returns the default value outside any provider', () => {
     const ctx = createContext('default');
     expect(useContext(ctx)).toBe('default');
   });
@@ -45,11 +45,124 @@ describe('createContext / useContext / withContext', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Context in render
+// Provider JSX API — matches React's Context.Provider pattern
+// ---------------------------------------------------------------------------
+
+describe('Context.Provider', () => {
+  test('Provider passes value to useContext inside render', () => {
+    const ThemeCtx = createContext('light');
+
+    function ThemedBox(): string {
+      const theme = useContext(ThemeCtx);
+      return `theme=${theme}`;
+    }
+
+    expect(render(
+      <ThemeCtx.Provider value="dark">
+        <ThemedBox />
+      </ThemeCtx.Provider>
+    )).toBe('theme=dark');
+  });
+
+  test('useContext returns default outside Provider', () => {
+    const ThemeCtx = createContext('light');
+
+    function ThemedBox(): string {
+      return useContext(ThemeCtx);
+    }
+
+    expect(render(<ThemedBox />)).toBe('light');
+  });
+
+  test('Provider restores default after render completes', () => {
+    const ThemeCtx = createContext('light');
+
+    render(
+      <ThemeCtx.Provider value="dark">
+        {''}
+      </ThemeCtx.Provider>
+    );
+
+    expect(useContext(ThemeCtx)).toBe('light');
+  });
+
+  test('nested Providers — innermost value wins', () => {
+    const ThemeCtx = createContext('light');
+
+    function ShowTheme(): string {
+      return useContext(ThemeCtx);
+    }
+
+    expect(render(
+      <ThemeCtx.Provider value="dark">
+        <ThemeCtx.Provider value="high-contrast">
+          <ShowTheme />
+        </ThemeCtx.Provider>
+      </ThemeCtx.Provider>
+    )).toBe('high-contrast');
+  });
+
+  test('outer Provider value is restored after inner Provider exits', () => {
+    const ThemeCtx = createContext('light');
+
+    function ShowTheme(): string {
+      return useContext(ThemeCtx);
+    }
+
+    // The outer Provider renders two children:
+    // 1. inner Provider with 'high-contrast' wrapping ShowTheme
+    // 2. ShowTheme directly — should see 'dark', not 'high-contrast'
+    expect(render(
+      <ThemeCtx.Provider value="dark">
+        <>
+          <ThemeCtx.Provider value="high-contrast">
+            {''}
+          </ThemeCtx.Provider>
+          <ShowTheme />
+        </>
+      </ThemeCtx.Provider>
+    )).toBe('dark');
+  });
+
+  test('multiple independent contexts propagate independently', () => {
+    const LangCtx = createContext('en');
+    const ThemeCtx = createContext('light');
+
+    function ShowBoth(): string {
+      return `${useContext(LangCtx)}-${useContext(ThemeCtx)}`;
+    }
+
+    expect(render(
+      <LangCtx.Provider value="fr">
+        <ThemeCtx.Provider value="dark">
+          <ShowBoth />
+        </ThemeCtx.Provider>
+      </LangCtx.Provider>
+    )).toBe('fr-dark');
+  });
+
+  test('Provider renders children normally (passthrough when no consumer)', () => {
+    const Ctx = createContext('x');
+
+    expect(render(
+      <Ctx.Provider value="y">
+        {'hello'}
+      </Ctx.Provider>
+    )).toBe('hello');
+  });
+
+  test('Provider with no children renders empty string', () => {
+    const Ctx = createContext('x');
+    expect(render(<Ctx.Provider value="y" />)).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context in render — component reads Provider value
 // ---------------------------------------------------------------------------
 
 describe('context in render', () => {
-  test('component reads context value set by withContext wrapper', () => {
+  test('component reads context value set by Provider', () => {
     const ThemeCtx = createContext('light');
 
     function ThemedBox({ children }: { children?: VNode }): string {
@@ -57,10 +170,11 @@ describe('context in render', () => {
       return `[${theme}] ${render(children ?? null)}`;
     }
 
-    const result = withContext(ThemeCtx, 'dark', () =>
-      render(<ThemedBox>content</ThemedBox>)
-    );
-    expect(result).toBe('[dark] content');
+    expect(render(
+      <ThemeCtx.Provider value="dark">
+        <ThemedBox>content</ThemedBox>
+      </ThemeCtx.Provider>
+    )).toBe('[dark] content');
   });
 
   test('nested render calls each see their own context depth', () => {
@@ -70,10 +184,31 @@ describe('context in render', () => {
       return String(useContext(LevelCtx));
     }
 
-    const result = withContext(LevelCtx, 1, () =>
-      withContext(LevelCtx, 2, () => render(<ShowLevel />))
+    expect(render(
+      <LevelCtx.Provider value={1}>
+        <LevelCtx.Provider value={2}>
+          <ShowLevel />
+        </LevelCtx.Provider>
+      </LevelCtx.Provider>
+    )).toBe('2');
+  });
+
+  test('withContext and Provider interoperate on the same context', () => {
+    const Ctx = createContext('default');
+
+    function ShowValue(): string {
+      return useContext(Ctx);
+    }
+
+    // withContext wrapping a render that uses Provider — innermost wins
+    const result = withContext(Ctx, 'outer', () =>
+      render(
+        <Ctx.Provider value="inner">
+          <ShowValue />
+        </Ctx.Provider>
+      )
     );
-    expect(result).toBe('2');
+    expect(result).toBe('inner');
   });
 });
 
@@ -91,7 +226,6 @@ describe('context error recovery', () => {
       });
     }).toThrow('render error');
 
-    // Stack must be clean — default is restored after throw
     expect(useContext(ctx)).toBe(0);
   });
 

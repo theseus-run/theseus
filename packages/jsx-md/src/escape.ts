@@ -24,7 +24,7 @@ export function escapeHtmlContent(s: string): string {
  * Markdown link syntax `[text](url)`.
  */
 export function encodeLinkUrl(url: string): string {
-  return url.replace(/[()]/g, (c) => encodeURIComponent(c));
+  return url.replace(/\(/g, '%28').replace(/\)/g, '%29');
 }
 
 /**

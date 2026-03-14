@@ -75,7 +75,7 @@ render(<ReviewerInstructions harness="opencode" firstPerson={true} />)
 
 No escaped backticks. Syntax highlighting in your editor. Conditionals are JSX expressions. Variants are props. Shared fragments are components.
 
-`render()` returns a plain string — no virtual DOM, no hydration, no React runtime anywhere in the chain.
+`render()` returns a plain string — no virtual DOM, no hydration, no React runtime anywhere in the chain. The API surface borrows React's shapes (`createContext`, `useContext`, `Context.Provider`) because they're the right shapes for this problem — not because React is involved.
 
 ---
 
@@ -102,9 +102,11 @@ Then in `tsconfig.json`:
 
 **Zero runtime dependencies.** The package ships TypeScript source with no third-party imports. Nothing gets added to your bundle.
 
-**Bun-first.** Ships TypeScript source directly, no compiled output. Works transparently in Bun: install, add two tsconfig lines, write TSX. The trade-off is real: vanilla Node.js without a bundler won't run `.ts` files from `node_modules`. If your stack is Vite, tsup, or esbuild, those handle it. If you're running bare Node, v0.1.0 doesn't have a solution for you yet.
+**Bun-first.** Ships TypeScript source directly, no compiled output. Works transparently in Bun: install, add two tsconfig lines, write TSX. The trade-off is real: vanilla Node.js without a bundler won't run `.ts` files from `node_modules`. If your stack is Vite, tsup, or esbuild, those handle it. If you're running bare Node, compiled output is on the roadmap.
 
-**JSX without React.** When you write `<H2>Title</H2>`, the transform calls `jsx(H2, { children: "Title" })`. `H2` is a plain function — takes props, returns a string. No virtual DOM, no reconciler, no fiber, no hooks. `render()` walks the VNode tree synchronously and concatenates. The output is deterministic: same input, same string, every time. You can test it with `expect(render(<MyPrompt />)).toMatchSnapshot()`.
+**JSX without the React runtime.** When you write `<H2>Title</H2>`, the transform calls `jsx(H2, { children: "Title" })`. `H2` is a plain function — takes props, returns a string. No virtual DOM, no reconciler, no fiber, no hydration. `render()` walks the VNode tree synchronously and concatenates. The output is deterministic: same input, same string, every time. You can test it with `expect(render(<MyPrompt />)).toBe(expected)`.
+
+The API borrows React's shapes where they fit — `createContext`, `useContext`, `Context.Provider` — without React's runtime constraints. `useContext` has no rules-of-hooks: it reads synchronously from a stack and can be called anywhere during a render.
 
 **TypeScript-first.** All components and their props are typed. `render()` accepts `VNode`, returns `string`. Wrong usage is a compile error, not a runtime surprise.
 
@@ -237,6 +239,41 @@ Attributes are typed (`index={1}` → `index="1"`), boolean `true` attrs render 
 
 ---
 
+## Context API
+
+Prop-drilling is the natural failure mode for prompt trees with conditional sections. A component deep in the tree needs to know which harness it's rendering for, and that value ends up threaded through every component between the root and the consumer.
+
+`createContext` / `useContext` / `Context.Provider` — same shape as React, synchronous.
+
+```tsx
+import { render, createContext, useContext, P, Ul, Li } from "@theseus.run/jsx-md";
+
+const HarnessCtx = createContext<'opencode' | 'copilot'>('copilot');
+
+function Instructions() {
+  const harness = useContext(HarnessCtx);
+  return (
+    <Ul>
+      <Li>Always verify output before claiming done.</Li>
+      {harness === 'opencode' && <Li>Use task() for multi-step subtasks.</Li>}
+    </Ul>
+  );
+}
+
+// Set the value once at the root — no prop threading:
+const prompt = render(
+  <HarnessCtx.Provider value="opencode">
+    <Instructions />
+  </HarnessCtx.Provider>
+);
+```
+
+`useContext` returns the default value when called outside a Provider. Providers nest correctly — innermost wins. The context stack is restored after each Provider exits, including on exceptions.
+
+`withContext(ctx, value, fn)` is a lower-level escape hatch for non-JSX call sites. It shares the same stack as Provider — they interoperate on the same context object.
+
+---
+
 ## Primitives
 
 | Component | Markdown output |
@@ -270,45 +307,9 @@ Attributes are typed (`index={1}` → `index="1"`), boolean `true` attrs render 
 
 ## Roadmap
 
-**v0.1.0** — current. TypeScript source, Bun-first. Markdown primitives + XML intrinsic elements.
+**v0.1.x** — current. TypeScript source, Bun-first. Markdown primitives + XML intrinsic elements + Context API (`createContext` / `useContext` / `Context.Provider`).
 
-**v0.2.0** — two additions:
-
-- _Context API (public)._ `DepthContext` already uses an internal context system for list nesting. v0.2.0 exposes this as a first-class public API. The pattern is React-familiar but synchronous and string-based.
-
-  Should fix prop-drilling. A prompt tree with conditional sections per harness ends up threading `harness` through every component:
-
-  ```tsx
-  // v0.1.0 — prop-drilling
-  const Prompt = ({ harness }: Props) => (
-    <>
-      <Instructions harness={harness} />
-      <Rules harness={harness} />
-      <Examples harness={harness} />
-    </>
-  )
-  ```
-
-  With the v0.2.0 context API, set it once at the root and read it anywhere:
-
-  ```tsx
-  // v0.2.0 — context
-  const HarnessContext = createContext<'opencode' | 'copilot'>('copilot')
-
-  const prompt = render(
-    <HarnessContext.Provider value="opencode">
-      <Prompt />
-    </HarnessContext.Provider>
-  )
-
-  // In any component, at any depth — no prop threading:
-  const Instructions = () => {
-    const harness = useContext(HarnessContext)
-    return harness === 'opencode'
-      ? <P>Use task() for subtasks.</P>
-      : null
-  }
-  ```
+**v0.2.0** — planned:
 
 - _Node.js compiled output._ Ships a compiled `dist/` alongside the TypeScript source. Unblocks bare Node.js without a bundler.
 

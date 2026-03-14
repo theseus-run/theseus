@@ -87,12 +87,12 @@ describe('Link', () => {
     )).toBe('See [the docs](https://example.com) for more.\n\n');
   });
 
-  test('passes ) through unencoded in href — known limitation of encodeLinkUrl', () => {
-    expect(render(<Link href="https://example.com/a)b">text</Link>)).toBe('[text](https://example.com/a)b)');
+  test(') in href → encoded as %29', () => {
+    expect(render(<Link href="https://example.com/a)b">text</Link>)).toBe('[text](https://example.com/a%29b)');
   });
 
-  test('passes ( through unencoded in href — known limitation of encodeLinkUrl', () => {
-    expect(render(<Link href="https://example.com/a(b">text</Link>)).toBe('[text](https://example.com/a(b)');
+  test('( in href → encoded as %28', () => {
+    expect(render(<Link href="https://example.com/a(b">text</Link>)).toBe('[text](https://example.com/a%28b)');
   });
 
   test('empty children → label is empty', () => {
@@ -117,8 +117,8 @@ describe('Img', () => {
     expect(render(<Img src="./x.png" />)).toBe('![](./x.png)');
   });
 
-  test('passes ) through unencoded in src — known limitation of encodeLinkUrl', () => {
-    expect(render(<Img src="img)file.png" alt="alt" />)).toBe('![alt](img)file.png)');
+  test(') in src → encoded as %29', () => {
+    expect(render(<Img src="img)file.png" alt="alt" />)).toBe('![alt](img%29file.png)');
   });
 
   test('encodes ] in alt to prevent label closure', () => {

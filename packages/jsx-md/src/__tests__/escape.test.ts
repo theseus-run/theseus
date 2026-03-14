@@ -91,13 +91,12 @@ describe('escapeHtmlContent', () => {
 // ---------------------------------------------------------------------------
 
 describe('encodeLinkUrl', () => {
-  test(') passes through unencoded — known bug: encodeURIComponent in regex has no effect', () => {
-    // The function intends to encode ) as %29 but does not at runtime.
-    expect(encodeLinkUrl('https://example.com/a)b')).toBe('https://example.com/a)b');
+  test(') → %29', () => {
+    expect(encodeLinkUrl('https://example.com/a)b')).toBe('https://example.com/a%29b');
   });
 
-  test('( passes through unencoded — known bug', () => {
-    expect(encodeLinkUrl('https://example.com/a(b')).toBe('https://example.com/a(b');
+  test('( → %28', () => {
+    expect(encodeLinkUrl('https://example.com/a(b')).toBe('https://example.com/a%28b');
   });
 
   test('URL with no special chars → unchanged', () => {
