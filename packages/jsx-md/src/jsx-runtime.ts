@@ -36,7 +36,7 @@ export type VNode =
   | ReadonlyArray<VNode>;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Component<P = any> = (props: P) => string;
+type Component<P = any> = (props: P) => VNode;
 
 // ---------------------------------------------------------------------------
 // JSX namespace
@@ -45,10 +45,10 @@ type Component<P = any> = (props: P) => string;
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace JSX {
   /**
-   * JSX.Element is VNode (not just VNodeElement) so that string-returning
-   * components pass TypeScript's component return-type check. The jsx() factory
-   * always produces VNodeElement at runtime; the wider union here is only needed
-   * to satisfy TypeScript's component-validity check.
+   * JSX.Element is VNode so that components returning any valid VNode
+   * (string, VNodeElement, Fragment, null, etc.) satisfy TypeScript's
+   * component return-type check. The jsx() factory always produces
+   * VNodeElement at runtime; the wider union is only for type-checking.
    */
   export type Element = VNode;
 
