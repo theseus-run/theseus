@@ -50,8 +50,9 @@ export function render(node: VNode): string {
     return `<${el.type}${attrStr}>\n${inner.trimEnd()}\n</${el.type}>\n`;
   }
 
-  // Function component — call with its props (children still as VNode)
-  return el.type(el.props);
+  // Function component — call with its props (children still as VNode),
+  // then recurse in case the component returned a VNode (e.g. a Fragment).
+  return render(el.type(el.props));
 }
 
 // Register render with Fragment immediately on module init.
