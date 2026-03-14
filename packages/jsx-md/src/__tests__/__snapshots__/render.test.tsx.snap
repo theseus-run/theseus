@@ -1,0 +1,476 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`block primitives H1 1`] = `
+"# hello world
+
+"
+`;
+
+exports[`block primitives H2 1`] = `
+"## section title
+
+"
+`;
+
+exports[`block primitives H3 1`] = `
+"### subsection
+
+"
+`;
+
+exports[`block primitives H4 1`] = `
+"#### minor heading
+
+"
+`;
+
+exports[`block primitives H5 1`] = `
+"##### heading
+
+"
+`;
+
+exports[`block primitives H6 1`] = `
+"###### heading
+
+"
+`;
+
+exports[`block primitives P 1`] = `
+"some prose text
+
+"
+`;
+
+exports[`block primitives Hr 1`] = `
+"---
+
+"
+`;
+
+exports[`block primitives Codeblock no lang 1`] = `
+"\`\`\`
+const x = 1
+\`\`\`
+
+"
+`;
+
+exports[`block primitives Codeblock with lang 1`] = `
+"\`\`\`ts
+const x = 1
+\`\`\`
+
+"
+`;
+
+exports[`block primitives Codeblock with indent 1`] = `
+"\`\`\`ts
+  const x = 1
+\`\`\`
+
+"
+`;
+
+exports[`inline primitives Bold 1`] = `"**important**"`;
+
+exports[`inline primitives Code 1`] = `"\`inline code\`"`;
+
+exports[`inline primitives Italic 1`] = `"*emphasized*"`;
+
+exports[`inline primitives Link 1`] = `"[click here](https://example.com)"`;
+
+exports[`inline primitives Link encodes ) in href to prevent link termination 1`] = `"[text](https://example.com/a)b)"`;
+
+exports[`inline primitives Strikethrough 1`] = `"~~deprecated~~"`;
+
+exports[`inline primitives Img 1`] = `"![architecture](./diagram.png)"`;
+
+exports[`inline primitives Img encodes ) in src 1`] = `"![alt](img)file.png)"`;
+
+exports[`inline primitives Img encodes ] in alt to prevent label closure 1`] = `"![bracket%5Dalt](img.png)"`;
+
+exports[`inline primitives Img in paragraph 1`] = `
+"![fig](./x.png) caption text
+
+"
+`;
+
+exports[`inline primitives Md passthrough 1`] = `"raw **text** with \`code\`"`;
+
+exports[`Blockquote single line 1`] = `
+"> note this
+
+"
+`;
+
+exports[`Blockquote with block children 1`] = `
+"> paragraph one
+>
+> paragraph two
+
+"
+`;
+
+exports[`Blockquote nested blockquotes 1`] = `
+"> > inner
+
+"
+`;
+
+exports[`Blockquote Strikethrough in list item 1`] = `
+"- ~~old item~~
+
+"
+`;
+
+exports[`composition Bold nested in P 1`] = `
+"**hello** world
+
+"
+`;
+
+exports[`composition Code and Italic nested in P 1`] = `
+"\`fn\` returns *nothing*
+
+"
+`;
+
+exports[`composition Link nested in P 1`] = `
+"See [the docs](https://example.com) for more.
+
+"
+`;
+
+exports[`flat lists Ul with Li items 1`] = `
+"- alpha
+- beta
+- gamma
+
+"
+`;
+
+exports[`flat lists Ol with Li items 1`] = `
+"1. first step
+2. second step
+3. third step
+
+"
+`;
+
+exports[`flat lists Li outside list (depth=0) 1`] = `
+"- standalone item
+"
+`;
+
+exports[`nested lists Ul nested in Ul 1`] = `
+"- top
+  - sub
+
+"
+`;
+
+exports[`nested lists Ul two levels deep 1`] = `
+"- top
+  - mid
+    - deep
+
+"
+`;
+
+exports[`nested lists Ol with nested Ul 1`] = `
+"1. first
+2. second  - sub-a
+  - sub-b
+
+"
+`;
+
+exports[`nested lists Li with inline formatting nested in Ul 1`] = `
+"- **important**: do this
+- \`fn()\` — calls the function
+
+"
+`;
+
+exports[`Fragment Fragment with multiple block children 1`] = `
+"first paragraph
+
+second paragraph
+
+"
+`;
+
+exports[`Fragment Fragment with mixed children 1`] = `
+"## title
+
+body
+
+---
+
+"
+`;
+
+exports[`Md Md with complex inline 1`] = `"**P0**: Type = \`TKey\`. Not \`TFuncKey\`, not \`string\`."`;
+
+exports[`Table basic two-column table 1`] = `
+"| Agent | Role |
+| --- | --- |
+| Theseus | Orchestrator |
+| Forge | Implementer |
+
+"
+`;
+
+exports[`Table table with inline formatting in cells 1`] = `
+"| Name | Type |
+| --- | --- |
+| **Theseus** | \`Orchestrator\` |
+
+"
+`;
+
+exports[`Table single-column table 1`] = `
+"| Item |
+| --- |
+| one |
+| two |
+
+"
+`;
+
+exports[`Table header only (no body rows) 1`] = `
+"| Col A | Col B |
+| --- | --- |
+
+"
+`;
+
+exports[`XML tags self-closing — no children 1`] = `
+"<br />
+"
+`;
+
+exports[`XML tags simple text content 1`] = `
+"<task>
+do the thing
+</task>
+"
+`;
+
+exports[`XML tags markdown children inside XML 1`] = `
+"<task>
+Do X.
+
+- step
+</task>
+"
+`;
+
+exports[`XML tags string attributes 1`] = `
+"<task type="summary" priority="high">
+content
+</task>
+"
+`;
+
+exports[`XML tags boolean attribute renders as bare name 1`] = `
+"<task required>
+content
+</task>
+"
+`;
+
+exports[`XML tags nested XML tags 1`] = `
+"<context>
+<task>
+inner
+</task>
+</context>
+"
+`;
+
+exports[`XML tags XML wrapper around markdown primitives 1`] = `
+"<instructions>
+## Rules
+
+- be concise
+- use examples
+</instructions>
+"
+`;
+
+exports[`XML tags escapes special characters in attribute values 1`] = `
+"<task type="a&quot;b" label="x &amp; y" />
+"
+`;
+
+exports[`XML tags renders non-self-closing when children are whitespace-only 1`] = `
+"<task>
+
+</task>
+"
+`;
+
+exports[`TaskList + Task single unchecked item 1`] = `
+"- [ ] buy milk
+
+"
+`;
+
+exports[`TaskList + Task single checked item (done prop) 1`] = `
+"- [x] buy milk
+
+"
+`;
+
+exports[`TaskList + Task multiple items mixed checked/unchecked 1`] = `
+"- [x] write tests
+- [ ] update docs
+- [x] fix bug
+- [ ] deploy
+
+"
+`;
+
+exports[`TaskList + Task nested TaskList inside TaskList 1`] = `
+"- [x] outer done
+- [ ] outer unchecked  - [x] inner done
+  - [ ] inner unchecked
+
+"
+`;
+
+exports[`Callout type="note" with simple text 1`] = `
+"> [!NOTE]
+> this is a note
+
+"
+`;
+
+exports[`Callout type="warning" with simple text 1`] = `
+"> [!WARNING]
+> be careful here
+
+"
+`;
+
+exports[`Callout type="important" with multi-line children 1`] = `
+"> [!IMPORTANT]
+> Read this carefully.
+>
+> - step one
+> - step two
+
+"
+`;
+
+exports[`Callout type note renders > [!NOTE] 1`] = `
+"> [!NOTE]
+> content
+
+"
+`;
+
+exports[`Callout type tip renders > [!TIP] 1`] = `
+"> [!TIP]
+> content
+
+"
+`;
+
+exports[`Callout type important renders > [!IMPORTANT] 1`] = `
+"> [!IMPORTANT]
+> content
+
+"
+`;
+
+exports[`Callout type warning renders > [!WARNING] 1`] = `
+"> [!WARNING]
+> content
+
+"
+`;
+
+exports[`Callout type caution renders > [!CAUTION] 1`] = `
+"> [!CAUTION]
+> content
+
+"
+`;
+
+exports[`Callout Callout followed by P has blank line separator 1`] = `
+"> [!NOTE]
+> heads up
+
+after the callout
+
+"
+`;
+
+exports[`HtmlComment single-line content 1`] = `
+"<!-- this is a comment -->
+"
+`;
+
+exports[`HtmlComment multi-line string content 1`] = `
+"<!--
+line one
+line two
+-->
+"
+`;
+
+exports[`HtmlComment children that render to multi-line (two P components) 1`] = `
+"<!--
+first paragraph
+
+second paragraph
+-->
+"
+`;
+
+exports[`Details basic: summary string + simple paragraph body 1`] = `
+"<details>
+<summary>Click to expand</summary>
+
+This is the body content.
+
+</details>
+"
+`;
+
+exports[`Details summary + markdown-rich body (H2 + Ul) 1`] = `
+"<details>
+<summary>Implementation notes</summary>
+
+## Steps
+
+- read the spec
+- write the code
+- run the tests
+
+</details>
+"
+`;
+
+exports[`Details blank line after </summary> is present in output 1`] = `
+"<details>
+<summary>See more</summary>
+
+body
+
+</details>
+"
+`;
+
+exports[`Details summary with special characters is HTML-escaped 1`] = `
+"<details>
+<summary>A &amp; B &lt;note&gt;</summary>
+
+body
+
+</details>
+"
+`;

@@ -1,0 +1,38 @@
+{
+  "name": "@theseus.run/jsx-md",
+  "version": "0.1.0",
+  "description": "JSX/TSX renderer for Markdown. Write agent prompts and LLM instructions as typed, composable components. Zero runtime dependencies.",
+  "type": "module",
+  "author": "Roman Dubinin <romanonthego@gmail.com> (https://romanonthego.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theseus-run/theseus",
+    "directory": "packages/jsx-md"
+  },
+  "homepage": "https://theseus.run",
+  "keywords": ["jsx", "tsx", "markdown", "llm", "agents", "prompts", "jsx-runtime"],
+  "scripts": {
+    "test": "bun test"
+  },
+  "files": [
+    "src/index.ts",
+    "src/render.ts",
+    "src/primitives.tsx",
+    "src/jsx-runtime.ts",
+    "src/jsx-dev-runtime.ts",
+    "src/context.ts",
+    "src/escape.ts",
+    "src/_render-registry.ts"
+  ],
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./jsx-runtime": "./src/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

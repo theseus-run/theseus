@@ -1,0 +1,14 @@
+{
+  "name": "theseus",
+  "private": true,
+  "description": "Open-source packages powering the Theseus agent harness.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theseus-run/theseus"
+  },
+  "homepage": "https://theseus.run",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "bun test"
+  }
+}
