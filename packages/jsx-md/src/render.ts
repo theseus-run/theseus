@@ -28,12 +28,17 @@ export function render(node: VNode): string {
     return Number.isFinite(node) ? String(node) : '';
   }
   if (Array.isArray(node)) {
-    return (node as ReadonlyArray<VNode>).map(render).join('');
+    return node.map(render).join('');
   }
   // VNodeElement — dispatch on type
   if (!isVNodeElement(node)) {
-    // Guard: functions passed as VNodes are a programmer error (TypeScript already
-    // catches this at compile time; this throw provides a runtime diagnostic).
+    // From TypeScript's perspective this branch is unreachable: after the null/boolean/string/
+    // number/Array guards above, the only remaining VNode member is VNodeElement, so `node`
+    // is already narrowed to VNodeElement and `!isVNodeElement` is statically false.
+    // The branch is kept as a runtime-only defensive net: if a caller bypasses TypeScript
+    // (plain JS, `as any`, etc.) and passes a function as a child, we throw a diagnostic
+    // error instead of silently returning ''. The double-cast (`as unknown as fn`) is
+    // required precisely because TS knows this is unreachable.
     if (typeof node === 'function') {
       throw new Error(
         `jsx-md: a function was passed as a VNode child. Did you forget to call it, or wrap it in JSX? ` +
@@ -46,6 +51,10 @@ export function render(node: VNode): string {
 
   // Fragment symbol — render children directly
   if (el.type === Fragment) {
+    // props is Record<string, unknown> by design (props type varies per-component and cannot
+    // be narrowed at the VNodeElement level). The `as VNode` cast is safe in practice: the
+    // only source of props.children values is the JSX compiler and user JSX expressions,
+    // both of which TypeScript has already validated as VNode at the call site.
     return render(el.props.children as VNode ?? null);
   }
 
@@ -72,6 +81,8 @@ export function render(node: VNode): string {
         attrStr += ` ${k}="${escapeHtmlAttr(String(v))}"`;
       }
     }
+    // Same cast rationale as the Fragment branch above: props.children is unknown
+    // at the VNodeElement level but is guaranteed VNode by the JSX type system.
     const inner = render(children as VNode ?? null);
     if (inner.trimEnd() === '') {
       return `<${tagName}${attrStr} />\n`;
@@ -81,5 +92,5 @@ export function render(node: VNode): string {
 
   // Function component — call with its props (children still as VNode),
   // then recurse in case the component returned a VNode.
-  return render((el.type as (props: Record<string, unknown>) => VNode)(el.props));
+  return render(el.type(el.props));
 }

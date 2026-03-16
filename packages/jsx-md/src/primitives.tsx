@@ -159,7 +159,7 @@ export function P({ children }: BlockProps): string {
   return `${render(children)}\n\n`;
 }
 
-export function Hr(): string {
+export function Hr(_: { children?: never } = {}): string {
   return '---\n\n';
 }
 
@@ -325,7 +325,7 @@ export function Strikethrough({ children }: InlineProps): string {
   return `~~${inner}~~`;
 }
 
-export function Br(): string {
+export function Br(_: { children?: never } = {}): string {
   return '  \n';
 }
 

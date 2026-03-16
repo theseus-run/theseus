@@ -16,6 +16,24 @@
 // VNode types
 // ---------------------------------------------------------------------------
 
+/**
+ * The concrete runtime shape of a JSX element — what the `jsx()` factory always produces.
+ *
+ * Useful for structural inspection of a VNode tree (e.g. testing whether a node is an
+ * element rather than a string, null, or array). The `isVNodeElement` predicate in
+ * render.ts narrows to this type.
+ *
+ * @remarks **Do not use as a component return-type annotation.** TypeScript infers
+ * `JSX.Element` (= `VNode`) as the return type of JSX expressions, not `VNodeElement`.
+ * Annotating a component as `(): VNodeElement` causes TS2322 because `VNode` (the
+ * inferred type) is not assignable to the narrower `VNodeElement`. Use `VNode` instead:
+ * ```ts
+ * // Wrong — TS2322
+ * function MyComp(): VNodeElement { return <P>hi</P>; }
+ * // Correct
+ * function MyComp(): VNode { return <P>hi</P>; }
+ * ```
+ */
 export type VNodeElement = {
   readonly type: Component | string | typeof Fragment;
   readonly props: Record<string, unknown>;
