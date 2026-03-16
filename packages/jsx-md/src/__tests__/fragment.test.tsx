@@ -29,9 +29,8 @@ describe('Fragment', () => {
     )).toBe('## title\n\nbody\n\n---\n\n');
   });
 
-  test('Fragment is safe when render is imported before JSX evaluation', () => {
-    // Documents the import-order contract: Fragment calls _renderFn which
-    // is registered by render.ts on module init.
+  test('Fragment renders children without a wrapper', () => {
+    // Fragment is now a Symbol; render.ts handles it directly — no circular dep.
     expect(() => render(<><P>test</P></>)).not.toThrow();
   });
 });
@@ -75,12 +74,16 @@ describe('number edge cases', () => {
     expect(render(-1)).toBe('-1');
   });
 
-  test('render(NaN) returns "NaN" — String(NaN) behavior', () => {
-    expect(render(NaN)).toBe('NaN');
+  test('render(NaN) returns "" — not a finite number', () => {
+    expect(render(NaN)).toBe('');
   });
 
-  test('render(Infinity) returns "Infinity" — String(Infinity) behavior', () => {
-    expect(render(Infinity)).toBe('Infinity');
+  test('render(Infinity) returns "" — not a finite number', () => {
+    expect(render(Infinity)).toBe('');
+  });
+
+  test('render(-Infinity) returns "" — not a finite number', () => {
+    expect(render(-Infinity)).toBe('');
   });
 });
 
@@ -103,5 +106,21 @@ describe('array edge cases', () => {
 
   test('array of all-falsy values renders empty string', () => {
     expect(render([null, false, undefined] as VNode[])).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Function as VNode — programmer error
+// ---------------------------------------------------------------------------
+
+describe('function as VNode', () => {
+  test('passing a named function as a VNode throws with helpful message', () => {
+    function myBadComponent() { return 'oops'; }
+    expect(() => render(myBadComponent as unknown as VNode)).toThrow('jsx-md: a function was passed as a VNode child');
+  });
+
+  test('error message includes function name', () => {
+    function namedFn() { return ''; }
+    expect(() => render(namedFn as unknown as VNode)).toThrow('namedFn');
   });
 });

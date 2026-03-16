@@ -26,10 +26,14 @@ describe('HtmlComment', () => {
     )).toBe('<!--\nfirst paragraph\n\nsecond paragraph\n-->\n');
   });
 
-  test('double-dash in content is not escaped — known behavior', () => {
-    // Double-dash inside HTML comments is technically invalid HTML but we
-    // do not escape it; callers are responsible for valid comment content.
-    expect(render(<HtmlComment>{'some -- comment'}</HtmlComment>)).toBe('<!-- some -- comment -->\n');
+  test('double-dash in content is sanitized — -- → - - (invalid HTML spec fix)', () => {
+    // Double-dash inside HTML comments is technically invalid HTML.
+    // We sanitize it to '- -' to produce valid HTML comment content.
+    expect(render(<HtmlComment>{'some -- comment'}</HtmlComment>)).toBe('<!-- some - - comment -->\n');
+  });
+
+  test('closing sequence --> in content is sanitized to -- >', () => {
+    expect(render(<HtmlComment>{'injection --> attempt'}</HtmlComment>)).toBe('<!-- injection -- > attempt -->\n');
   });
 
   test('whitespace-only string renders as <!-- --> — same as no children', () => {

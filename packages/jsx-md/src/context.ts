@@ -9,13 +9,29 @@
  * the render() traversal. Not safe for async or concurrent rendering.
  */
 
-import { callRender } from './_render-registry.ts';
+import { render } from './render.ts';
 import type { VNode } from './jsx-runtime.ts';
 
 export interface Context<T> {
   readonly _id: symbol;
   readonly _default: T;
-  /** JSX provider component — identical usage to React's Context.Provider. */
+  /**
+   * JSX provider component — identical usage to React's Context.Provider.
+   *
+   * Return type is `string` (not `VNode`) because `render()` always returns `string`
+   * and this is the honest, precise type. This means `Provider` is not directly
+   * assignable to `Component<P>` without a cast, even though `string extends VNode`.
+   *
+   * React solves this by typing `Provider` as `ProviderExoticComponent` — a distinct
+   * type with a `$$typeof: symbol` discriminant — rather than a plain function component.
+   * That approach deliberately prevents `Provider` from being used as a generic
+   * `Component` argument, and it returns `ReactNode` (broad) rather than a precise type.
+   *
+   * We keep `=> string` because: (a) no code in this codebase passes `Provider` as a
+   * `Component`-typed value, (b) precision is more useful than assignability here,
+   * and (c) the exotic-component indirection would be engineering for a non-problem.
+   * If that higher-order pattern ever becomes necessary, change this to `=> VNode`.
+   */
   readonly Provider: (props: { value: T; children?: VNode }) => string;
 }
 
@@ -37,9 +53,10 @@ export function createContext<T>(defaultValue: T): Context<T> {
     }
     s.push(value as unknown);
     try {
-      return callRender(children ?? null);
+      return render(children ?? null);
     } finally {
       s.pop();
+      if (s.length === 0) stack.delete(_id);
     }
   }
 
@@ -65,5 +82,6 @@ export function withContext<T>(ctx: Context<T>, value: T, fn: () => string): str
     return fn();
   } finally {
     s.pop();
+    if (s.length === 0) stack.delete(ctx._id);
   }
 }
