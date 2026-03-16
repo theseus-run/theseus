@@ -6,14 +6,20 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [jsx-md, jsx-md-beautiful-mermaid]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run typecheck
-        working-directory: packages/jsx-md
+        working-directory: packages/${{ matrix.package }}
       - run: bun test
-        working-directory: packages/jsx-md
+        working-directory: packages/${{ matrix.package }}
