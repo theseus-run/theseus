@@ -6,14 +6,16 @@ An AI agent orchestration system for running multi-step missions with specialist
 
 These packages are the open parts of the harness — independently useful, zero coupling to the rest of the system.
 
-| Package | Description |
-| --- | --- |
-| [`@theseus.run/jsx-md`](./packages/jsx-md) | JSX/TSX renderer for Markdown. Write agent prompts and LLM instructions as typed, composable components. Zero runtime dependencies. |
-| [`@theseus.run/jsx-md-beautiful-mermaid`](./packages/jsx-md-beautiful-mermaid) | `BeautifulMermaid` component for `@theseus.run/jsx-md`. Renders Mermaid diagrams as ASCII/Unicode art via `beautiful-mermaid`. |
+### `jsx-md` family
 
-## Using without Theseus
+- **[`@theseus.run/jsx-md`](./packages/jsx-md)**
+    
+    JSX/TSX renderer for Markdown. Write agent prompts and LLM instructions as typed, composable components. Zero runtime dependencies.
 
-Each package works on its own. You don't need the full harness to use them. `bun add @theseus.run/jsx-md` and you're done — no lock-in, no required configuration beyond what the package itself needs.
+- **[`@theseus.run/jsx-md-beautiful-mermaid`](./packages/jsx-md-beautiful-mermaid)**
+
+    `BeautifulMermaid` component for `@theseus.run/jsx-md`. Renders Mermaid diagrams as ASCII/Unicode art via [`beautiful-mermaid`](https://github.com/lukilabs/beautiful-mermaid).
+
 
 ## About
 
