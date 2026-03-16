@@ -23,7 +23,7 @@ bun add @theseus.run/jsx-md
 **AI coding agent skill** (OpenCode, Cursor, Copilot, Claude Code):
 
 ```bash
-npx skills add https://github.com/theseus-run/theseus/tree/main/packages/jsx-md
+npx skills add https://github.com/theseus-run/theseus/tree/master/packages/jsx-md
 ```
 
 `tsconfig.json`:
