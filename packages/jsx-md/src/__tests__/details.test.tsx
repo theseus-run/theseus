@@ -107,4 +107,17 @@ describe('Details', () => {
       '</details>\n'
     );
   });
+
+  test('summary with newline is collapsed to space', () => {
+    expect(render(
+      <Details summary={'first line\nsecond line'}>
+        <P>body</P>
+      </Details>
+    )).toBe(
+      '<details>\n' +
+      '<summary>first line second line</summary>\n\n' +
+      'body\n\n' +
+      '</details>\n'
+    );
+  });
 });

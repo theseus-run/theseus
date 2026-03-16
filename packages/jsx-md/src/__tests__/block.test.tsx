@@ -40,6 +40,11 @@ describe('headings', () => {
   test('H2 with mixed inline children', () => {
     expect(render(<H2><Code>fn</Code> returns <Italic>value</Italic></H2>)).toBe('## `fn` returns *value*\n\n');
   });
+
+  test('H1 trims leading/trailing whitespace from rendered children', () => {
+    // A leading \n from a block child would otherwise break the heading syntax
+    expect(render(<H1>{'\n bold title \n'}</H1>)).toBe('# bold title\n\n');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -115,6 +120,14 @@ describe('Codeblock', () => {
   test('content that is only blank lines — all stripped before closing fence', () => {
     // Each empty line is popped; nothing remains → same as empty content
     expect(render(<Codeblock>{'\n\n'}</Codeblock>)).toBe('```\n\n```\n\n');
+  });
+
+  test('content with triple backtick → fence uses 4 backticks', () => {
+    expect(render(<Codeblock>{'```nested```'}</Codeblock>)).toBe('````\n```nested```\n````\n\n');
+  });
+
+  test('content with double backtick → fence uses 3 backticks', () => {
+    expect(render(<Codeblock>{'a``b'}</Codeblock>)).toBe('```\na``b\n```\n\n');
   });
 });
 

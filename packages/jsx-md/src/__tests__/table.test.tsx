@@ -59,8 +59,9 @@ describe('Table', () => {
     );
   });
 
-  test('pipe in cell content is not escaped — known limitation', () => {
-    // Callers are responsible for escaping pipes in cell content manually.
+  test('pipe in cell content — separator still has correct column count', () => {
+    // The separator row is now derived from Th count (via context), not pipe parsing.
+    // Pipes in cell content do not affect the separator row column count.
     const result = render(
       <Table>
         <Tr><Th>A</Th><Th>B</Th></Tr>
@@ -71,6 +72,20 @@ describe('Table', () => {
       '| A | B |\n' +
       '| --- | --- |\n' +
       '| has | pipe | normal |\n\n'
+    );
+  });
+
+  test('empty Th — separator has correct column count even with empty header cells', () => {
+    const result = render(
+      <Table>
+        <Tr><Th></Th><Th>B</Th><Th></Th></Tr>
+        <Tr><Td>a</Td><Td>b</Td><Td>c</Td></Tr>
+      </Table>
+    );
+    expect(result).toBe(
+      '|  | B |  |\n' +
+      '| --- | --- | --- |\n' +
+      '| a | b | c |\n\n'
     );
   });
 
@@ -129,6 +144,82 @@ describe('Table', () => {
       '| Name | Logo |\n' +
       '| --- | --- |\n' +
       '| Bun | ![Bun](bun.png) |\n\n'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Table — column alignment
+// ---------------------------------------------------------------------------
+
+describe('Table column alignment', () => {
+  test('left-aligned column → :---', () => {
+    expect(render(
+      <Table>
+        <Tr><Th align="left">Name</Th></Tr>
+        <Tr><Td>Alice</Td></Tr>
+      </Table>
+    )).toBe(
+      '| Name |\n' +
+      '| :--- |\n' +
+      '| Alice |\n\n'
+    );
+  });
+
+  test('center-aligned column → :---:', () => {
+    expect(render(
+      <Table>
+        <Tr><Th align="center">Score</Th></Tr>
+        <Tr><Td>42</Td></Tr>
+      </Table>
+    )).toBe(
+      '| Score |\n' +
+      '| :---: |\n' +
+      '| 42 |\n\n'
+    );
+  });
+
+  test('right-aligned column → ---:', () => {
+    expect(render(
+      <Table>
+        <Tr><Th align="right">Amount</Th></Tr>
+        <Tr><Td>100</Td></Tr>
+      </Table>
+    )).toBe(
+      '| Amount |\n' +
+      '| ---: |\n' +
+      '| 100 |\n\n'
+    );
+  });
+
+  test('unaligned column (no align prop) → ---', () => {
+    expect(render(
+      <Table>
+        <Tr><Th>Default</Th></Tr>
+        <Tr><Td>value</Td></Tr>
+      </Table>
+    )).toBe(
+      '| Default |\n' +
+      '| --- |\n' +
+      '| value |\n\n'
+    );
+  });
+
+  test('mixed alignment — left, center, right, default', () => {
+    expect(render(
+      <Table>
+        <Tr>
+          <Th align="left">Name</Th>
+          <Th align="center">Status</Th>
+          <Th align="right">Score</Th>
+          <Th>Notes</Th>
+        </Tr>
+        <Tr><Td>Alice</Td><Td>active</Td><Td>99</Td><Td>top</Td></Tr>
+      </Table>
+    )).toBe(
+      '| Name | Status | Score | Notes |\n' +
+      '| :--- | :---: | ---: | --- |\n' +
+      '| Alice | active | 99 | top |\n\n'
     );
   });
 });

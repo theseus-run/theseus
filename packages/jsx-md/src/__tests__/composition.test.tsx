@@ -380,7 +380,7 @@ describe('context through JSX-returning components', () => {
     expect(render(<BulletGroup />)).toBe('- one\n- two\n\n');
   });
 
-  test('DepthContext nesting works when inner Ul is inside a custom component inside outer Ul', () => {
+   test('DepthContext nesting works when inner Ul is inside a custom component inside outer Ul', () => {
     function SubList(): VNode {
       return (
         <Ul>
@@ -395,9 +395,9 @@ describe('context through JSX-returning components', () => {
         <SubList />
       </Ul>
     );
-    // SubList contributes its own Ul which increments depth again;
-    // sub items should be indented two levels (depth 2 → '    ')
-    expect(result).toBe('- top\n  - sub-a\n  - sub-b\n\n');
+    // SubList's Ul is at depth > 0, so it emits a leading \n (sublist on its own line).
+    // Sub items are indented one level (depth 2 → '  ').
+    expect(result).toBe('- top\n\n  - sub-a\n  - sub-b\n\n');
   });
 });
 

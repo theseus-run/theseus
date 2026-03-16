@@ -9,7 +9,7 @@
  * the render() traversal. Not safe for async or concurrent rendering.
  */
 
-import { callRender } from './_render-registry.ts';
+import { render } from './render.ts';
 import type { VNode } from './jsx-runtime.ts';
 
 export interface Context<T> {
@@ -37,9 +37,10 @@ export function createContext<T>(defaultValue: T): Context<T> {
     }
     s.push(value as unknown);
     try {
-      return callRender(children ?? null);
+      return render(children ?? null);
     } finally {
       s.pop();
+      if (s.length === 0) stack.delete(_id);
     }
   }
 
@@ -65,5 +66,6 @@ export function withContext<T>(ctx: Context<T>, value: T, fn: () => string): str
     return fn();
   } finally {
     s.pop();
+    if (s.length === 0) stack.delete(ctx._id);
   }
 }

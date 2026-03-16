@@ -16,9 +16,9 @@ describe('XML tags', () => {
     expect(render(<task>do the thing</task>)).toBe('<task>\ndo the thing\n</task>\n');
   });
 
-  test('non-self-closing when children are whitespace-only', () => {
-    // Whitespace-only inner renders to non-empty string so tag is not self-closed.
-    expect(render(<task>{'\n'}</task>)).toBe('<task>\n\n</task>\n');
+  test('self-closing when children are whitespace-only', () => {
+    // whitespace-only inner trims to '' → self-closing
+    expect(render(<task>{'\n'}</task>)).toBe('<task />\n');
   });
 
   test('markdown children inside XML tag', () => {
@@ -74,5 +74,41 @@ describe('XML tags', () => {
 
   test('escapes < and > in attribute values', () => {
     expect(render(<task type="a<b>c" />)).toBe('<task type="a&lt;b&gt;c" />\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// XML tag name validation
+// ---------------------------------------------------------------------------
+
+describe('XML tag name validation', () => {
+  test('valid tag names are accepted', () => {
+    expect(render(<task />)).toBe('<task />\n');
+    expect(render(<my_tag />)).toBe('<my_tag />\n');
+    expect(render(<ns:tag />)).toBe('<ns:tag />\n');
+    expect(render(<tag-name />)).toBe('<tag-name />\n');
+    expect(render(<tag1 />)).toBe('<tag1 />\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Object/Array attribute value — programmer error
+// ---------------------------------------------------------------------------
+
+describe('object as XML attribute', () => {
+  test('passing an object as attribute value throws with helpful message', () => {
+    expect(() =>
+      render(
+        <task data={{ key: 'value' }} />,
+      ),
+    ).toThrow('jsx-md: attribute "data" received an object value');
+  });
+
+  test('error message mentions JSON.stringify', () => {
+    expect(() =>
+      render(
+        <task data={{ key: 'value' }} />,
+      ),
+    ).toThrow('JSON.stringify');
   });
 });

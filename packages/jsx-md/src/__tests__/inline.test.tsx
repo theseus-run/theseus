@@ -2,7 +2,7 @@
 
 import { expect, test, describe } from 'bun:test';
 import { render } from '../index.ts';
-import { P, Bold, Code, Italic, Strikethrough, Link, Img, Md } from '../index.ts';
+import { P, Bold, Code, Italic, Strikethrough, Link, Img, Md, Br, Sup, Sub, Kbd, Escape } from '../index.ts';
 
 // ---------------------------------------------------------------------------
 // Bold
@@ -24,6 +24,14 @@ describe('Bold', () => {
   test('wrapping Italic → bold-italic ***', () => {
     expect(render(<Bold><Italic>both</Italic></Bold>)).toBe('***both***');
   });
+
+  test('** in content is escaped to \\*\\*', () => {
+    expect(render(<Bold>{'a**b'}</Bold>)).toBe('**a\\*\\*b**');
+  });
+
+  test('multiple ** in content — all escaped', () => {
+    expect(render(<Bold>{'x ** y ** z'}</Bold>)).toBe('**x \\*\\* y \\*\\* z**');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -41,6 +49,14 @@ describe('Code', () => {
 
   test('empty children → ``', () => {
     expect(render(<Code></Code>)).toBe('``');
+  });
+
+  test('single backtick in content → double backtick fence', () => {
+    expect(render(<Code>{'a`b'}</Code>)).toBe('``a`b``');
+  });
+
+  test('double backtick in content → triple backtick fence', () => {
+    expect(render(<Code>{'a``b'}</Code>)).toBe('```a``b```');
   });
 });
 
@@ -69,6 +85,10 @@ describe('Strikethrough', () => {
 
   test('empty children → ~~~~', () => {
     expect(render(<Strikethrough></Strikethrough>)).toBe('~~~~');
+  });
+
+  test('~~ in content is escaped to \\~\\~', () => {
+    expect(render(<Strikethrough>{'a~~b'}</Strikethrough>)).toBe('~~a\\~\\~b~~');
   });
 });
 
@@ -159,5 +179,107 @@ describe('Md', () => {
   test('JSX children are rendered — Md is transparent to render()', () => {
     // Md calls render(children), so JSX children are evaluated normally
     expect(render(<Md><Bold>x</Bold></Md>)).toBe('**x**');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Br (hard line break)
+// ---------------------------------------------------------------------------
+
+describe('Br', () => {
+  test('produces two trailing spaces + newline', () => {
+    expect(render(<Br />)).toBe('  \n');
+  });
+
+  test('inside P — prose + Br + prose', () => {
+    expect(render(<P>first line<Br />second line</P>)).toBe('first line  \nsecond line\n\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sup
+// ---------------------------------------------------------------------------
+
+describe('Sup', () => {
+  test('wraps content in <sup></sup>', () => {
+    expect(render(<Sup>2</Sup>)).toBe('<sup>2</sup>');
+  });
+
+  test('text content', () => {
+    expect(render(<Sup>th</Sup>)).toBe('<sup>th</sup>');
+  });
+
+  test('empty children', () => {
+    expect(render(<Sup></Sup>)).toBe('<sup></sup>');
+  });
+
+  test('inside P', () => {
+    expect(render(<P>x<Sup>2</Sup> + y</P>)).toBe('x<sup>2</sup> + y\n\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sub
+// ---------------------------------------------------------------------------
+
+describe('Sub', () => {
+  test('wraps content in <sub></sub>', () => {
+    expect(render(<Sub>2</Sub>)).toBe('<sub>2</sub>');
+  });
+
+  test('text content', () => {
+    expect(render(<Sub>i</Sub>)).toBe('<sub>i</sub>');
+  });
+
+  test('empty children', () => {
+    expect(render(<Sub></Sub>)).toBe('<sub></sub>');
+  });
+
+  test('inside P', () => {
+    expect(render(<P>H<Sub>2</Sub>O</P>)).toBe('H<sub>2</sub>O\n\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Kbd
+// ---------------------------------------------------------------------------
+
+describe('Kbd', () => {
+  test('wraps content in <kbd></kbd>', () => {
+    expect(render(<Kbd>Ctrl+C</Kbd>)).toBe('<kbd>Ctrl+C</kbd>');
+  });
+
+  test('empty children', () => {
+    expect(render(<Kbd></Kbd>)).toBe('<kbd></kbd>');
+  });
+
+  test('inside P', () => {
+    expect(render(<P>Press <Kbd>Enter</Kbd> to continue.</P>)).toBe('Press <kbd>Enter</kbd> to continue.\n\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Escape
+// ---------------------------------------------------------------------------
+
+describe('Escape', () => {
+  test('plain text passes through unchanged', () => {
+    expect(render(<Escape>hello world</Escape>)).toBe('hello world');
+  });
+
+  test('** is escaped', () => {
+    expect(render(<Escape>{'**bold**'}</Escape>)).toBe('\\*\\*bold\\*\\*');
+  });
+
+  test('_italic_ is escaped', () => {
+    expect(render(<Escape>{'_italic_'}</Escape>)).toBe('\\_italic\\_');
+  });
+
+  test('[link](url) metacharacters are escaped', () => {
+    expect(render(<Escape>{'[link](url)'}</Escape>)).toBe('\\[link\\]\\(url\\)');
+  });
+
+  test('inside P — untrusted filename is safe', () => {
+    expect(render(<P>File: <Escape>{'**danger**.md'}</Escape></P>)).toBe('File: \\*\\*danger\\*\\*\\.md\n\n');
   });
 });

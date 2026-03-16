@@ -8,21 +8,16 @@
  * Call `render(node)` from `./render.ts` to produce the final markdown string.
  * All markdown primitives live in primitives.tsx as named components.
  *
- * Fragment circular-dep resolution: Fragment needs render() to flatten children,
- * but render.ts imports types from this file. We use _render-registry.ts as a
- * shared side-channel: render.ts calls registerRender(render) on module init,
- * Fragment defers to callRender(). Any entry point that imports render will
- * register it before rendering starts.
+ * Fragment is a Symbol. render.ts imports this Symbol and handles it explicitly,
+ * keeping the dependency one-way: render.ts → jsx-runtime.ts (no cycle).
  */
-
-import { callRender } from './_render-registry.ts';
 
 // ---------------------------------------------------------------------------
 // VNode types
 // ---------------------------------------------------------------------------
 
 export type VNodeElement = {
-  readonly type: Component | string;
+  readonly type: Component | string | typeof Fragment;
   readonly props: Record<string, unknown>;
 };
 
@@ -63,12 +58,16 @@ export namespace JSX {
 }
 
 // ---------------------------------------------------------------------------
-// Render registration (avoids circular dep with render.ts)
+// Fragment symbol
 // ---------------------------------------------------------------------------
 
-// Registration and dispatch are handled by _render-registry.ts.
-// render.ts calls registerRender(render) on module init.
-// Fragment calls callRender() to evaluate children.
+/**
+ * Fragment — a unique Symbol used as the `type` of JSX fragment VNodes.
+ * render.ts detects this Symbol and renders children directly, with no wrapper.
+ * Using a Symbol (rather than a function) eliminates the circular dependency
+ * that previously required _render-registry.ts.
+ */
+export const Fragment = Symbol('Fragment');
 
 // ---------------------------------------------------------------------------
 // JSX factory
@@ -77,18 +76,16 @@ export namespace JSX {
 /**
  * JSX factory — called by Bun's compiled JSX. Builds VNode tree; no evaluation.
  *
- * `type` is a function component or a string tag name. String tags are rendered
- * as XML blocks by render.ts: `<tag attrs>\ncontent\n</tag>\n` (or self-closing
- * when the inner content is empty).
+ * `type` is a function component, a string tag name, or the Fragment symbol.
+ * String tags are rendered as XML blocks by render.ts: `<tag attrs>\ncontent\n</tag>\n`
+ * (or self-closing when the inner content is empty).
  */
-export function jsx(type: Component | string, props: Record<string, unknown>): VNodeElement {
+export function jsx(
+  type: Component | string | typeof Fragment,
+  props: Record<string, unknown>,
+): VNodeElement {
   return { type, props };
 }
 
 /** jsxs — same as jsx, used when there are multiple children (children is array) */
 export const jsxs = jsx;
-
-/** Fragment — renders children. Defers to _render-registry to avoid circular imports. */
-export function Fragment({ children }: { children?: VNode }): string {
-  return callRender(children ?? null);
-}
