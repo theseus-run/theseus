@@ -9,6 +9,7 @@ These packages are the open parts of the harness — independently useful, zero 
 | Package | Description |
 | --- | --- |
 | [`@theseus.run/jsx-md`](./packages/jsx-md) | JSX/TSX renderer for Markdown. Write agent prompts and LLM instructions as typed, composable components. Zero runtime dependencies. |
+| [`@theseus.run/jsx-md-beautiful-mermaid`](./packages/jsx-md-beautiful-mermaid) | `BeautifulMermaid` component for `@theseus.run/jsx-md`. Renders Mermaid diagrams as ASCII/Unicode art via `beautiful-mermaid`. |
 
 ## Using without Theseus
 

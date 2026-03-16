@@ -24,7 +24,6 @@ bun add @theseus.run/jsx-md
 
 ```bash
 npx skills add https://github.com/theseus-run/theseus/tree/master/packages/jsx-md
-npx skills add https://github.com/theseus-run/theseus/tree/master/packages/jsx-md
 ```
 
 `tsconfig.json`:

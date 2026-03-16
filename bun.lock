@@ -7,21 +7,44 @@
     },
     "packages/jsx-md": {
       "name": "@theseus.run/jsx-md",
-      "version": "0.1.2",
+      "version": "0.2.1",
       "devDependencies": {
         "@types/bun": "1.3.10",
         "typescript": "5.9.3",
+      },
+    },
+    "packages/jsx-md-beautiful-mermaid": {
+      "name": "@theseus.run/jsx-md-beautiful-mermaid",
+      "version": "0.2.1",
+      "dependencies": {
+        "beautiful-mermaid": ">=1.0.0",
+      },
+      "devDependencies": {
+        "@theseus.run/jsx-md": "workspace:*",
+        "@types/bun": "1.3.10",
+        "typescript": "5.9.3",
+      },
+      "peerDependencies": {
+        "@theseus.run/jsx-md": ">=0.2.0",
       },
     },
   },
   "packages": {
     "@theseus.run/jsx-md": ["@theseus.run/jsx-md@workspace:packages/jsx-md"],
 
+    "@theseus.run/jsx-md-beautiful-mermaid": ["@theseus.run/jsx-md-beautiful-mermaid@workspace:packages/jsx-md-beautiful-mermaid"],
+
     "@types/bun": ["@types/bun@1.3.10", "", { "dependencies": { "bun-types": "1.3.10" } }, "sha512-0+rlrUrOrTSskibryHbvQkDOWRJwJZqZlxrUs1u4oOoTln8+WIXBPmAuCF35SWB2z4Zl3E84Nl/D0P7803nigQ=="],
 
     "@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
 
+    "beautiful-mermaid": ["beautiful-mermaid@1.1.3", "", { "dependencies": { "elkjs": "^0.11.0", "entities": "^7.0.1" } }, "sha512-TItrtrAyHp1vwFfFVYauWGrquouk/6SS21Aq3RsxindSYZODcN4xYrPZD6BiZRU+o5mKJzDPz9MUSMvELdylyg=="],
+
     "bun-types": ["bun-types@1.3.10", "", { "dependencies": { "@types/node": "*" } }, "sha512-tcpfCCl6XWo6nCVnpcVrxQ+9AYN1iqMIzgrSKYMB/fjLtV2eyAVEg7AxQJuCq/26R6HpKWykQXuSOq/21RYcbg=="],
+
+    "elkjs": ["elkjs@0.11.1", "", {}, "sha512-zxxR9k+rx5ktMwT/FwyLdPCrq7xN6e4VGGHH8hA01vVYKjTFik7nHOxBnAYtrgYUB1RpAiLvA1/U2YraWxyKKg=="],
+
+    "entities": ["entities@7.0.1", "", {}, "sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
