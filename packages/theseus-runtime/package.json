@@ -1,0 +1,23 @@
+{
+  "name": "@theseus.run/runtime",
+  "version": "0.0.1",
+  "description": "Headless agentic harness — Effect fibers as agents, queues as communication",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run bin/theseus.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/ai-openai": "4.0.0-beta.33",
+    "@effect/platform-bun": "4.0.0-beta.33",
+    "effect": "4.0.0-beta.33"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}

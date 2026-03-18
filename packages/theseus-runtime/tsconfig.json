@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@theseus.run/runtime": ["./src/index.ts"],
+      "@theseus.run/runtime/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*", "bin/**/*"]
+}
