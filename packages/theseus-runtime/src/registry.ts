@@ -61,6 +61,7 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
         const maybeEntry = HashMap.get(entries, agentId)
         if (maybeEntry._tag === "None") return false
         yield* Queue.offer(maybeEntry.value.inbox, msg)
+        yield* Ref.update(maybeEntry.value.messagesHandled, (n) => n + 1)
         return true
       })
 
@@ -97,7 +98,6 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
                   const state = yield* Ref.get(stateRef)
                   const next = yield* agent.handle(msg, state)
                   yield* Ref.set(stateRef, next)
-                  yield* Ref.update(msgCount, (n) => n + 1)
                 }
               }) as Effect.Effect<void, never, never>)
 

@@ -131,7 +131,13 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
         catch: (e) => new Error(`listDir failed: ${String(e)}`),
       })
       const filtered = deep ? entries : entries.filter((e) => !e.includes("/"))
-      return filtered.join("\n") || "(empty directory)"
+      const MAX_ENTRIES = 500
+      const truncated = filtered.length > MAX_ENTRIES
+      const visible = truncated ? filtered.slice(0, MAX_ENTRIES) : filtered
+      const suffix = truncated
+        ? `\n... (${filtered.length - MAX_ENTRIES} more entries omitted — use a more specific path or grep)`
+        : ""
+      return (visible.join("\n") || "(empty directory)") + suffix
     }).pipe(
       Effect.catchCause((cause) => Effect.succeed(`listDir error: ${Cause.pretty(cause)}`)),
     ),
@@ -204,11 +210,15 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
 
       // Compute lines surrounding the replaced block so the model always has
       // an up-to-date view of the file without needing a separate readFile call.
+      // When replace is empty (deletion), anchor by the search text's position
+      // in the original content rather than indexOf("") which always returns 0.
       const CONTEXT_LINES = 4
       const allLines = updated.split("\n")
-      const replacePos = updated.indexOf(replace)
-      const linesBefore = updated.slice(0, replacePos).split("\n").length - 1
-      const replaceLineCount = replace.split("\n").length
+      const anchorPos = replace.length > 0
+        ? updated.indexOf(replace)
+        : original.indexOf(search)
+      const linesBefore = updated.slice(0, anchorPos).split("\n").length - 1
+      const replaceLineCount = Math.max(replace.split("\n").length, 1)
       const ctxStart = Math.max(0, linesBefore - CONTEXT_LINES)
       const ctxEnd = Math.min(allLines.length, linesBefore + replaceLineCount + CONTEXT_LINES)
       const surrounding = allLines.slice(ctxStart, ctxEnd).join("\n")

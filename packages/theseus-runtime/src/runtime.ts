@@ -11,7 +11,7 @@
  *   ToolRegistryLive      ← built from fs + shell + ts tools │  │
  *   AppLayer              = all of the above merged           ┘  ┘
  */
-import { Cause, Effect, Layer, Queue } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import { AgentRegistry, AgentRegistryLive } from "./registry.ts"
 import { MessageBusLive } from "./bus.ts"
 import { TuiLogger, TuiLoggerLive } from "./tui.ts"
@@ -26,6 +26,7 @@ import {
   makeFsTools,
   makeShellTool,
   ToolRegistry,
+  buildToolRegistryService,
 } from "./tools/index.ts"
 import { Config } from "./config.ts"
 
@@ -33,7 +34,7 @@ import { Config } from "./config.ts"
 // Workspace root — where tsconfig.json lives for the runtime package
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_ROOT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "")
+const WORKSPACE_ROOT = new URL("../../../", import.meta.url).pathname.replace(/\/$/, "")
 
 // ---------------------------------------------------------------------------
 // TS Language Service layer (initialised once, warm for the session)
@@ -53,19 +54,7 @@ const ToolRegistryLive = Layer.effect(ToolRegistry)(
       makeShellTool(WORKSPACE_ROOT),
       ...makeTsTools(WORKSPACE_ROOT, languageService),
     ]
-    const byName = new Map(allTools.map((t) => [t.definition.function.name, t.handler]))
-    const defs = allTools.map((t) => t.definition) as ReadonlyArray<ToolDefinition>
-    return ToolRegistry.of({
-      definitions: () => defs,
-      execute: (name, args) => {
-        const handler = byName.get(name)
-        if (!handler)
-          return Effect.succeed(`Error: unknown tool "${name}"`)
-        return handler(args).pipe(
-          Effect.catchCause((cause) => Effect.succeed(`Tool error: ${Cause.pretty(cause)}`)),
-        )
-      },
-    })
+    return buildToolRegistryService(allTools)
   }),
 ).pipe(Layer.provide(TsServiceLive))
 
@@ -118,10 +107,11 @@ export const main = Effect.gen(function* () {
       }),
     )
 
-    const coordinator = new CoordinatorAgent(callLLM)
+  const coordinator = new CoordinatorAgent(callLLM)
+  const coordinatorId = coordinator.id
   yield* registry.spawn(coordinator)
 
-  yield* Queue.offer(coordinator._inbox, { _tag: "Start" })
+  yield* registry.send(coordinatorId, { _tag: "Start" } satisfies CoordinatorMsg)
 
   // Read tasks from stdin — one instruction per line.
   // This lets the runtime be driven by: echo "fix X" | bun run start
@@ -143,7 +133,7 @@ export const main = Effect.gen(function* () {
         for (const line of lines) {
           if (line.trim()) {
             yield* tui.info(`stdin → dispatch: ${line.trim().slice(0, 60)}${line.trim().length > 60 ? "…" : ""}`)
-            yield* Queue.offer(coordinator._inbox, { _tag: "Dispatch", instruction: line.trim() } satisfies CoordinatorMsg)
+            yield* registry.send(coordinatorId, { _tag: "Dispatch", instruction: line.trim() } satisfies CoordinatorMsg)
           }
         }
       }

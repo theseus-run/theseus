@@ -1,4 +1,4 @@
-export { ToolRegistry, makeToolRegistryLayer } from "./registry.ts"
+export { ToolRegistry, makeToolRegistryLayer, buildToolRegistryService } from "./registry.ts"
 export { makeFsTools } from "./fs.ts"
 export { makeShellTool } from "./shell.ts"
 export { TsService, makeTsServiceLayer, makeTsTools } from "./ts-service.ts"

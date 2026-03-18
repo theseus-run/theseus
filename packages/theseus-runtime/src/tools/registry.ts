@@ -19,27 +19,35 @@ export class ToolRegistry extends ServiceMap.Service<
 >()("ToolRegistry") {}
 
 /**
- * Build a ToolRegistry Layer from a plain array of registered tools.
- * Usage: Layer.provide(makeToolRegistryLayer([readFileTool, ...]))
+ * Build the raw ToolRegistry service value from a plain array of registered tools.
+ * Use this inside a Layer.effect that needs to yield other services first
+ * (e.g. TsService) before constructing the tool list.
  */
-export const makeToolRegistryLayer = (
+export const buildToolRegistryService = (
   tools: ReadonlyArray<RegisteredTool>,
-): Layer.Layer<ToolRegistry> => {
+): typeof ToolRegistry.Service => {
   const byName = new Map<string, ToolHandler>(
     tools.map((t) => [t.definition.function.name, t.handler]),
   )
   const defs = tools.map((t) => t.definition) as ReadonlyArray<ToolDefinition>
 
-  return Layer.succeed(ToolRegistry)(
-    ToolRegistry.of({
-      definitions: () => defs,
-      execute: (name, args) => {
-        const handler = byName.get(name)
-        if (!handler) return Effect.succeed(`Error: unknown tool "${name}"`)
-        return handler(args).pipe(
-          Effect.catchCause((cause) => Effect.succeed(`Tool error: ${Cause.pretty(cause)}`)),
-        )
-      },
-    }),
-  )
+  return ToolRegistry.of({
+    definitions: () => defs,
+    execute: (name, args) => {
+      const handler = byName.get(name)
+      if (!handler) return Effect.succeed(`Error: unknown tool "${name}"`)
+      return handler(args).pipe(
+        Effect.catchCause((cause) => Effect.succeed(`Tool error: ${Cause.pretty(cause)}`)),
+      )
+    },
+  })
 }
+
+/**
+ * Build a ToolRegistry Layer from a plain array of registered tools.
+ * Use when the tool list is already fully constructed (no Effect dependencies needed).
+ */
+export const makeToolRegistryLayer = (
+  tools: ReadonlyArray<RegisteredTool>,
+): Layer.Layer<ToolRegistry> =>
+  Layer.succeed(ToolRegistry)(buildToolRegistryService(tools))
