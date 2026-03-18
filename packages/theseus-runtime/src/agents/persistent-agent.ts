@@ -105,6 +105,7 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
         // Tool calling loop — continues while model calls tools
         let continueLoop = true
+        let finalResponse = ""
         while (continueLoop) {
           continueLoop = yield* Effect.gen(function* () {
               const state = yield* Ref.get(self._stateRef)
@@ -227,8 +228,8 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
                   ],
                 }))
 
-                const preview = response.content.slice(0, 120)
-                yield* self.log(`${taskId} | done: ${preview}${response.content.length > 120 ? "…" : ""}`)
+                finalResponse = response.content
+                yield* self.log(`${taskId} | done (${response.content.length} chars)`)
                 return false
               }
           })
@@ -240,6 +241,7 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
           taskId,
           agentId: self.id,
           historySize: stateAfter.conversationHistory.length,
+          finalResponse,
         })
       }
     }) as Effect.Effect<never, never, never>

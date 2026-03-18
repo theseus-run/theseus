@@ -53,10 +53,5 @@ export class LLMParseError extends Data.TaggedError("LLMParseError")<{
 // Agent system
 // ---------------------------------------------------------------------------
 
-export class AgentNotFoundError extends Data.TaggedError("AgentNotFoundError")<{
-  readonly agentId: string
-}> {
-  override get message() {
-    return `No agent registered with id "${this.agentId}"`
-  }
-}
+// AgentNotFoundError removed — registry.send returns boolean on miss,
+// never throws. Reserved for future use if the registry grows a typed send.

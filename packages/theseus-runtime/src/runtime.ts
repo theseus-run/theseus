@@ -11,7 +11,7 @@
  *   ToolRegistryLive      ← built from fs + shell + ts tools │  │
  *   AppLayer              = all of the above merged           ┘  ┘
  */
-import { Cause, Effect, Layer } from "effect"
+import { Cause, Effect, Layer, Schedule } from "effect"
 import { AgentRegistry, AgentRegistryLive } from "./registry.ts"
 import { MessageBusLive } from "./bus.ts"
 import { TuiLogger, TuiLoggerLive } from "./tui.ts"
@@ -86,12 +86,15 @@ export const main = Effect.gen(function* () {
   yield* tui.info("theseus runtime starting…")
   yield* tui.info(`workspace: ${WORKSPACE_ROOT}`)
 
-  // Wrap copilot.chat — timeout + errors become content so the agent loop never crashes
+  // Wrap copilot.chat — retry transient errors, timeout + errors become content so the agent loop never crashes
+  // Retry up to 2 extra times with 2 s spacing before giving up (handles 429 / 503 / transient failures).
+  const retrySchedule = Schedule.spaced("2 seconds").pipe(Schedule.take(2))
   const callLLM = (
     messages: ReadonlyArray<ChatMessage>,
     tools: ReadonlyArray<ToolDefinition>,
   ) =>
     copilot.chat(messages, { model: Config.model, tools }).pipe(
+      Effect.retry(retrySchedule),
       Effect.timeout("120 seconds"),
       Effect.catchCause((cause) => {
         const msg = Cause.pretty(cause)

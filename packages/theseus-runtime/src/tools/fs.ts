@@ -31,6 +31,37 @@ const findNearestTsconfig = (startDir: string): string | undefined => {
 }
 
 // ---------------------------------------------------------------------------
+// listDir exclusions — directories and files that are never useful to list
+// ---------------------------------------------------------------------------
+
+const EXCLUDED_SEGMENTS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".cache",
+  ".turbo",
+  ".next",
+  ".output",
+  "coverage",
+  ".nyc_output",
+])
+
+// Lock files are noise — the agent should never need to read them
+const EXCLUDED_FILENAMES = new Set([
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+])
+
+const isExcluded = (entry: string): boolean => {
+  const firstSegment = entry.split("/")[0] ?? ""
+  return EXCLUDED_SEGMENTS.has(firstSegment) || EXCLUDED_FILENAMES.has(firstSegment)
+}
+
+// ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
 
@@ -72,12 +103,27 @@ const makeReadFile = (workspaceRoot: string): RegisteredTool => ({
         catch: (e) => new Error(`readFile: invalid arguments: ${String(e)}`),
       })
       const abs = resolvePath(workspaceRoot, path)
+      const bunFile = Bun.file(abs)
+      const sizeBytes = bunFile.size
+      const MAX_BYTES = 50 * 1024 // 50 KB
       const content = yield* Effect.tryPromise({
-        try: () => Bun.file(abs).text(),
+        try: () => bunFile.text(),
         catch: (e) => new Error(`readFile failed: ${String(e)}`),
       })
       const rel = relative(workspaceRoot, abs)
-      return `// ${rel}\n${content}`
+      const header = `// ${rel}\n`
+      if (sizeBytes > MAX_BYTES) {
+        const truncated = content.slice(0, MAX_BYTES)
+        const lineCount = content.split("\n").length
+        const truncatedLineCount = truncated.split("\n").length
+        return (
+          header +
+          truncated +
+          `\n\n// ⚠ File truncated at ${truncatedLineCount} of ${lineCount} lines (${Math.round(sizeBytes / 1024)} KB total).\n` +
+          `// Use shell+grep to search within it, or readFile a specific section via a different approach.`
+        )
+      }
+      return header + content
     }).pipe(
       Effect.catchCause((cause) => Effect.succeed(`readFile error: ${Cause.pretty(cause)}`)),
     ),
@@ -93,7 +139,7 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
     function: {
       name: "listDir",
       description:
-        "List files and directories at a path. Returns one entry per line with a trailing / for directories.",
+        "List files and directories at a path. Returns one entry per line with a trailing / for directories. node_modules, .git, dist, and lock files are always excluded.",
       parameters: {
         type: "object",
         properties: {
@@ -130,7 +176,8 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
         },
         catch: (e) => new Error(`listDir failed: ${String(e)}`),
       })
-      const filtered = deep ? entries : entries.filter((e) => !e.includes("/"))
+      const filtered = (deep ? entries : entries.filter((e) => !e.includes("/")))
+        .filter((e) => !isExcluded(e))
       const MAX_ENTRIES = 500
       const truncated = filtered.length > MAX_ENTRIES
       const visible = truncated ? filtered.slice(0, MAX_ENTRIES) : filtered

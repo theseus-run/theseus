@@ -337,3 +337,48 @@ enough to run after every individual edit.
 - **Grunt model selection:** inherit caller's model or always use a cheaper/faster one?
 - **Theseus autonomy level:** how much can Theseus decide without user confirmation? Per-session config or per-action type?
 - **Named → Named spawning depth:** capped at 1 level via Theseus today. Revisit if Planner → Critic → SubCritic patterns emerge.
+
+---
+
+## Deferred ideas — research backlog
+
+> Status: locked for reference. Do not implement until explicitly scheduled.  
+> Sources: cocoindex-code (`indexer.py`), Morph Compact SDK, Context+ (TypeScript MCP, tree-sitter WASM + Ollama).
+
+### Harness tool improvements
+
+**A — `fileSkeleton` tool**  
+Return all exported symbols with line ranges using `languageService.getNavigateToItems("*")`.  
+No file body. Example output: `export function verifyToken (L20–L58)`.  
+Forge calls this first; reads only the spans it needs. Highest token-savings idea available without embeddings.
+
+**B — File-read staleness tracking**  
+Maintain `Map<absPath, mtimeMs>` at harness level. Record mtime after every successful `readFile` or `searchReplace`.  
+On next access, if mtime changed, prepend: `⚠ This file was modified since your last read (current content shown).`  
+Prevents stale-mental-model edits when shell tool runs a formatter between reads.
+
+**C — `readFile` with symbol anchor**  
+Add optional `symbol` param to `readFile`. Use `languageService.getNavigateToItems(symbol)` to find the definition span, return only that function/class body + N context lines.  
+Turns a 500-line file read into a ~30-line targeted read.
+
+**F — `findReferences` call-site context**  
+Current output: `src/middleware/guard.ts:33:5`.  
+Enhanced output: `src/middleware/guard.ts:33  verifyToken(token)  (read)`.  
+Return the actual source line alongside coordinates. No extra round-trips for the agent.
+
+### Context management (fully deferred — do not start)
+
+**G — Objective vs query-based compaction**  
+Two modes: (1) between tasks, no query — drop tool results for files not mentioned in upcoming task; (2) mid-task with query — weight keep/drop by relevance to current instruction string.
+
+**H — Verbatim deletion only**  
+Compaction must only delete whole messages, never rewrite or summarise. Every surviving message is byte-for-byte identical. Prevents hallucinated context drift.
+
+**I — `preserve_recent: N`**  
+Always keep the last N message pairs untouched, regardless of compaction pressure.
+
+**J — Compaction audit log**  
+Log which messages were dropped to TuiLogger: `"Dropped 3 tool results (readFile utils.ts, shell grep, listDir)"`. Operator-visible.
+
+**K — Compaction as a coordinator step**  
+Run compaction between tasks: after forge sends `TaskDone`, before coordinator dispatches the next task. Never mid-task. The coordinator is already the correct insertion point.

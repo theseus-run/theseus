@@ -24,7 +24,7 @@ import { AgentRegistry } from "../registry.ts"
 export type CoordinatorMsg =
   | { readonly _tag: "Start" }
   | { readonly _tag: "Dispatch"; readonly instruction: string }
-  | { readonly _tag: "TaskDone"; readonly taskId: string; readonly agentId: AgentIdType; readonly historySize: number }
+  | { readonly _tag: "TaskDone"; readonly taskId: string; readonly agentId: AgentIdType; readonly historySize: number; readonly finalResponse: string }
 
 export interface CoordinatorState {
   readonly tasksCompleted: number
@@ -117,6 +117,11 @@ export class CoordinatorAgent extends BaseAgent<CoordinatorMsg, CoordinatorState
           yield* self.log(
             `✓ ${msg.taskId} done | history: ${msg.historySize} entries | pending: ${pendingTasks.length}`,
           )
+          // Print the full forge response clearly — this is the primary output for the operator.
+          yield* Effect.sync(() => {
+            const sep = "─".repeat(72)
+            process.stdout.write(`\n${sep}\n${msg.taskId} › forge response\n${sep}\n${msg.finalResponse}\n${sep}\n\n`)
+          })
           yield* dispatchNext()
         }
         // "Start" arriving after startup is ignored
