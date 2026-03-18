@@ -8,14 +8,15 @@
  */
 import { Effect, Queue } from "effect"
 import { BaseAgent } from "../agent.ts"
-import type { AgentId } from "../agent.ts"
+import { AgentId } from "../agent.ts"
+import type { AgentId as AgentIdType } from "../agent.ts"
 import { PersistentAgent } from "./persistent-agent.ts"
 import type { CallLLM } from "./persistent-agent.ts"
 import { AgentRegistry } from "../registry.ts"
 
 export type CoordinatorMsg =
   | { readonly _tag: "Start" }
-  | { readonly _tag: "TaskDone"; readonly taskId: string; readonly agentId: AgentId; readonly historySize: number }
+  | { readonly _tag: "TaskDone"; readonly taskId: string; readonly agentId: AgentIdType; readonly historySize: number }
 
 export interface CoordinatorState {
   readonly tasksCompleted: number
@@ -39,7 +40,7 @@ Navigation strategy:
 - Be concise in your final response — show the key changes made`
 
 export class CoordinatorAgent extends BaseAgent<CoordinatorMsg, CoordinatorState> {
-  readonly id = "coordinator"
+  readonly id = AgentId("coordinator")
   readonly initialState: CoordinatorState = { tasksCompleted: 0 }
 
   private readonly _callLLM: CallLLM
@@ -57,7 +58,7 @@ export class CoordinatorAgent extends BaseAgent<CoordinatorMsg, CoordinatorState
 
       const registry = yield* AgentRegistry
 
-      const forgeName = "forge-1"
+      const forgeName = AgentId("forge-1")
       yield* self.log(`spawning ${forgeName}`)
       yield* registry.spawn(new PersistentAgent(forgeName, self._callLLM, FORGE_SYSTEM_PROMPT))
 

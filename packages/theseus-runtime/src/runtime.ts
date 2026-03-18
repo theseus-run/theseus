@@ -27,6 +27,7 @@ import {
   ToolRegistry,
 } from "./tools/index.ts"
 import { Queue } from "effect"
+import { Config } from "./config.ts"
 
 // ---------------------------------------------------------------------------
 // Workspace root — where tsconfig.json lives for the runtime package
@@ -96,12 +97,13 @@ export const main = Effect.gen(function* () {
   yield* tui.info("theseus runtime starting…")
   yield* tui.info(`workspace: ${WORKSPACE_ROOT}`)
 
-  // Wrap copilot.chat — errors become content so the agent loop never crashes
+  // Wrap copilot.chat — timeout + errors become content so the agent loop never crashes
   const callLLM = (
     messages: ReadonlyArray<ChatMessage>,
     tools: ReadonlyArray<ToolDefinition>,
   ) =>
-    copilot.chat(messages, { model: "gpt-4o", tools }).pipe(
+    copilot.chat(messages, { model: Config.model, tools }).pipe(
+      Effect.timeout("120 seconds"),
       Effect.catchCause((cause) => {
         const msg = Cause.pretty(cause)
         return Effect.succeed({

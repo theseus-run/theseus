@@ -13,7 +13,7 @@
  *     if finish_reason === "tool_calls": execute tools, append results, repeat
  *     if finish_reason === "stop":       append final response, task done
  */
-import { Effect, Queue, Ref } from "effect"
+import { Cause, Effect, Queue, Ref } from "effect"
 import { BaseAgent } from "../agent.ts"
 import type { AgentId } from "../agent.ts"
 import type { ChatMessage, ToolDefinition } from "../llm/index.ts"
@@ -35,6 +35,8 @@ export type HistoryMessage = ChatMessage
 
 export interface PersistentState {
   readonly conversationHistory: ReadonlyArray<HistoryMessage>
+  readonly totalPromptTokens: number
+  readonly totalCompletionTokens: number
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +50,7 @@ export type CallLLM = (
   content: string
   finishReason: string
   toolCalls: ReadonlyArray<{ id: string; name: string; arguments: string }>
+  usage: { readonly promptTokens: number; readonly completionTokens: number }
 }, never>
 
 // ---------------------------------------------------------------------------
@@ -56,7 +59,11 @@ export type CallLLM = (
 
 export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
   readonly id: AgentId
-  readonly initialState: PersistentState = { conversationHistory: [] }
+  readonly initialState: PersistentState = {
+    conversationHistory: [],
+    totalPromptTokens: 0,
+    totalCompletionTokens: 0,
+  }
 
   private readonly _callLLM: CallLLM
   private readonly _systemPrompt: string
@@ -87,6 +94,7 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
         // Append the user turn
         yield* Ref.update(self._stateRef, (s) => ({
+          ...s,
           conversationHistory: [
             ...s.conversationHistory,
             { role: "user" as const, content: instruction },
@@ -95,88 +103,129 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
         const tools = toolRegistry.definitions()
 
-        // Tool calling loop — repeats until the model stops calling tools
+        // Tool calling loop — continues while model calls tools
         let continueLoop = true
         while (continueLoop) {
-          const state = yield* Ref.get(self._stateRef)
-          const messages: ReadonlyArray<ChatMessage> = [
-            { role: "system", content: self._systemPrompt },
-            ...state.conversationHistory,
-          ]
+          continueLoop = yield* Effect.gen(function* () {
+              const state = yield* Ref.get(self._stateRef)
+              const messages: ReadonlyArray<ChatMessage> = [
+                { role: "system", content: self._systemPrompt },
+                ...state.conversationHistory,
+              ]
 
-          yield* self.log(`${taskId} | calling LLM (${messages.length} msgs, ${tools.length} tools)…`)
+              yield* self.log(`${taskId} | calling LLM (${messages.length} msgs, ${tools.length} tools)…`)
 
-          const response = yield* self._callLLM(messages, tools)
+              const response = yield* self._callLLM(messages, tools).pipe(
+                Effect.withSpan("llm.chat", { attributes: { taskId, agentId: self.id, messageCount: messages.length } }),
+              )
 
-          // --- yield point A: after LLM response, before tool execution ---
-          const steerA = yield* Queue.poll(self._inbox)
-          if (steerA._tag === "Some" && steerA.value._tag === "Steer") {
-            yield* self.log(`${taskId} | steer (after llm): "${steerA.value.guidance}"`)
-          }
+              // Accumulate token usage
+              yield* Ref.update(self._stateRef, (s) => ({
+                ...s,
+                totalPromptTokens: s.totalPromptTokens + (response.usage?.promptTokens ?? 0),
+                totalCompletionTokens: s.totalCompletionTokens + (response.usage?.completionTokens ?? 0),
+              }))
+              const usageState = yield* Ref.get(self._stateRef)
+              yield* self.log(`${taskId} | tokens: +${response.usage?.promptTokens ?? 0}p +${response.usage?.completionTokens ?? 0}c (total: ${usageState.totalPromptTokens}p ${usageState.totalCompletionTokens}c)`)
 
-          if (response.finishReason === "tool_calls" && response.toolCalls.length > 0) {
-            // Append the assistant message with tool_calls (needed for API continuity)
-            yield* Ref.update(self._stateRef, (s) => ({
-              conversationHistory: [
-                ...s.conversationHistory,
-                {
-                  role: "assistant" as const,
-                  content: response.content ?? "",
-                  tool_calls: response.toolCalls.map((tc) => ({
-                    id: tc.id,
-                    type: "function" as const,
-                    function: { name: tc.name, arguments: tc.arguments },
-                  })),
-                },
-              ],
-            }))
-
-            // Execute each tool call and append results
-            for (const tc of response.toolCalls) {
-              yield* self.log(`${taskId} | tool → ${tc.name}(${tc.arguments.slice(0, 80)})`)
-
-              let parsedArgs: unknown
-              try {
-                parsedArgs = JSON.parse(tc.arguments)
-              } catch {
-                parsedArgs = {}
+              // --- yield point A: after LLM response, before tool execution ---
+              const steerA = yield* Queue.poll(self._inbox)
+              if (steerA._tag === "Some" && steerA.value._tag === "Steer") {
+                const guidance = steerA.value.guidance
+                yield* self.log(`${taskId} | steer (after llm): "${guidance}"`)
+                yield* Ref.update(self._stateRef, (s) => ({
+                  ...s,
+                  conversationHistory: [
+                    ...s.conversationHistory,
+                    { role: "user" as const, content: `[Guidance from operator: ${guidance}]` },
+                  ],
+                }))
               }
 
-              const result = yield* toolRegistry.execute(tc.name, parsedArgs)
-              yield* self.log(`${taskId} | tool ← ${tc.name}: ${result.slice(0, 100)}${result.length > 100 ? "…" : ""}`)
+              if (response.finishReason === "tool_calls" && response.toolCalls.length > 0) {
+                // Append the assistant message with tool_calls (needed for API continuity)
+                yield* Ref.update(self._stateRef, (s) => ({
+                  ...s,
+                  conversationHistory: [
+                    ...s.conversationHistory,
+                    {
+                      role: "assistant" as const,
+                      content: response.content ?? "",
+                      tool_calls: response.toolCalls.map((tc) => ({
+                        id: tc.id,
+                        type: "function" as const,
+                        function: { name: tc.name, arguments: tc.arguments },
+                      })),
+                    },
+                  ],
+                }))
 
-              yield* Ref.update(self._stateRef, (s) => ({
-                conversationHistory: [
-                  ...s.conversationHistory,
-                  {
-                    role: "tool" as const,
-                    content: result,
-                    tool_call_id: tc.id,
-                  },
-                ],
-              }))
-            }
+                // Execute each tool call and append results
+                for (const tc of response.toolCalls) {
+                  yield* self.log(`${taskId} | tool → ${tc.name}(${tc.arguments.slice(0, 80)})`)
 
-            // --- yield point B: after tool results injected ---
-            const steerB = yield* Queue.poll(self._inbox)
-            if (steerB._tag === "Some" && steerB.value._tag === "Steer") {
-              yield* self.log(`${taskId} | steer (after tools): "${steerB.value.guidance}"`)
-            }
+                  const parsedArgs = yield* Effect.try({
+                    try: () => JSON.parse(tc.arguments) as unknown,
+                    catch: (e) => new Error(`Failed to parse tool arguments for ${tc.name}: ${String(e)}`),
+                  }).pipe(
+                    Effect.catchCause((cause) => {
+                      // Log the parse failure and pass empty object so the tool handler can report the issue
+                      return Effect.as(
+                        Effect.logError(`tool arg parse failed: ${Cause.pretty(cause)}`),
+                        {} as unknown,
+                      )
+                    }),
+                  )
 
-            // Loop continues — call LLM again with tool results in context
-          } else {
-            // finish_reason === "stop" — model is done
-            yield* Ref.update(self._stateRef, (s) => ({
-              conversationHistory: [
-                ...s.conversationHistory,
-                { role: "assistant" as const, content: response.content },
-              ],
-            }))
+                  const result = yield* toolRegistry.execute(tc.name, parsedArgs).pipe(
+                    Effect.withSpan("tool.execute", { attributes: { toolName: tc.name, taskId, agentId: self.id } }),
+                  )
+                  yield* self.log(`${taskId} | tool ← ${tc.name}: ${result.slice(0, 100)}${result.length > 100 ? "…" : ""}`)
 
-            const preview = response.content.slice(0, 120)
-            yield* self.log(`${taskId} | done: ${preview}${response.content.length > 120 ? "…" : ""}`)
-            continueLoop = false
-          }
+                  yield* Ref.update(self._stateRef, (s) => ({
+                    ...s,
+                    conversationHistory: [
+                      ...s.conversationHistory,
+                      {
+                        role: "tool" as const,
+                        content: result,
+                        tool_call_id: tc.id,
+                      },
+                    ],
+                  }))
+                }
+
+                // --- yield point B: after tool results injected ---
+                const steerB = yield* Queue.poll(self._inbox)
+                if (steerB._tag === "Some" && steerB.value._tag === "Steer") {
+                  const guidance = steerB.value.guidance
+                  yield* self.log(`${taskId} | steer (after tools): "${guidance}"`)
+                  yield* Ref.update(self._stateRef, (s) => ({
+                    ...s,
+                    conversationHistory: [
+                      ...s.conversationHistory,
+                      { role: "user" as const, content: `[Guidance from operator: ${guidance}]` },
+                    ],
+                  }))
+                }
+
+                // Loop continues — call LLM again with tool results in context
+                return true
+              } else {
+                // finish_reason === "stop" — model is done
+                yield* Ref.update(self._stateRef, (s) => ({
+                  ...s,
+                  conversationHistory: [
+                    ...s.conversationHistory,
+                    { role: "assistant" as const, content: response.content },
+                  ],
+                }))
+
+                const preview = response.content.slice(0, 120)
+                yield* self.log(`${taskId} | done: ${preview}${response.content.length > 120 ? "…" : ""}`)
+                return false
+              }
+          })
         }
 
         const stateAfter = yield* Ref.get(self._stateRef)

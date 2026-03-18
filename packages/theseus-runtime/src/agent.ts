@@ -1,24 +1,23 @@
 /**
  * Core agent types and BaseAgent abstract class.
  */
-import { Effect } from "effect"
+import { Brand, Effect } from "effect"
 import type { Fiber, Queue, Ref } from "effect"
 
 // ---------------------------------------------------------------------------
 // Identifiers
 // ---------------------------------------------------------------------------
 
-export type AgentId = string
+export type AgentId = string & Brand.Brand<"AgentId">
+export const AgentId = Brand.nominal<AgentId>()
 
 // ---------------------------------------------------------------------------
 // RuntimeContext — injected into every agent on spawn
 // ---------------------------------------------------------------------------
 
 export interface RuntimeContext {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly send: (agentId: AgentId, msg: any) => Effect.Effect<void>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly publish: (topic: string, msg: any) => Effect.Effect<void>
+  readonly send: (agentId: AgentId, msg: unknown) => Effect.Effect<void>
+  readonly publish: (topic: string, msg: unknown) => Effect.Effect<void>
   readonly log: (content: string) => Effect.Effect<void>
 }
 

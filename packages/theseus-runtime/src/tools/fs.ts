@@ -7,7 +7,7 @@
  * All paths are resolved relative to `workspaceRoot` when they are relative.
  * Absolute paths pass through unchanged.
  */
-import { Effect } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import { existsSync } from "node:fs"
 import { resolve, relative, isAbsolute, dirname } from "path"
 import type { RegisteredTool } from "./types.ts"
@@ -31,6 +31,21 @@ const findNearestTsconfig = (startDir: string): string | undefined => {
 }
 
 // ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
+
+const ReadFileArgs = Schema.Struct({ path: Schema.String })
+const ListDirArgs = Schema.Struct({
+  path: Schema.optional(Schema.String),
+  deep: Schema.optional(Schema.Boolean),
+})
+const SearchReplaceArgs = Schema.Struct({
+  path: Schema.String,
+  search: Schema.String,
+  replace: Schema.String,
+})
+
+// ---------------------------------------------------------------------------
 // readFile
 // ---------------------------------------------------------------------------
 
@@ -52,7 +67,10 @@ const makeReadFile = (workspaceRoot: string): RegisteredTool => ({
   },
   handler: (args) =>
     Effect.gen(function* () {
-      const { path } = args as { path: string }
+      const { path } = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(ReadFileArgs)(args),
+        catch: (e) => new Error(`readFile: invalid arguments: ${String(e)}`),
+      })
       const abs = resolvePath(workspaceRoot, path)
       const content = yield* Effect.tryPromise({
         try: () => Bun.file(abs).text(),
@@ -60,7 +78,9 @@ const makeReadFile = (workspaceRoot: string): RegisteredTool => ({
       })
       const rel = relative(workspaceRoot, abs)
       return `// ${rel}\n${content}`
-    }),
+    }).pipe(
+      Effect.catchCause((cause) => Effect.succeed(`readFile error: ${Cause.pretty(cause)}`)),
+    ),
 })
 
 // ---------------------------------------------------------------------------
@@ -93,7 +113,10 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
   },
   handler: (args) =>
     Effect.gen(function* () {
-      const { path: rawPath, deep } = (args ?? {}) as { path?: string; deep?: boolean }
+      const { path: rawPath, deep } = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(ListDirArgs)(args ?? {}),
+        catch: (e) => new Error(`listDir: invalid arguments: ${String(e)}`),
+      })
       const resolvedPath: string = rawPath ?? "."
       const abs = resolvePath(workspaceRoot, resolvedPath)
       const entries = yield* Effect.tryPromise({
@@ -109,7 +132,9 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
       })
       const filtered = deep ? entries : entries.filter((e) => !e.includes("/"))
       return filtered.join("\n") || "(empty directory)"
-    }),
+    }).pipe(
+      Effect.catchCause((cause) => Effect.succeed(`listDir error: ${Cause.pretty(cause)}`)),
+    ),
 })
 
 // ---------------------------------------------------------------------------
@@ -140,11 +165,10 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
   },
   handler: (args) =>
     Effect.gen(function* () {
-      const { path, search, replace } = args as {
-        path: string
-        search: string
-        replace: string
-      }
+      const { path, search, replace } = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(SearchReplaceArgs)(args),
+        catch: (e) => new Error(`searchReplace: invalid arguments: ${String(e)}`),
+      })
       const abs = resolvePath(workspaceRoot, path)
       const rel = relative(workspaceRoot, abs)
 
@@ -204,7 +228,9 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
         return `Edit applied to ${rel}.\n\nType errors detected:\n${errors}\n\nFix these before moving on.`
       }
       return `Edit applied to ${rel}. No type errors.`
-    }) as Effect.Effect<string, Error, never>,
+    }).pipe(
+      Effect.catchCause((cause) => Effect.succeed(`searchReplace error: ${Cause.pretty(cause)}`)),
+    ),
 })
 
 // ---------------------------------------------------------------------------

@@ -10,13 +10,15 @@
  *
  * Bearer tokens are cached and refreshed when within 60 s of expiry.
  */
-import { Cause, Effect, Layer, Ref, ServiceMap } from "effect"
+import { Effect, Layer, Ref, ServiceMap } from "effect"
 import { BunHttpClient } from "@effect/platform-bun"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { readFileSync } from "fs"
 import { homedir } from "os"
 import { join } from "path"
+import { CopilotTokenError, LLMHttpError, LLMParseError } from "../errors.ts"
+import { Config } from "../config.ts"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,7 +81,7 @@ interface TokenCache {
 // Helpers — read local Copilot credential file (synchronous, one-off)
 // ---------------------------------------------------------------------------
 
-const readOauthToken: Effect.Effect<string, Error> = Effect.try({
+const readOauthToken: Effect.Effect<string, CopilotTokenError> = Effect.try({
   try: () => {
     const path = join(homedir(), ".config", "github-copilot", "apps.json")
     const raw = readFileSync(path, "utf-8")
@@ -91,7 +93,7 @@ const readOauthToken: Effect.Effect<string, Error> = Effect.try({
     }
     return entry.oauth_token
   },
-  catch: (e) => new Error(`Failed to read Copilot token: ${String(e)}`),
+  catch: (e) => new CopilotTokenError({ cause: e }),
 })
 
 // ---------------------------------------------------------------------------
@@ -109,7 +111,7 @@ export class CopilotProvider extends ServiceMap.Service<
     readonly chat: (
       messages: ReadonlyArray<ChatMessage>,
       options?: { model?: string; tools?: ReadonlyArray<ToolDefinition> },
-    ) => Effect.Effect<ChatResponse, Error>
+    ) => Effect.Effect<ChatResponse, CopilotTokenError | LLMHttpError | LLMParseError>
   }
 >()("CopilotProvider") {}
 
@@ -125,7 +127,7 @@ export const CopilotProviderLive = Layer.effect(CopilotProvider)(
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null)
 
     /** Exchange an oauth_token for a short-lived Copilot bearer. */
-    const exchangeToken = (oauthToken: string): Effect.Effect<TokenCache, Error> =>
+    const exchangeToken = (oauthToken: string): Effect.Effect<TokenCache, CopilotTokenError | LLMParseError> =>
       Effect.gen(function* () {
         const req = HttpClientRequest.get(
           "https://api.github.com/copilot_internal/v2/token",
@@ -137,20 +139,22 @@ export const CopilotProviderLive = Layer.effect(CopilotProvider)(
           }),
         )
         const res = yield* httpClient.execute(req).pipe(
-          Effect.mapError((e) => new Error(`Token exchange HTTP error: ${String(e)}`)),
+          Effect.mapError((e) => new CopilotTokenError({ cause: e })),
         )
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const body = (yield* res.json.pipe(
-          Effect.mapError((e) => new Error(`Token exchange parse error: ${String(e)}`)),
+          Effect.mapError((e) => new LLMParseError({ cause: e })),
         )) as any
         if (!body?.token) {
-          throw new Error(`Unexpected token exchange response: ${JSON.stringify(body)}`)
+          return yield* Effect.fail(
+            new CopilotTokenError({ cause: new Error(`Unexpected token exchange response: ${JSON.stringify(body)}`) }),
+          )
         }
         return { bearer: body.token as string, expiresAt: body.expires_at as number }
       })
 
     /** Return a valid bearer, re-exchanging if expired or within 60 s of expiry. */
-    const getBearer = (): Effect.Effect<string, Error> =>
+    const getBearer = (): Effect.Effect<string, CopilotTokenError | LLMParseError> =>
       Effect.gen(function* () {
         const now = Math.floor(Date.now() / 1000)
         const cached = yield* Ref.get(tokenCacheRef)
@@ -166,13 +170,13 @@ export const CopilotProviderLive = Layer.effect(CopilotProvider)(
     return CopilotProvider.of({
       chat: (messages, options = {}) =>
         Effect.gen(function* () {
-          const { model = "gpt-4o", tools } = options
+          const { model = Config.model, tools } = options
           const bearer = yield* getBearer()
 
           const reqBody: Record<string, unknown> = {
             model,
             messages: messages as Array<{ role: string; content: string }>,
-            max_tokens: 4096,
+            max_tokens: Config.maxTokens,
             stream: false,
           }
           if (tools && tools.length > 0) reqBody.tools = tools
@@ -192,21 +196,21 @@ export const CopilotProviderLive = Layer.effect(CopilotProvider)(
           )
 
           const res = yield* httpClient.execute(req).pipe(
-            Effect.mapError((e) => new Error(`Copilot HTTP error: ${String(e)}`)),
+            Effect.mapError((e) => new LLMHttpError({ status: 0, body: String(e) })),
           )
 
           if (res.status !== 200) {
             const errText = yield* res.text.pipe(
-              Effect.mapError((e) => new Error(`Failed to read error body: ${String(e)}`)),
+              Effect.mapError((e) => new LLMParseError({ cause: e })),
             )
             return yield* Effect.fail(
-              new Error(`Copilot API error ${res.status}: ${errText}`),
+              new LLMHttpError({ status: res.status, body: errText }),
             )
           }
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const data = (yield* res.json.pipe(
-            Effect.mapError((e) => new Error(`Copilot response parse error: ${String(e)}`)),
+            Effect.mapError((e) => new LLMParseError({ cause: e })),
           )) as any
 
           const choice = data?.choices?.[0]

@@ -2,6 +2,7 @@
  * AgentRegistry — spawn agents as Effect fibers and route point-to-point messages.
  */
 import {
+  Cause,
   Effect,
   Fiber,
   HashMap,
@@ -33,10 +34,8 @@ interface AgentEntry {
 export class AgentRegistry extends ServiceMap.Service<
   AgentRegistry,
   {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     spawn: <M, S>(agent: BaseAgent<M, S>) => Effect.Effect<void>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    send: (agentId: AgentId, msg: any) => Effect.Effect<boolean>
+    send: (agentId: AgentId, msg: unknown) => Effect.Effect<boolean>
     list: () => Effect.Effect<ReadonlyArray<AgentInfo>>
     stop: (agentId: AgentId) => Effect.Effect<void>
   }
@@ -55,8 +54,7 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
 
     const sendToAgent = (
       agentId: AgentId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      msg: any,
+      msg: unknown,
     ): Effect.Effect<boolean> =>
       Effect.gen(function* () {
         const entries = yield* Ref.get(entriesRef)
@@ -103,7 +101,13 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
                 }
               }) as Effect.Effect<void, never, never>)
 
-          const fiber = yield* Effect.forkDetach(loop)
+          // Wrap with catchCause so crashes are logged rather than silently swallowed
+          const supervisedLoop = loop.pipe(
+            Effect.catchCause((cause) =>
+              tui.error(`[${agent.id}] agent crashed: ${Cause.pretty(cause)}`),
+            ),
+          )
+          const fiber = yield* Effect.forkDetach(supervisedLoop)
           agent._fiber = fiber
 
           yield* Ref.update(entriesRef, (m) =>

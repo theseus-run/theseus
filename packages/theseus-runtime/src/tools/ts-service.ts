@@ -11,11 +11,12 @@
  * Tool handlers close over ts.LanguageService directly (not via yield* TsService)
  * so they satisfy ToolHandler = (args) => Effect.Effect<string, Error> with R=never.
  */
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Schema, ServiceMap } from "effect"
 import ts from "typescript"
 import { statSync, readFileSync } from "fs"
 import { dirname, relative, resolve } from "path"
 import type { RegisteredTool } from "./types.ts"
+import { TsServiceInitError } from "../errors.ts"
 
 // ---------------------------------------------------------------------------
 // TsService — Effect service, initialised once per session
@@ -29,52 +30,65 @@ export class TsService extends ServiceMap.Service<
   }
 >()("TsService") {}
 
-export const makeTsServiceLayer = (workspaceRoot: string): Layer.Layer<TsService> =>
+export const makeTsServiceLayer = (workspaceRoot: string): Layer.Layer<TsService, TsServiceInitError> =>
   Layer.effect(TsService)(
-    Effect.sync(() => {
-      const configPath = ts.findConfigFile(workspaceRoot, ts.sys.fileExists, "tsconfig.json")
-      if (!configPath) throw new Error(`tsconfig.json not found under ${workspaceRoot}`)
+    Effect.try({
+      try: () => {
+        const configPath = ts.findConfigFile(workspaceRoot, ts.sys.fileExists, "tsconfig.json")
+        if (!configPath) throw new Error(`tsconfig.json not found under ${workspaceRoot}`)
 
-      const { config } = ts.readConfigFile(configPath, ts.sys.readFile)
-      const { fileNames, options } = ts.parseJsonConfigFileContent(
-        config,
-        ts.sys,
-        dirname(configPath),
-      )
+        const { config } = ts.readConfigFile(configPath, ts.sys.readFile)
+        const { fileNames, options } = ts.parseJsonConfigFileContent(
+          config,
+          ts.sys,
+          dirname(configPath),
+        )
 
-      const host: ts.LanguageServiceHost = {
-        getScriptFileNames: () => fileNames,
-        // mtime as version — service re-reads files automatically after edits
-        getScriptVersion: (fileName) => {
-          try {
-            return String(statSync(fileName).mtimeMs)
-          } catch {
-            return "0"
-          }
-        },
-        getScriptSnapshot: (fileName) => {
-          try {
-            return ts.ScriptSnapshot.fromString(readFileSync(fileName, "utf-8"))
-          } catch {
-            return undefined
-          }
-        },
-        getCurrentDirectory: () => workspaceRoot,
-        getCompilationSettings: () => options,
-        getDefaultLibFileName: ts.getDefaultLibFilePath,
-        fileExists: ts.sys.fileExists,
-        readFile: ts.sys.readFile,
-        readDirectory: ts.sys.readDirectory,
-        directoryExists: ts.sys.directoryExists,
-        getDirectories: ts.sys.getDirectories,
-      }
+        const host: ts.LanguageServiceHost = {
+          getScriptFileNames: () => fileNames,
+          // mtime as version — service re-reads files automatically after edits
+          getScriptVersion: (fileName) => {
+            try {
+              return String(statSync(fileName).mtimeMs)
+            } catch {
+              return "0"
+            }
+          },
+          getScriptSnapshot: (fileName) => {
+            try {
+              return ts.ScriptSnapshot.fromString(readFileSync(fileName, "utf-8"))
+            } catch {
+              return undefined
+            }
+          },
+          getCurrentDirectory: () => workspaceRoot,
+          getCompilationSettings: () => options,
+          getDefaultLibFileName: ts.getDefaultLibFilePath,
+          fileExists: ts.sys.fileExists,
+          readFile: ts.sys.readFile,
+          readDirectory: ts.sys.readDirectory,
+          directoryExists: ts.sys.directoryExists,
+          getDirectories: ts.sys.getDirectories,
+        }
 
-      return TsService.of({
-        languageService: ts.createLanguageService(host, ts.createDocumentRegistry()),
-        workspaceRoot,
-      })
+        return TsService.of({
+          languageService: ts.createLanguageService(host, ts.createDocumentRegistry()),
+          workspaceRoot,
+        })
+      },
+      catch: (e) => new TsServiceInitError({ cause: e }),
     }),
   )
+
+// ---------------------------------------------------------------------------
+// Schema for findReferences args
+// ---------------------------------------------------------------------------
+
+const FindReferencesArgs = Schema.Struct({
+  symbol: Schema.String,
+  kind: Schema.optional(Schema.String),
+  definedIn: Schema.optional(Schema.String),
+})
 
 // ---------------------------------------------------------------------------
 // findReferences tool
@@ -136,11 +150,10 @@ export const makeFindReferencesTool = (
   },
   handler: (args) =>
     Effect.gen(function* () {
-      const { symbol, kind, definedIn } = args as {
-        symbol: string
-        kind?: string
-        definedIn?: string
-      }
+      const { symbol, kind, definedIn } = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(FindReferencesArgs)(args),
+        catch: (e) => new Error(`findReferences: invalid arguments: ${String(e)}`),
+      })
 
       // Resolve definedIn to absolute path for comparison with item.fileName
       const definedInAbs = definedIn ? resolve(workspaceRoot, definedIn) : undefined
@@ -204,7 +217,7 @@ export const makeFindReferencesTool = (
       if (lines.length === 0) return `No references found for "${symbol}".`
       return [`References to "${symbol}" (${lines.length}):`, ...lines].join("\n")
     }).pipe(
-      Effect.catchCause((cause) => Effect.succeed(`findReferences error: ${cause}`)),
+      Effect.catchCause((cause) => Effect.succeed(`findReferences error: ${Cause.pretty(cause)}`)),
     ),
 })
 

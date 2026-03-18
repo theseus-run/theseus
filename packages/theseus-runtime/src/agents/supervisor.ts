@@ -2,8 +2,8 @@
  * SupervisorAgent — generates tasks on a ticker and dispatches them to workers.
  */
 import { Effect, Queue } from "effect"
-import { BaseAgent } from "../agent.ts"
-import type { AgentId } from "../agent.ts"
+import { BaseAgent, AgentId } from "../agent.ts"
+import type { AgentId as AgentIdType } from "../agent.ts"
 
 // ---------------------------------------------------------------------------
 // Messages
@@ -13,7 +13,7 @@ export type SupervisorMsg =
   | { readonly _tag: "Tick" }
   | {
       readonly _tag: "WorkerResult"
-      readonly workerId: AgentId
+      readonly workerId: AgentIdType
       readonly taskId: string
       readonly result: string
     }
@@ -25,7 +25,7 @@ export type SupervisorMsg =
 export interface SupervisorState {
   readonly taskCounter: number
   readonly completedTasks: number
-  readonly workerIds: ReadonlyArray<AgentId>
+  readonly workerIds: ReadonlyArray<AgentIdType>
 }
 
 // ---------------------------------------------------------------------------
@@ -33,9 +33,9 @@ export interface SupervisorState {
 // ---------------------------------------------------------------------------
 
 export class SupervisorAgent extends BaseAgent<SupervisorMsg, SupervisorState> {
-  readonly id = "supervisor"
+  readonly id = AgentId("supervisor")
 
-  constructor(private readonly workerIds: ReadonlyArray<AgentId>) {
+  constructor(private readonly workerIds: ReadonlyArray<AgentIdType>) {
     super()
   }
 

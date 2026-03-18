@@ -7,15 +7,18 @@
  * Intended for: bun test, git diff, git log, rg, find — anything that
  * doesn't have a dedicated semantic tool.
  */
-import { Effect } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import type { RegisteredTool } from "./types.ts"
+import { Config } from "../config.ts"
 
-const MAX_OUTPUT = 8 * 1024 // 8 KB
-
-const truncate = (s: string): string =>
-  s.length > MAX_OUTPUT
+const truncate = (s: string): string => {
+  const MAX_OUTPUT = Config.shellMaxOutput
+  return s.length > MAX_OUTPUT
     ? s.slice(0, MAX_OUTPUT) + `\n... (truncated — ${s.length - MAX_OUTPUT} bytes omitted)`
     : s
+}
+
+const ShellArgs = Schema.Struct({ command: Schema.String })
 
 export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
   definition: {
@@ -42,7 +45,10 @@ export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
   },
   handler: (args) =>
     Effect.gen(function* () {
-      const { command } = args as { command: string }
+      const { command } = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(ShellArgs)(args),
+        catch: (e) => new Error(`shell: invalid arguments: ${String(e)}`),
+      })
 
       const { stdout, stderr, exitCode } = yield* Effect.tryPromise({
         try: async () => {
@@ -64,5 +70,7 @@ export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
       const combined = [stdout, stderr].filter(Boolean).join("\n").trim()
       const output = combined || "(no output)"
       return `exit ${exitCode}\n${truncate(output)}`
-    }),
+    }).pipe(
+      Effect.catchCause((cause) => Effect.succeed(`shell error: ${Cause.pretty(cause)}`)),
+    ),
 })

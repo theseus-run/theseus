@@ -2,14 +2,14 @@
  * MessageBus — broadcast pub/sub for cross-agent events.
  *
  * Uses a single PubSub<BusEnvelope> for all topics.
- * `subscribe(topic)` returns a filtered Queue scoped to the caller's Scope.
+ * `subscribe(topic)` returns a filtered Stream.
  * `subscribeAll()` returns the raw PubSub.Subscription for all events.
  */
 import {
   Effect,
   Layer,
   PubSub,
-  Queue,
+  Stream,
   type Scope,
   ServiceMap,
 } from "effect"
@@ -21,8 +21,7 @@ import {
 export interface BusEnvelope {
   readonly topic: string
   readonly from: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly payload: any
+  readonly payload: unknown
 }
 
 // ---------------------------------------------------------------------------
@@ -35,18 +34,14 @@ export class MessageBus extends ServiceMap.Service<
     publish: (
       topic: string,
       from: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      payload: any,
+      payload: unknown,
     ) => Effect.Effect<void>
 
     /**
      * Subscribe to a specific topic.
-     * Returns a Queue<BusEnvelope> scoped to the caller's Scope — the
-     * background filter fiber is cleaned up when the scope closes.
+     * Returns a Stream<BusEnvelope> filtered to the given topic.
      */
-    subscribe: (
-      topic: string,
-    ) => Effect.Effect<Queue.Dequeue<BusEnvelope>, never, Scope.Scope>
+    subscribe: (topic: string) => Stream.Stream<BusEnvelope>
 
     /**
      * Subscribe to ALL topics (e.g. for a TUI event log).
@@ -73,21 +68,7 @@ export const MessageBusLive = Layer.effect(MessageBus)(
         PubSub.publish(ps, { topic, from, payload }),
 
       subscribe: (topic) =>
-        Effect.gen(function* () {
-          const sub = yield* PubSub.subscribe(ps)
-          const filtered = yield* Queue.unbounded<BusEnvelope>()
-          yield* Effect.forkScoped(
-            Effect.gen(function* () {
-              while (true) {
-                const env = yield* PubSub.take(sub)
-                if (env.topic === topic) {
-                  yield* Queue.offer(filtered, env)
-                }
-              }
-            }),
-          )
-          return filtered as Queue.Dequeue<BusEnvelope>
-        }),
+        Stream.fromPubSub(ps).pipe(Stream.filter((e) => e.topic === topic)),
 
       subscribeAll: () => PubSub.subscribe(ps),
     })

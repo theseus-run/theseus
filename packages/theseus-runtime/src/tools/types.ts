@@ -6,10 +6,10 @@ export type { ToolDefinition, LLMToolCall } from "../llm/copilot.ts"
 /**
  * A tool handler: receives parsed args, returns a plain string result
  * that is injected back into the conversation as a tool message.
- * Errors are caught by the ToolRegistry and returned as error strings
- * (so the model can reason about failures rather than crashing).
+ * Handlers are fully responsible for converting all errors to informative
+ * strings — the handler must never fail (Effect<string, never>).
  */
-export type ToolHandler = (args: unknown) => Effect.Effect<string, Error>
+export type ToolHandler = (args: unknown) => Effect.Effect<string, never>
 
 /**
  * A registered tool: its JSON schema definition (sent to the LLM so it
