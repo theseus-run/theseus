@@ -211,6 +211,12 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
                 // Loop continues — call LLM again with tool results in context
                 return true
+              } else if (response.finishReason === "error") {
+                // LLM call failed (timeout, network error, etc.).
+                // Log the error but do NOT append to conversationHistory — a raw error
+                // string as an assistant message would confuse subsequent LLM calls.
+                yield* self.log(`${taskId} | LLM error (history unchanged): ${response.content}`)
+                return false
               } else {
                 // finish_reason === "stop" — model is done
                 yield* Ref.update(self._stateRef, (s) => ({

@@ -178,22 +178,17 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
       })
 
       if (!original.includes(search)) {
-        // Return the count of near-matches to help the model self-correct
-        const fileLines = original.split("\n")
-        const firstWord = search.trim().split(/\s+/)[0] ?? ""
-        const hints = fileLines
-          .map((l, i) => ({ i: i + 1, l }))
-          .filter(({ l }) => firstWord !== "" && l.includes(firstWord))
-          .slice(0, 5)
-          .map(({ i, l }) => `  line ${i}: ${l.trimEnd()}`)
-          .join("\n")
+        // Return the full file so the model can find the exact text — hints alone rarely work.
         return [
           `Error: search text not found in ${rel}.`,
-          hints ? `Lines containing "${firstWord}":\n${hints}` : "",
-          "Re-read the file and try again with the exact text.",
-        ]
-          .filter(Boolean)
-          .join("\n")
+          "The current file content is shown below. Find your intended block in it and retry",
+          "with the exact text (indentation and whitespace must match character-for-character).",
+          "",
+          `--- Current content of ${rel} ---`,
+          "```",
+          original,
+          "```",
+        ].join("\n")
       }
 
       const occurrences = original.split(search).length - 1
@@ -207,11 +202,30 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
         catch: (e) => new Error(`Cannot write ${rel}: ${String(e)}`),
       })
 
+      // Compute lines surrounding the replaced block so the model always has
+      // an up-to-date view of the file without needing a separate readFile call.
+      const CONTEXT_LINES = 4
+      const allLines = updated.split("\n")
+      const replacePos = updated.indexOf(replace)
+      const linesBefore = updated.slice(0, replacePos).split("\n").length - 1
+      const replaceLineCount = replace.split("\n").length
+      const ctxStart = Math.max(0, linesBefore - CONTEXT_LINES)
+      const ctxEnd = Math.min(allLines.length, linesBefore + replaceLineCount + CONTEXT_LINES)
+      const surrounding = allLines.slice(ctxStart, ctxEnd).join("\n")
+      const lineRange = `lines ${ctxStart + 1}–${ctxEnd}`
+
       // Find nearest tsconfig.json by walking up from the edited file's directory.
       // This correctly handles monorepos where the workspace root has no tsconfig.
       const tsconfigPath = findNearestTsconfig(dirname(abs))
       if (!tsconfigPath) {
-        return `Edit applied to ${rel}. (No tsconfig.json found — type check skipped.)`
+        return [
+          `Edit applied to ${rel}. (No tsconfig.json found — type check skipped.)`,
+          "",
+          `--- ${rel} around change (${lineRange}) ---`,
+          "```",
+          surrounding,
+          "```",
+        ].join("\n")
       }
 
       const tscOut = yield* Effect.tryPromise({
@@ -224,10 +238,17 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
       }).pipe(Effect.catchCause(() => Effect.succeed("(tsc check failed to run)")))
 
       const errors = tscOut.trim()
-      if (errors) {
-        return `Edit applied to ${rel}.\n\nType errors detected:\n${errors}\n\nFix these before moving on.`
-      }
-      return `Edit applied to ${rel}. No type errors.`
+      const header = errors
+        ? `Edit applied to ${rel}.\n\nType errors detected:\n${errors}\n\nFix these before moving on.`
+        : `Edit applied to ${rel}. No type errors.`
+      return [
+        header,
+        "",
+        `--- ${rel} around change (${lineRange}) ---`,
+        "```",
+        surrounding,
+        "```",
+      ].join("\n")
     }).pipe(
       Effect.catchCause((cause) => Effect.succeed(`searchReplace error: ${Cause.pretty(cause)}`)),
     ),

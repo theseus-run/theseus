@@ -11,13 +11,14 @@
  *   ToolRegistryLive      ← built from fs + shell + ts tools │  │
  *   AppLayer              = all of the above merged           ┘  ┘
  */
-import { Cause, Effect, Layer } from "effect"
+import { Cause, Effect, Layer, Queue } from "effect"
 import { AgentRegistry, AgentRegistryLive } from "./registry.ts"
 import { MessageBusLive } from "./bus.ts"
 import { TuiLogger, TuiLoggerLive } from "./tui.ts"
 import { CopilotProvider, CopilotProviderLive } from "./llm/index.ts"
 import type { ChatMessage, ToolDefinition } from "./llm/index.ts"
 import { CoordinatorAgent } from "./agents/coordinator.ts"
+import type { CoordinatorMsg } from "./agents/coordinator.ts"
 import {
   TsService,
   makeTsServiceLayer,
@@ -26,7 +27,6 @@ import {
   makeShellTool,
   ToolRegistry,
 } from "./tools/index.ts"
-import { Queue } from "effect"
 import { Config } from "./config.ts"
 
 // ---------------------------------------------------------------------------
@@ -109,18 +109,47 @@ export const main = Effect.gen(function* () {
         return Effect.succeed({
           content: `[LLM error: ${msg}]`,
           model: "unknown",
-          finishReason: "stop" as const,
+          // "error" is a sentinel — persistent-agent will log this and NOT append it
+          // to conversationHistory, preventing poisoning of future LLM calls.
+          finishReason: "error" as const,
           toolCalls: [] as const,
           usage: { promptTokens: 0, completionTokens: 0 },
         })
       }),
     )
 
-  const coordinator = new CoordinatorAgent(callLLM)
+    const coordinator = new CoordinatorAgent(callLLM)
   yield* registry.spawn(coordinator)
 
   yield* Queue.offer(coordinator._inbox, { _tag: "Start" })
 
-  yield* tui.info("scenario running  (Ctrl-C to stop)")
+  // Read tasks from stdin — one instruction per line.
+  // This lets the runtime be driven by: echo "fix X" | bun run start
+  // or interactively (pipe into the process).
+  yield* Effect.forkDetach(
+    Effect.gen(function* () {
+      const reader = Bun.stdin.stream().getReader()
+      const decoder = new TextDecoder()
+      let leftover = ""
+      while (true) {
+        const chunk = yield* Effect.tryPromise({
+          try: () => reader.read() as Promise<{ done: boolean; value: Uint8Array | undefined }>,
+          catch: () => new Error("stdin read failed"),
+        }).pipe(Effect.catchCause(() => Effect.succeed({ done: true as const, value: undefined })))
+        if (chunk.done) break
+        leftover += decoder.decode(chunk.value, { stream: true })
+        const lines = leftover.split("\n")
+        leftover = lines.pop() ?? ""
+        for (const line of lines) {
+          if (line.trim()) {
+            yield* tui.info(`stdin → dispatch: ${line.trim().slice(0, 60)}${line.trim().length > 60 ? "…" : ""}`)
+            yield* Queue.offer(coordinator._inbox, { _tag: "Dispatch", instruction: line.trim() } satisfies CoordinatorMsg)
+          }
+        }
+      }
+    }) as Effect.Effect<void, never, never>,
+  )
+
+  yield* tui.info("ready — pipe tasks via stdin (one instruction per line)")
   yield* Effect.never
 })

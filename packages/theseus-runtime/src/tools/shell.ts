@@ -57,12 +57,26 @@ export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
             stdout: "pipe",
             stderr: "pipe",
           })
+
+          const TIMEOUT_MS = 30_000
+          let timedOut = false
+          const killer = setTimeout(() => {
+            timedOut = true
+            proc.kill()
+          }, TIMEOUT_MS)
+
           const [out, err] = await Promise.all([
             new Response(proc.stdout).text(),
             new Response(proc.stderr).text(),
           ])
           const code = await proc.exited
-          return { stdout: out, stderr: err, exitCode: code }
+          clearTimeout(killer)
+
+          return {
+            stdout: timedOut ? "" : out,
+            stderr: timedOut ? "Command timed out after 30s (process killed)" : err,
+            exitCode: timedOut ? 124 : code,
+          }
         },
         catch: (e) => new Error(`shell failed to spawn: ${String(e)}`),
       })
