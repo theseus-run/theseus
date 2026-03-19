@@ -1,0 +1,6 @@
+language js(typescript)
+
+`$source` where {
+  $source <: `"@effect/schema"`,
+  register_diagnostic(span=$source, message="Effect v4: @effect/schema is gone. Import from 'effect' instead: import { Schema } from 'effect'.", severity="error")
+}

@@ -1,0 +1,10 @@
+language js(typescript)
+
+`$fn($tag, $impl)` where {
+  $fn <: or {
+    `Layer.succeed`,
+    `Layer.effect`,
+    `Layer.scoped`
+  },
+  register_diagnostic(span=$fn, message="Effect v4: Layer constructors are curried. Use Layer.succeed(Tag)(impl) instead of Layer.succeed(Tag, impl).", severity="error")
+}

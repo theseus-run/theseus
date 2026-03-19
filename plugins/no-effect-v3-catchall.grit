@@ -1,0 +1,6 @@
+language js(typescript)
+
+`$fn($args)` where {
+  $fn <: `Effect.catchAll`,
+  register_diagnostic(span=$fn, message="Effect v4: catchAll was removed. Use Effect.catchCause to handle all causes, or Effect.catch for a specific error tag.", severity="error")
+}
