@@ -6,17 +6,17 @@
  *   - are structurally equal (Data.Equal)
  *   - render readable messages via .message / Cause.pretty
  */
-import { Data } from "effect"
+import { Data } from "effect";
 
 // ---------------------------------------------------------------------------
 // TypeScript Language Service
 // ---------------------------------------------------------------------------
 
 export class TsServiceInitError extends Data.TaggedError("TsServiceInitError")<{
-  readonly cause: unknown
+  readonly cause: unknown;
 }> {
   override get message() {
-    return `TypeScript service failed to initialize: ${String(this.cause)}`
+    return `TypeScript service failed to initialize: ${String(this.cause)}`;
   }
 }
 
@@ -25,27 +25,27 @@ export class TsServiceInitError extends Data.TaggedError("TsServiceInitError")<{
 // ---------------------------------------------------------------------------
 
 export class CopilotTokenError extends Data.TaggedError("CopilotTokenError")<{
-  readonly cause: unknown
+  readonly cause: unknown;
 }> {
   override get message() {
-    return `Copilot token exchange failed: ${String(this.cause)}`
+    return `Copilot token exchange failed: ${String(this.cause)}`;
   }
 }
 
 export class LLMHttpError extends Data.TaggedError("LLMHttpError")<{
-  readonly status: number
-  readonly body: string
+  readonly status: number;
+  readonly body: string;
 }> {
   override get message() {
-    return `Copilot API error ${this.status}: ${this.body}`
+    return `Copilot API error ${this.status}: ${this.body}`;
   }
 }
 
 export class LLMParseError extends Data.TaggedError("LLMParseError")<{
-  readonly cause: unknown
+  readonly cause: unknown;
 }> {
   override get message() {
-    return `Failed to parse Copilot response: ${String(this.cause)}`
+    return `Failed to parse Copilot response: ${String(this.cause)}`;
   }
 }
 

@@ -1,1 +1,1 @@
-export { BeautifulMermaid, type BeautifulMermaidProps } from './mermaid.tsx';
+export { BeautifulMermaid, type BeautifulMermaidProps } from "./mermaid.tsx";

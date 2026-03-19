@@ -10,25 +10,25 @@
  * This keeps the dependency one-way (render.ts → jsx-runtime.ts) with no cycle.
  */
 
-import { escapeHtmlAttr } from './escape.ts';
-import { Fragment, type VNode, type VNodeElement } from './jsx-runtime.ts';
+import { escapeHtmlAttr } from "./escape.ts";
+import { Fragment, type VNode, type VNodeElement } from "./jsx-runtime.ts";
 
 function isVNodeElement(node: VNode): node is VNodeElement {
-  return typeof node === 'object' && node !== null && !Array.isArray(node);
+  return typeof node === "object" && node !== null && !Array.isArray(node);
 }
 
 export function render(node: VNode): string {
   if (node === null || node === undefined || node === false || node === true) {
-    return '';
+    return "";
   }
-  if (typeof node === 'string') {
+  if (typeof node === "string") {
     return node;
   }
-  if (typeof node === 'number') {
-    return Number.isFinite(node) ? String(node) : '';
+  if (typeof node === "number") {
+    return Number.isFinite(node) ? String(node) : "";
   }
   if (Array.isArray(node)) {
-    return node.map(render).join('');
+    return node.map(render).join("");
   }
   // VNodeElement — dispatch on type
   if (!isVNodeElement(node)) {
@@ -39,13 +39,13 @@ export function render(node: VNode): string {
     // (plain JS, `as any`, etc.) and passes a function as a child, we throw a diagnostic
     // error instead of silently returning ''. The double-cast (`as unknown as fn`) is
     // required precisely because TS knows this is unreachable.
-    if (typeof node === 'function') {
+    if (typeof node === "function") {
       throw new Error(
-        `jsx-md: a function was passed as a VNode child. Did you forget to call it, or wrap it in JSX? ` +
-          `Received: ${(node as unknown as (...args: unknown[]) => unknown).name || 'anonymous function'}`,
+        "jsx-md: a function was passed as a VNode child. Did you forget to call it, or wrap it in JSX? " +
+          `Received: ${(node as unknown as (...args: unknown[]) => unknown).name || "anonymous function"}`,
       );
     }
-    return '';
+    return "";
   }
   const el = node; // narrowed to VNodeElement
 
@@ -55,11 +55,11 @@ export function render(node: VNode): string {
     // be narrowed at the VNodeElement level). The `as VNode` cast is safe in practice: the
     // only source of props.children values is the JSX compiler and user JSX expressions,
     // both of which TypeScript has already validated as VNode at the call site.
-    return render(el.props.children as VNode ?? null);
+    return render((el.props["children"] as VNode) ?? null);
   }
 
   // String type → render as an XML block tag
-  if (typeof el.type === 'string') {
+  if (typeof el.type === "string") {
     const tagName = el.type;
     if (!/^[a-zA-Z][a-zA-Z0-9:._-]*$/.test(tagName)) {
       throw new Error(
@@ -67,12 +67,12 @@ export function render(node: VNode): string {
       );
     }
     const { children, ...attrs } = el.props;
-    let attrStr = '';
+    let attrStr = "";
     for (const [k, v] of Object.entries(attrs)) {
       if (v === undefined || v === null || v === false) continue;
       if (v === true) {
         attrStr += ` ${k}`;
-      } else if (typeof v === 'object') {
+      } else if (typeof v === "object") {
         throw new Error(
           `jsx-md: attribute "${k}" received an object value. XML attributes must be strings. ` +
             `Use JSON.stringify() to convert: ${k}={JSON.stringify(v)}`,
@@ -83,8 +83,8 @@ export function render(node: VNode): string {
     }
     // Same cast rationale as the Fragment branch above: props.children is unknown
     // at the VNodeElement level but is guaranteed VNode by the JSX type system.
-    const inner = render(children as VNode ?? null);
-    if (inner.trimEnd() === '') {
+    const inner = render((children as VNode) ?? null);
+    if (inner.trimEnd() === "") {
       return `<${tagName}${attrStr} />\n`;
     }
     return `<${tagName}${attrStr}>\n${inner.trimEnd()}\n</${tagName}>\n`;

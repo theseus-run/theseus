@@ -14,7 +14,15 @@
     "url": "https://github.com/theseus-run/theseus/issues"
   },
   "homepage": "https://theseus.run",
-  "keywords": ["jsx", "tsx", "markdown", "llm", "agents", "prompts", "jsx-runtime"],
+  "keywords": [
+    "jsx",
+    "tsx",
+    "markdown",
+    "llm",
+    "agents",
+    "prompts",
+    "jsx-runtime"
+  ],
   "engines": {
     "bun": ">=1.0.0",
     "node": ">=18.0.0"

@@ -6,15 +6,15 @@
  * Single-pass via a lookup map — avoids four sequential .replace() calls.
  */
 const HTML_ATTR_MAP: Record<string, string> = {
-  '&': '&amp;',
-  '"': '&quot;',
-  '<': '&lt;',
-  '>': '&gt;',
+  "&": "&amp;",
+  '"': "&quot;",
+  "<": "&lt;",
+  ">": "&gt;",
 };
 const HTML_ATTR_RE = /[&"<>]/g;
 
 export function escapeHtmlAttr(s: string): string {
-  return s.replace(HTML_ATTR_RE, (c) => HTML_ATTR_MAP[c]!);
+  return s.replace(HTML_ATTR_RE, (c) => HTML_ATTR_MAP[c] ?? c);
 }
 
 /**
@@ -23,14 +23,14 @@ export function escapeHtmlAttr(s: string): string {
  * Single-pass via a lookup map.
  */
 const HTML_CONTENT_MAP: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
 };
 const HTML_CONTENT_RE = /[&<>]/g;
 
 export function escapeHtmlContent(s: string): string {
-  return s.replace(HTML_CONTENT_RE, (c) => HTML_CONTENT_MAP[c]!);
+  return s.replace(HTML_CONTENT_RE, (c) => HTML_CONTENT_MAP[c] ?? c);
 }
 
 /**
@@ -38,7 +38,7 @@ export function escapeHtmlContent(s: string): string {
  * Markdown link syntax `[text](url)`.
  */
 export function encodeLinkUrl(url: string): string {
-  return url.replace(/\(/g, '%28').replace(/\)/g, '%29');
+  return url.replace(/\(/g, "%28").replace(/\)/g, "%29");
 }
 
 /**
@@ -68,7 +68,7 @@ export function encodeLinkLabel(text: string): string {
 const MARKDOWN_ESCAPE_RE = /[\\`*_[\]()#+\-.!|~<>]/g;
 
 export function escapeMarkdown(s: string): string {
-  return s.replace(MARKDOWN_ESCAPE_RE, '\\$&');
+  return s.replace(MARKDOWN_ESCAPE_RE, "\\$&");
 }
 
 /**
@@ -83,7 +83,7 @@ export function backtickFenceLength(content: string, minimum: number = 1): numbe
   let maxRun = 0;
   let currentRun = 0;
   for (const ch of content) {
-    if (ch === '`') {
+    if (ch === "`") {
       currentRun++;
       if (currentRun > maxRun) maxRun = currentRun;
     } else {

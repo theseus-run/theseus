@@ -72,10 +72,16 @@
 
 /* @jsxImportSource @theseus.run/jsx-md */
 
-import type { VNode } from './jsx-runtime.ts';
-import { render } from './render.ts';
-import { createContext, useContext, withContext } from './context.ts';
-import { escapeHtmlContent, encodeLinkUrl, encodeLinkLabel, backtickFenceLength, escapeMarkdown } from './escape.ts';
+import { createContext, useContext, withContext } from "./context.ts";
+import {
+  backtickFenceLength,
+  encodeLinkLabel,
+  encodeLinkUrl,
+  escapeHtmlContent,
+  escapeMarkdown,
+} from "./escape.ts";
+import type { VNode } from "./jsx-runtime.ts";
+import { render } from "./render.ts";
 
 // ---------------------------------------------------------------------------
 // DepthContext — tracks list nesting level for Li indentation
@@ -106,7 +112,7 @@ const OlCollectorContext = createContext<OlCollector | null>(null);
  * Alignment value for a GFM table column.
  * 'left' → `:---`, 'center' → `:---:`, 'right' → `---:`, undefined → `---`.
  */
-export type ColAlign = 'left' | 'center' | 'right';
+export type ColAlign = "left" | "center" | "right";
 
 /**
  * Mutable spec box passed through context during Table rendering.
@@ -117,10 +123,10 @@ type ColSpec = { cols: Array<ColAlign | undefined> };
 const ColSpecContext = createContext<ColSpec | null>(null);
 
 function alignSeparator(align: ColAlign | undefined): string {
-  if (align === 'left') return ':---';
-  if (align === 'center') return ':---:';
-  if (align === 'right') return '---:';
-  return '---';
+  if (align === "left") return ":---";
+  if (align === "center") return ":---:";
+  if (align === "right") return "---:";
+  return "---";
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +166,7 @@ export function P({ children }: BlockProps): string {
 }
 
 export function Hr(_: { children?: never } = {}): string {
-  return '---\n\n';
+  return "---\n\n";
 }
 
 interface CodeblockProps {
@@ -169,17 +175,17 @@ interface CodeblockProps {
   indent?: number;
 }
 
-export function Codeblock({ lang = '', children, indent = 0 }: CodeblockProps): string {
-  const prefix = ' '.repeat(indent);
+export function Codeblock({ lang = "", children, indent = 0 }: CodeblockProps): string {
+  const prefix = " ".repeat(indent);
   const content = render(children);
-  const fence = '`'.repeat(backtickFenceLength(content, 3));
-  const rawLines = content.split('\n');
+  const fence = "`".repeat(backtickFenceLength(content, 3));
+  const rawLines = content.split("\n");
   // Drop trailing empty entries produced by a trailing \n in content to prevent
   // a spurious indented blank line appearing before the closing fence.
-  while (rawLines.length > 0 && rawLines[rawLines.length - 1] === '') {
+  while (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
     rawLines.pop();
   }
-  const body = rawLines.map((line) => prefix + line).join('\n');
+  const body = rawLines.map((line) => prefix + line).join("\n");
   return `${fence}${lang}\n${body}\n${fence}\n\n`;
 }
 
@@ -195,7 +201,10 @@ export function Codeblock({ lang = '', children, indent = 0 }: CodeblockProps): 
  */
 export function Blockquote({ children }: BlockProps): string {
   const content = render(children).trimEnd();
-  const lines = content.split('\n').map((line) => (line === '' ? '>' : `> ${line}`)).join('\n');
+  const lines = content
+    .split("\n")
+    .map((line) => (line === "" ? ">" : `> ${line}`))
+    .join("\n");
   return `${lines}\n\n`;
 }
 
@@ -231,10 +240,8 @@ export function Ol({ children }: BlockProps): string {
   withContext(OlCollectorContext, collector, () =>
     withContext(DepthContext, depth + 1, () => render(children)),
   );
-  const indent = '  '.repeat(depth);
-  const numbered = collector.items
-    .map((item, i) => `${indent}${i + 1}. ${item}`)
-    .join('');
+  const indent = "  ".repeat(depth);
+  const numbered = collector.items.map((item, i) => `${indent}${i + 1}. ${item}`).join("");
   return depth === 0 ? `${numbered}\n` : `\n${numbered}`;
 }
 
@@ -243,12 +250,12 @@ export function Li({ children }: BlockProps): string {
   const collector = useContext(OlCollectorContext);
   // depth is already incremented by the enclosing Ul/Ol, so depth 1 = top-level.
   // Math.max guard: safe when Li is used outside Ul/Ol (depth=0).
-  const indent = '  '.repeat(Math.max(0, depth - 1));
+  const indent = "  ".repeat(Math.max(0, depth - 1));
   const inner = render(children).trimEnd();
   if (collector) {
     // Inside Ol: push content to collector; Ol will number items after rendering.
     collector.items.push(`${inner}\n`);
-    return '';
+    return "";
   }
   return `${indent}- ${inner}\n`;
 }
@@ -287,14 +294,14 @@ export function Tr({ children }: { children?: VNode }): string {
 export function Table({ children }: { children?: VNode }): string {
   const spec: ColSpec = { cols: [] };
   const rendered = withContext(ColSpecContext, spec, () => render(children));
-  const lines = rendered.split('\n').filter((l) => l.trim().length > 0);
+  const lines = rendered.split("\n").filter((l) => l.trim().length > 0);
   if (lines.length === 0) {
-    return '';
+    return "";
   }
-  const separator = '| ' + spec.cols.map(alignSeparator).join(' | ') + ' |';
-  const headerLine = lines[0]!;
+  const separator = `| ${spec.cols.map(alignSeparator).join(" | ")} |`;
+  const headerLine = lines[0] ?? "";
   const bodyLines = lines.slice(1);
-  return [headerLine, separator, ...bodyLines].join('\n') + '\n\n';
+  return `${[headerLine, separator, ...bodyLines].join("\n")}\n\n`;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,13 +313,13 @@ interface InlineProps {
 }
 
 export function Bold({ children }: InlineProps): string {
-  const inner = render(children).replace(/\*\*/g, '\\*\\*');
+  const inner = render(children).replace(/\*\*/g, "\\*\\*");
   return `**${inner}**`;
 }
 
 export function Code({ children }: InlineProps): string {
   const inner = render(children);
-  const fence = '`'.repeat(backtickFenceLength(inner));
+  const fence = "`".repeat(backtickFenceLength(inner));
   return `${fence}${inner}${fence}`;
 }
 
@@ -321,12 +328,12 @@ export function Italic({ children }: InlineProps): string {
 }
 
 export function Strikethrough({ children }: InlineProps): string {
-  const inner = render(children).replace(/~~/g, '\\~\\~');
+  const inner = render(children).replace(/~~/g, "\\~\\~");
   return `~~${inner}~~`;
 }
 
 export function Br(_: { children?: never } = {}): string {
-  return '  \n';
+  return "  \n";
 }
 
 export function Sup({ children }: InlineProps): string {
@@ -359,7 +366,7 @@ interface ImgProps {
   alt?: string;
 }
 
-export function Img({ src, alt = '' }: ImgProps): string {
+export function Img({ src, alt = "" }: ImgProps): string {
   return `![${encodeLinkLabel(alt)}](${encodeLinkUrl(src)})`;
 }
 
@@ -385,8 +392,8 @@ export function TaskList({ children }: { children?: VNode }): string {
 export function Task({ children, done }: { children?: VNode; done?: boolean }): string {
   const depth = useContext(DepthContext);
   // Math.max guard matches Li's defensive pattern — safe when Task is used outside TaskList (depth=0)
-  const indent = '  '.repeat(Math.max(0, depth - 1));
-  const prefix = done ? '[x]' : '[ ]';
+  const indent = "  ".repeat(Math.max(0, depth - 1));
+  const prefix = done ? "[x]" : "[ ]";
   const inner = render(children).trimEnd();
   return `${indent}- ${prefix} ${inner}\n`;
 }
@@ -395,17 +402,14 @@ export function Task({ children, done }: { children?: VNode; done?: boolean }): 
 // Callout — GitHub-flavored alert blockquote
 // ---------------------------------------------------------------------------
 
-export type CalloutType = 'note' | 'tip' | 'important' | 'warning' | 'caution';
+export type CalloutType = "note" | "tip" | "important" | "warning" | "caution";
 
-export function Callout({
-  children,
-  type,
-}: {
-  children?: VNode;
-  type: CalloutType;
-}): string {
+export function Callout({ children, type }: { children?: VNode; type: CalloutType }): string {
   const inner = render(children).trimEnd();
-  const lines = inner.split('\n').map((line) => (line === '' ? '>' : `> ${line}`)).join('\n');
+  const lines = inner
+    .split("\n")
+    .map((line) => (line === "" ? ">" : `> ${line}`))
+    .join("\n");
   return `> [!${type.toUpperCase()}]\n${lines}\n\n`;
 }
 
@@ -417,13 +421,13 @@ export function HtmlComment({ children }: { children?: VNode }): string {
   const inner = render(children).trimEnd();
   // Use .trim() only for the empty-check: whitespace-only content → <!-- -->
   if (!inner.trim()) {
-    return `<!-- -->\n`;
+    return "<!-- -->\n";
   }
   // Sanitize in a single pass (left-to-right alternation):
   // '-->': closes comment prematurely → replace '>' with ' >' to break the sequence
   // '--': invalid per HTML spec → replace second '-' with ' -'
-  const safe = inner.replace(/-->|--/g, (m) => (m === '-->' ? '-- >' : '- -'));
-  if (safe.includes('\n')) {
+  const safe = inner.replace(/-->|--/g, (m) => (m === "-->" ? "-- >" : "- -"));
+  if (safe.includes("\n")) {
     return `<!--\n${safe}\n-->\n`;
   }
   return `<!-- ${safe} -->\n`;
@@ -433,15 +437,9 @@ export function HtmlComment({ children }: { children?: VNode }): string {
 // Details — GitHub collapsible section
 // ---------------------------------------------------------------------------
 
-export function Details({
-  children,
-  summary,
-}: {
-  children?: VNode;
-  summary: string;
-}): string {
+export function Details({ children, summary }: { children?: VNode; summary: string }): string {
   // Newlines in summary break the <summary> element — collapse to spaces.
-  const safeSummary = escapeHtmlContent(summary.replace(/\n/g, ' '));
+  const safeSummary = escapeHtmlContent(summary.replace(/\n/g, " "));
   // trimEnd() required: GitHub needs a blank line before </details> to render body as markdown.
   // The \n\n in the template provides that; trimEnd prevents double-blank-lines.
   const body = render(children).trimEnd();

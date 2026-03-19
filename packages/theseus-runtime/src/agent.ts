@@ -1,36 +1,37 @@
 /**
  * Core agent types and BaseAgent abstract class.
  */
-import { Brand, Effect } from "effect"
-import type { Fiber, Queue, Ref } from "effect"
+
+import type { Fiber, Queue, Ref } from "effect";
+import { Brand, Effect } from "effect";
 
 // ---------------------------------------------------------------------------
 // Identifiers
 // ---------------------------------------------------------------------------
 
-export type AgentId = string & Brand.Brand<"AgentId">
-export const AgentId = Brand.nominal<AgentId>()
+export type AgentId = string & Brand.Brand<"AgentId">;
+export const AgentId = Brand.nominal<AgentId>();
 
 // ---------------------------------------------------------------------------
 // RuntimeContext — injected into every agent on spawn
 // ---------------------------------------------------------------------------
 
 export interface RuntimeContext {
-  readonly send: (agentId: AgentId, msg: unknown) => Effect.Effect<void>
-  readonly publish: (topic: string, msg: unknown) => Effect.Effect<void>
-  readonly log: (content: string) => Effect.Effect<void>
+  readonly send: (agentId: AgentId, msg: unknown) => Effect.Effect<void>;
+  readonly publish: (topic: string, msg: unknown) => Effect.Effect<void>;
+  readonly log: (content: string) => Effect.Effect<void>;
 }
 
 // ---------------------------------------------------------------------------
 // Lifecycle info (TUI / introspection)
 // ---------------------------------------------------------------------------
 
-export type AgentStatus = "running" | "idle" | "stopped"
+export type AgentStatus = "running" | "idle" | "stopped";
 
 export interface AgentInfo {
-  readonly id: AgentId
-  readonly status: AgentStatus
-  readonly messagesHandled: number
+  readonly id: AgentId;
+  readonly status: AgentStatus;
+  readonly messagesHandled: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,8 +39,8 @@ export interface AgentInfo {
 // ---------------------------------------------------------------------------
 
 export abstract class BaseAgent<Msg, State> {
-  abstract readonly id: AgentId
-  abstract readonly initialState: State
+  abstract readonly id: AgentId;
+  abstract readonly initialState: State;
 
   /**
    * Handle one message, return the next state.
@@ -49,7 +50,7 @@ export abstract class BaseAgent<Msg, State> {
    * not use this method at all.
    */
   handle(_msg: Msg, state: State): Effect.Effect<State> {
-    return Effect.succeed(state)
+    return Effect.succeed(state);
   }
 
   /**
@@ -59,24 +60,24 @@ export abstract class BaseAgent<Msg, State> {
    *
    * Must never resolve (runs until fiber interrupted).
    */
-  run?(): Effect.Effect<never, never, never>
+  run?(): Effect.Effect<never, never, never>;
 
   // -------------------------------------------------------------------------
   // Infrastructure — set by AgentRegistry._initAgent before the fiber forks
   // -------------------------------------------------------------------------
 
-  /** @internal */ _inbox!: Queue.Queue<Msg>
-  /** @internal */ _stateRef!: Ref.Ref<State>
-  /** @internal */ _fiber: Fiber.Fiber<void, never> | null = null
+  /** @internal */ _inbox!: Queue.Queue<Msg>;
+  /** @internal */ _stateRef!: Ref.Ref<State>;
+  /** @internal */ _fiber: Fiber.Fiber<void, never> | null = null;
 
-  protected ctx!: RuntimeContext
+  protected ctx!: RuntimeContext;
 
   /**
    * Called by AgentRegistry.spawn — wires up the runtime context.
    * @internal
    */
   _initRuntime(ctx: RuntimeContext): void {
-    this.ctx = ctx
+    this.ctx = ctx;
   }
 
   // -------------------------------------------------------------------------
@@ -84,14 +85,14 @@ export abstract class BaseAgent<Msg, State> {
   // -------------------------------------------------------------------------
 
   protected send<M>(agentId: AgentId, msg: M): Effect.Effect<void> {
-    return this.ctx.send(agentId, msg)
+    return this.ctx.send(agentId, msg);
   }
 
   protected publish(topic: string, msg: unknown): Effect.Effect<void> {
-    return this.ctx.publish(topic, msg)
+    return this.ctx.publish(topic, msg);
   }
 
   protected log(content: string): Effect.Effect<void> {
-    return this.ctx.log(content)
+    return this.ctx.log(content);
   }
 }

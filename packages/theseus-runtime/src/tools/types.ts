@@ -1,7 +1,7 @@
-import type { Effect } from "effect"
+import type { Effect } from "effect";
 
 // Re-export from copilot so callers import from one place
-export type { ToolDefinition, LLMToolCall } from "../llm/copilot.ts"
+export type { LLMToolCall, ToolDefinition } from "../llm/copilot.ts";
 
 /**
  * A tool handler: receives parsed args, returns a plain string result
@@ -9,7 +9,7 @@ export type { ToolDefinition, LLMToolCall } from "../llm/copilot.ts"
  * Handlers are fully responsible for converting all errors to informative
  * strings — the handler must never fail (Effect<string, never>).
  */
-export type ToolHandler = (args: unknown) => Effect.Effect<string, never>
+export type ToolHandler = (args: unknown) => Effect.Effect<string, never>;
 
 /**
  * A registered tool: its JSON schema definition (sent to the LLM so it
@@ -17,16 +17,16 @@ export type ToolHandler = (args: unknown) => Effect.Effect<string, never>
  */
 export interface RegisteredTool {
   readonly definition: {
-    readonly type: "function"
+    readonly type: "function";
     readonly function: {
-      readonly name: string
-      readonly description: string
+      readonly name: string;
+      readonly description: string;
       readonly parameters: {
-        readonly type: "object"
-        readonly properties: Record<string, unknown>
-        readonly required: ReadonlyArray<string>
-      }
-    }
-  }
-  readonly handler: ToolHandler
+        readonly type: "object";
+        readonly properties: Record<string, unknown>;
+        readonly required: ReadonlyArray<string>;
+      };
+    };
+  };
+  readonly handler: ToolHandler;
 }

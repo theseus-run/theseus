@@ -7,28 +7,29 @@
  * All paths are resolved relative to `workspaceRoot` when they are relative.
  * Absolute paths pass through unchanged.
  */
-import { Cause, Effect, Schema } from "effect"
-import { existsSync } from "node:fs"
-import { resolve, relative, isAbsolute, dirname } from "path"
-import type { RegisteredTool } from "./types.ts"
+
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { Cause, Effect, Schema } from "effect";
+import type { RegisteredTool } from "./types.ts";
 
 const resolvePath = (workspaceRoot: string, p: string): string =>
-  isAbsolute(p) ? p : resolve(workspaceRoot, p)
+  isAbsolute(p) ? p : resolve(workspaceRoot, p);
 
 /**
  * Walk up the directory tree from startDir until a tsconfig.json is found.
  * Returns the absolute path, or undefined if none exists up to the fs root.
  */
 const findNearestTsconfig = (startDir: string): string | undefined => {
-  let dir = startDir
+  let dir = startDir;
   while (true) {
-    const candidate = resolve(dir, "tsconfig.json")
-    if (existsSync(candidate)) return candidate
-    const parent = dirname(dir)
-    if (parent === dir) return undefined
-    dir = parent
+    const candidate = resolve(dir, "tsconfig.json");
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
   }
-}
+};
 
 // ---------------------------------------------------------------------------
 // listDir exclusions — directories and files that are never useful to list
@@ -45,7 +46,7 @@ const EXCLUDED_SEGMENTS = new Set([
   ".output",
   "coverage",
   ".nyc_output",
-])
+]);
 
 // Lock files are noise — the agent should never need to read them
 const EXCLUDED_FILENAMES = new Set([
@@ -54,27 +55,27 @@ const EXCLUDED_FILENAMES = new Set([
   "package-lock.json",
   "yarn.lock",
   "pnpm-lock.yaml",
-])
+]);
 
 const isExcluded = (entry: string): boolean => {
-  const firstSegment = entry.split("/")[0] ?? ""
-  return EXCLUDED_SEGMENTS.has(firstSegment) || EXCLUDED_FILENAMES.has(firstSegment)
-}
+  const firstSegment = entry.split("/")[0] ?? "";
+  return EXCLUDED_SEGMENTS.has(firstSegment) || EXCLUDED_FILENAMES.has(firstSegment);
+};
 
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
 
-const ReadFileArgs = Schema.Struct({ path: Schema.String })
+const ReadFileArgs = Schema.Struct({ path: Schema.String });
 const ListDirArgs = Schema.Struct({
   path: Schema.optional(Schema.String),
   deep: Schema.optional(Schema.Boolean),
-})
+});
 const SearchReplaceArgs = Schema.Struct({
   path: Schema.String,
   search: Schema.String,
   replace: Schema.String,
-})
+});
 
 // ---------------------------------------------------------------------------
 // readFile
@@ -85,8 +86,7 @@ const makeReadFile = (workspaceRoot: string): RegisteredTool => ({
     type: "function",
     function: {
       name: "readFile",
-      description:
-        "Read the full contents of a file. Use relative paths from the workspace root.",
+      description: "Read the full contents of a file. Use relative paths from the workspace root.",
       parameters: {
         type: "object",
         properties: {
@@ -101,33 +101,31 @@ const makeReadFile = (workspaceRoot: string): RegisteredTool => ({
       const { path } = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(ReadFileArgs)(args),
         catch: (e) => new Error(`readFile: invalid arguments: ${String(e)}`),
-      })
-      const abs = resolvePath(workspaceRoot, path)
-      const bunFile = Bun.file(abs)
-      const sizeBytes = bunFile.size
-      const MAX_BYTES = 50 * 1024 // 50 KB
+      });
+      const abs = resolvePath(workspaceRoot, path);
+      const bunFile = Bun.file(abs);
+      const sizeBytes = bunFile.size;
+      const MAX_BYTES = 50 * 1024; // 50 KB
       const content = yield* Effect.tryPromise({
         try: () => bunFile.text(),
         catch: (e) => new Error(`readFile failed: ${String(e)}`),
-      })
-      const rel = relative(workspaceRoot, abs)
-      const header = `// ${rel}\n`
+      });
+      const rel = relative(workspaceRoot, abs);
+      const header = `// ${rel}\n`;
       if (sizeBytes > MAX_BYTES) {
-        const truncated = content.slice(0, MAX_BYTES)
-        const lineCount = content.split("\n").length
-        const truncatedLineCount = truncated.split("\n").length
+        const truncated = content.slice(0, MAX_BYTES);
+        const lineCount = content.split("\n").length;
+        const truncatedLineCount = truncated.split("\n").length;
         return (
           header +
           truncated +
           `\n\n// ⚠ File truncated at ${truncatedLineCount} of ${lineCount} lines (${Math.round(sizeBytes / 1024)} KB total).\n` +
-          `// Use shell+grep to search within it, or readFile a specific section via a different approach.`
-        )
+          "// Use shell+grep to search within it, or readFile a specific section via a different approach."
+        );
       }
-      return header + content
-    }).pipe(
-      Effect.catchCause((cause) => Effect.succeed(`readFile error: ${Cause.pretty(cause)}`)),
-    ),
-})
+      return header + content;
+    }).pipe(Effect.catchCause((cause) => Effect.succeed(`readFile error: ${Cause.pretty(cause)}`))),
+});
 
 // ---------------------------------------------------------------------------
 // listDir
@@ -162,33 +160,32 @@ const makeListDir = (workspaceRoot: string): RegisteredTool => ({
       const { path: rawPath, deep } = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(ListDirArgs)(args ?? {}),
         catch: (e) => new Error(`listDir: invalid arguments: ${String(e)}`),
-      })
-      const resolvedPath: string = rawPath ?? "."
-      const abs = resolvePath(workspaceRoot, resolvedPath)
+      });
+      const resolvedPath: string = rawPath ?? ".";
+      const abs = resolvePath(workspaceRoot, resolvedPath);
       const entries = yield* Effect.tryPromise({
         try: async () => {
-          const glob = new Bun.Glob("**/*")
-          const results: string[] = []
+          const glob = new Bun.Glob("**/*");
+          const results: string[] = [];
           for await (const entry of glob.scan({ cwd: abs, onlyFiles: false })) {
-            results.push(entry)
+            results.push(entry);
           }
-          return results.sort()
+          return results.sort();
         },
         catch: (e) => new Error(`listDir failed: ${String(e)}`),
-      })
-      const filtered = (deep ? entries : entries.filter((e) => !e.includes("/")))
-        .filter((e) => !isExcluded(e))
-      const MAX_ENTRIES = 500
-      const truncated = filtered.length > MAX_ENTRIES
-      const visible = truncated ? filtered.slice(0, MAX_ENTRIES) : filtered
+      });
+      const filtered = (deep ? entries : entries.filter((e) => !e.includes("/"))).filter(
+        (e) => !isExcluded(e),
+      );
+      const MAX_ENTRIES = 500;
+      const truncated = filtered.length > MAX_ENTRIES;
+      const visible = truncated ? filtered.slice(0, MAX_ENTRIES) : filtered;
       const suffix = truncated
         ? `\n... (${filtered.length - MAX_ENTRIES} more entries omitted — use a more specific path or grep)`
-        : ""
-      return (visible.join("\n") || "(empty directory)") + suffix
-    }).pipe(
-      Effect.catchCause((cause) => Effect.succeed(`listDir error: ${Cause.pretty(cause)}`)),
-    ),
-})
+        : "";
+      return (visible.join("\n") || "(empty directory)") + suffix;
+    }).pipe(Effect.catchCause((cause) => Effect.succeed(`listDir error: ${Cause.pretty(cause)}`))),
+});
 
 // ---------------------------------------------------------------------------
 // searchReplace
@@ -221,14 +218,14 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
       const { path, search, replace } = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(SearchReplaceArgs)(args),
         catch: (e) => new Error(`searchReplace: invalid arguments: ${String(e)}`),
-      })
-      const abs = resolvePath(workspaceRoot, path)
-      const rel = relative(workspaceRoot, abs)
+      });
+      const abs = resolvePath(workspaceRoot, path);
+      const rel = relative(workspaceRoot, abs);
 
       const original = yield* Effect.tryPromise({
         try: () => Bun.file(abs).text(),
         catch: (e) => new Error(`Cannot read ${rel}: ${String(e)}`),
-      })
+      });
 
       if (!original.includes(search)) {
         // Return the full file so the model can find the exact text — hints alone rarely work.
@@ -241,39 +238,37 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
           "```",
           original,
           "```",
-        ].join("\n")
+        ].join("\n");
       }
 
-      const occurrences = original.split(search).length - 1
+      const occurrences = original.split(search).length - 1;
       if (occurrences > 1) {
-        return `Error: search text appears ${occurrences} times in ${rel}. Make it more specific (include more surrounding lines).`
+        return `Error: search text appears ${occurrences} times in ${rel}. Make it more specific (include more surrounding lines).`;
       }
 
-      const updated = original.replace(search, replace)
+      const updated = original.replace(search, replace);
       yield* Effect.tryPromise({
         try: () => Bun.write(abs, updated),
         catch: (e) => new Error(`Cannot write ${rel}: ${String(e)}`),
-      })
+      });
 
       // Compute lines surrounding the replaced block so the model always has
       // an up-to-date view of the file without needing a separate readFile call.
       // When replace is empty (deletion), anchor by the search text's position
       // in the original content rather than indexOf("") which always returns 0.
-      const CONTEXT_LINES = 4
-      const allLines = updated.split("\n")
-      const anchorPos = replace.length > 0
-        ? updated.indexOf(replace)
-        : original.indexOf(search)
-      const linesBefore = updated.slice(0, anchorPos).split("\n").length - 1
-      const replaceLineCount = Math.max(replace.split("\n").length, 1)
-      const ctxStart = Math.max(0, linesBefore - CONTEXT_LINES)
-      const ctxEnd = Math.min(allLines.length, linesBefore + replaceLineCount + CONTEXT_LINES)
-      const surrounding = allLines.slice(ctxStart, ctxEnd).join("\n")
-      const lineRange = `lines ${ctxStart + 1}–${ctxEnd}`
+      const CONTEXT_LINES = 4;
+      const allLines = updated.split("\n");
+      const anchorPos = replace.length > 0 ? updated.indexOf(replace) : original.indexOf(search);
+      const linesBefore = updated.slice(0, anchorPos).split("\n").length - 1;
+      const replaceLineCount = Math.max(replace.split("\n").length, 1);
+      const ctxStart = Math.max(0, linesBefore - CONTEXT_LINES);
+      const ctxEnd = Math.min(allLines.length, linesBefore + replaceLineCount + CONTEXT_LINES);
+      const surrounding = allLines.slice(ctxStart, ctxEnd).join("\n");
+      const lineRange = `lines ${ctxStart + 1}–${ctxEnd}`;
 
       // Find nearest tsconfig.json by walking up from the edited file's directory.
       // This correctly handles monorepos where the workspace root has no tsconfig.
-      const tsconfigPath = findNearestTsconfig(dirname(abs))
+      const tsconfigPath = findNearestTsconfig(dirname(abs));
       if (!tsconfigPath) {
         return [
           `Edit applied to ${rel}. (No tsconfig.json found — type check skipped.)`,
@@ -282,22 +277,19 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
           "```",
           surrounding,
           "```",
-        ].join("\n")
+        ].join("\n");
       }
 
       const tscOut = yield* Effect.tryPromise({
         try: () =>
-          Bun.$`tsc --noEmit --project ${tsconfigPath}`
-            .cwd(dirname(tsconfigPath))
-            .nothrow()
-            .text(),
+          Bun.$`tsc --noEmit --project ${tsconfigPath}`.cwd(dirname(tsconfigPath)).nothrow().text(),
         catch: (e) => new Error(`tsc failed to run: ${String(e)}`),
-      }).pipe(Effect.catchCause(() => Effect.succeed("(tsc check failed to run)")))
+      }).pipe(Effect.catchCause(() => Effect.succeed("(tsc check failed to run)")));
 
-      const errors = tscOut.trim()
+      const errors = tscOut.trim();
       const header = errors
         ? `Edit applied to ${rel}.\n\nType errors detected:\n${errors}\n\nFix these before moving on.`
-        : `Edit applied to ${rel}. No type errors.`
+        : `Edit applied to ${rel}. No type errors.`;
       return [
         header,
         "",
@@ -305,11 +297,11 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
         "```",
         surrounding,
         "```",
-      ].join("\n")
+      ].join("\n");
     }).pipe(
       Effect.catchCause((cause) => Effect.succeed(`searchReplace error: ${Cause.pretty(cause)}`)),
     ),
-})
+});
 
 // ---------------------------------------------------------------------------
 // Exports
@@ -319,4 +311,4 @@ export const makeFsTools = (workspaceRoot: string): ReadonlyArray<RegisteredTool
   makeReadFile(workspaceRoot),
   makeListDir(workspaceRoot),
   makeSearchReplace(workspaceRoot),
-]
+];

@@ -7,18 +7,18 @@
  * Intended for: bun test, git diff, git log, rg, find — anything that
  * doesn't have a dedicated semantic tool.
  */
-import { Cause, Effect, Schema } from "effect"
-import type { RegisteredTool } from "./types.ts"
-import { Config } from "../config.ts"
+import { Cause, Effect, Schema } from "effect";
+import { Config } from "../config.ts";
+import type { RegisteredTool } from "./types.ts";
 
 const truncate = (s: string): string => {
-  const MAX_OUTPUT = Config.shellMaxOutput
+  const MAX_OUTPUT = Config.shellMaxOutput;
   return s.length > MAX_OUTPUT
-    ? s.slice(0, MAX_OUTPUT) + `\n... (truncated — ${s.length - MAX_OUTPUT} bytes omitted)`
-    : s
-}
+    ? `${s.slice(0, MAX_OUTPUT)}\n... (truncated — ${s.length - MAX_OUTPUT} bytes omitted)`
+    : s;
+};
 
-const ShellArgs = Schema.Struct({ command: Schema.String })
+const ShellArgs = Schema.Struct({ command: Schema.String });
 
 export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
   definition: {
@@ -48,7 +48,7 @@ export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
       const { command } = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(ShellArgs)(args),
         catch: (e) => new Error(`shell: invalid arguments: ${String(e)}`),
-      })
+      });
 
       const { stdout, stderr, exitCode } = yield* Effect.tryPromise({
         try: async () => {
@@ -56,35 +56,33 @@ export const makeShellTool = (workspaceRoot: string): RegisteredTool => ({
             cwd: workspaceRoot,
             stdout: "pipe",
             stderr: "pipe",
-          })
+          });
 
-          const TIMEOUT_MS = 30_000
-          let timedOut = false
+          const TIMEOUT_MS = 30_000;
+          let timedOut = false;
           const killer = setTimeout(() => {
-            timedOut = true
-            proc.kill()
-          }, TIMEOUT_MS)
+            timedOut = true;
+            proc.kill();
+          }, TIMEOUT_MS);
 
           const [out, err] = await Promise.all([
             new Response(proc.stdout).text(),
             new Response(proc.stderr).text(),
-          ])
-          const code = await proc.exited
-          clearTimeout(killer)
+          ]);
+          const code = await proc.exited;
+          clearTimeout(killer);
 
           return {
             stdout: timedOut ? "" : out,
             stderr: timedOut ? "Command timed out after 30s (process killed)" : err,
             exitCode: timedOut ? 124 : code,
-          }
+          };
         },
         catch: (e) => new Error(`shell failed to spawn: ${String(e)}`),
-      })
+      });
 
-      const combined = [stdout, stderr].filter(Boolean).join("\n").trim()
-      const output = combined || "(no output)"
-      return `exit ${exitCode}\n${truncate(output)}`
-    }).pipe(
-      Effect.catchCause((cause) => Effect.succeed(`shell error: ${Cause.pretty(cause)}`)),
-    ),
-})
+      const combined = [stdout, stderr].filter(Boolean).join("\n").trim();
+      const output = combined || "(no output)";
+      return `exit ${exitCode}\n${truncate(output)}`;
+    }).pipe(Effect.catchCause((cause) => Effect.succeed(`shell error: ${Cause.pretty(cause)}`))),
+});

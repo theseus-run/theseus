@@ -48,7 +48,7 @@ export type VNode =
   | VNodeElement
   | ReadonlyArray<VNode>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: standard JSX component generic default
 type Component<P = any> = (props: P) => VNode;
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ export namespace JSX {
  * Using a Symbol (rather than a function) eliminates the circular dependency
  * that previously required _render-registry.ts.
  */
-export const Fragment = Symbol('Fragment');
+export const Fragment = Symbol("Fragment");
 
 // ---------------------------------------------------------------------------
 // JSX factory

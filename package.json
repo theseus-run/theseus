@@ -7,8 +7,15 @@
     "url": "https://github.com/theseus-run/theseus"
   },
   "homepage": "https://theseus.run",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "bunx tsc -p packages/theseus-runtime/tsconfig.json --noEmit && bunx tsc -p packages/icarus-cli/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md-beautiful-mermaid/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.8",
+    "@effect/language-service": "0.80.0"
   }
 }

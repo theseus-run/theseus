@@ -11,12 +11,13 @@
  * Tool handlers close over ts.LanguageService directly (not via yield* TsService)
  * so they satisfy ToolHandler = (args) => Effect.Effect<string, Error> with R=never.
  */
-import { Cause, Effect, Layer, Schema, ServiceMap } from "effect"
-import ts from "typescript"
-import { statSync, readFileSync } from "fs"
-import { dirname, relative, resolve } from "path"
-import type { RegisteredTool } from "./types.ts"
-import { TsServiceInitError } from "../errors.ts"
+
+import { readFileSync, statSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { Cause, Effect, Layer, Schema, ServiceMap } from "effect";
+import ts from "typescript";
+import { TsServiceInitError } from "../errors.ts";
+import type { RegisteredTool } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // TsService — Effect service, initialised once per session
@@ -25,40 +26,42 @@ import { TsServiceInitError } from "../errors.ts"
 export class TsService extends ServiceMap.Service<
   TsService,
   {
-    readonly languageService: ts.LanguageService
-    readonly workspaceRoot: string
+    readonly languageService: ts.LanguageService;
+    readonly workspaceRoot: string;
   }
 >()("TsService") {}
 
-export const makeTsServiceLayer = (workspaceRoot: string): Layer.Layer<TsService, TsServiceInitError> =>
+export const makeTsServiceLayer = (
+  workspaceRoot: string,
+): Layer.Layer<TsService, TsServiceInitError> =>
   Layer.effect(TsService)(
     Effect.try({
       try: () => {
-        const configPath = ts.findConfigFile(workspaceRoot, ts.sys.fileExists, "tsconfig.json")
-        if (!configPath) throw new Error(`tsconfig.json not found under ${workspaceRoot}`)
+        const configPath = ts.findConfigFile(workspaceRoot, ts.sys.fileExists, "tsconfig.json");
+        if (!configPath) throw new Error(`tsconfig.json not found under ${workspaceRoot}`);
 
-        const { config } = ts.readConfigFile(configPath, ts.sys.readFile)
+        const { config } = ts.readConfigFile(configPath, ts.sys.readFile);
         const { fileNames, options } = ts.parseJsonConfigFileContent(
           config,
           ts.sys,
           dirname(configPath),
-        )
+        );
 
         const host: ts.LanguageServiceHost = {
           getScriptFileNames: () => fileNames,
           // mtime as version — service re-reads files automatically after edits
           getScriptVersion: (fileName) => {
             try {
-              return String(statSync(fileName).mtimeMs)
+              return String(statSync(fileName).mtimeMs);
             } catch {
-              return "0"
+              return "0";
             }
           },
           getScriptSnapshot: (fileName) => {
             try {
-              return ts.ScriptSnapshot.fromString(readFileSync(fileName, "utf-8"))
+              return ts.ScriptSnapshot.fromString(readFileSync(fileName, "utf-8"));
             } catch {
-              return undefined
+              return undefined;
             }
           },
           getCurrentDirectory: () => workspaceRoot,
@@ -69,16 +72,16 @@ export const makeTsServiceLayer = (workspaceRoot: string): Layer.Layer<TsService
           readDirectory: ts.sys.readDirectory,
           directoryExists: ts.sys.directoryExists,
           getDirectories: ts.sys.getDirectories,
-        }
+        };
 
         return TsService.of({
           languageService: ts.createLanguageService(host, ts.createDocumentRegistry()),
           workspaceRoot,
-        })
+        });
       },
       catch: (e) => new TsServiceInitError({ cause: e }),
     }),
-  )
+  );
 
 // ---------------------------------------------------------------------------
 // Schema for findReferences args
@@ -88,7 +91,7 @@ const FindReferencesArgs = Schema.Struct({
   symbol: Schema.String,
   kind: Schema.optional(Schema.String),
   definedIn: Schema.optional(Schema.String),
-})
+});
 
 // ---------------------------------------------------------------------------
 // findReferences tool
@@ -100,11 +103,11 @@ const offsetToLineCol = (
   fileName: string,
   offset: number,
 ): string => {
-  const sf = languageService.getProgram()?.getSourceFile(fileName)
-  if (!sf) return `offset:${offset}`
-  const { line, character } = ts.getLineAndCharacterOfPosition(sf, offset)
-  return `${line + 1}:${character + 1}`
-}
+  const sf = languageService.getProgram()?.getSourceFile(fileName);
+  if (!sf) return `offset:${offset}`;
+  const { line, character } = ts.getLineAndCharacterOfPosition(sf, offset);
+  return `${line + 1}:${character + 1}`;
+};
 
 export const makeFindReferencesTool = (
   workspaceRoot: string,
@@ -153,73 +156,71 @@ export const makeFindReferencesTool = (
       const { symbol, kind, definedIn } = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(FindReferencesArgs)(args),
         catch: (e) => new Error(`findReferences: invalid arguments: ${String(e)}`),
-      })
+      });
 
       // Resolve definedIn to absolute path for comparison with item.fileName
-      const definedInAbs = definedIn ? resolve(workspaceRoot, definedIn) : undefined
+      const definedInAbs = definedIn ? resolve(workspaceRoot, definedIn) : undefined;
 
       // Step 1: name → definition locations (fetch more candidates so filters have room to work)
-      const items = yield* Effect.sync(() =>
-        languageService.getNavigateToItems(symbol, 50),
-      )
+      const items = yield* Effect.sync(() => languageService.getNavigateToItems(symbol, 50));
 
       if (!items || items.length === 0) {
-        return `No symbol named "${symbol}" found in the project.`
+        return `No symbol named "${symbol}" found in the project.`;
       }
 
       // Step 2: filter by kind
-      let filtered = [...items]
+      let filtered = [...items];
       if (kind) {
-        filtered = filtered.filter((item) => item.kind === kind)
+        filtered = filtered.filter((item) => item.kind === kind);
         if (filtered.length === 0) {
-          const available = [...new Set(items.map((i) => i.kind))].join(", ")
+          const available = [...new Set(items.map((i) => i.kind))].join(", ");
           return (
             `No symbol named "${symbol}" with kind "${kind}" found. ` +
             `Available kinds for "${symbol}": ${available}`
-          )
+          );
         }
       }
 
       // Step 3: filter by definition file
       if (definedInAbs) {
-        filtered = filtered.filter((item) => item.fileName === definedInAbs)
+        filtered = filtered.filter((item) => item.fileName === definedInAbs);
         if (filtered.length === 0) {
           const available = [
             ...new Set(items.map((i) => relative(workspaceRoot, i.fileName))),
-          ].join(", ")
+          ].join(", ");
           return (
             `No symbol "${symbol}" found in file "${definedIn}". ` +
             `"${symbol}" is defined in: ${available}`
-          )
+          );
         }
       }
 
       // Step 4: collect all references, deduplicate by file:line:col
-      const seen = new Set<string>()
-      const lines: string[] = []
+      const seen = new Set<string>();
+      const lines: string[] = [];
 
       for (const item of filtered) {
         const refs = yield* Effect.sync(() =>
           languageService.getReferencesAtPosition(item.fileName, item.textSpan.start),
-        )
-        if (!refs) continue
+        );
+        if (!refs) continue;
 
         for (const ref of refs) {
-          const lineCol = offsetToLineCol(languageService, ref.fileName, ref.textSpan.start)
-          const rel = relative(workspaceRoot, ref.fileName)
-          const key = `${rel}:${lineCol}`
-          if (seen.has(key)) continue
-          seen.add(key)
-          lines.push(`${rel}:${lineCol}${ref.isWriteAccess ? " (write)" : ""}`)
+          const lineCol = offsetToLineCol(languageService, ref.fileName, ref.textSpan.start);
+          const rel = relative(workspaceRoot, ref.fileName);
+          const key = `${rel}:${lineCol}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          lines.push(`${rel}:${lineCol}${ref.isWriteAccess ? " (write)" : ""}`);
         }
       }
 
-      if (lines.length === 0) return `No references found for "${symbol}".`
-      return [`References to "${symbol}" (${lines.length}):`, ...lines].join("\n")
+      if (lines.length === 0) return `No references found for "${symbol}".`;
+      return [`References to "${symbol}" (${lines.length}):`, ...lines].join("\n");
     }).pipe(
       Effect.catchCause((cause) => Effect.succeed(`findReferences error: ${Cause.pretty(cause)}`)),
     ),
-})
+});
 
 // ---------------------------------------------------------------------------
 // Build all TS tools — called with the already-resolved language service
@@ -228,4 +229,4 @@ export const makeFindReferencesTool = (
 export const makeTsTools = (
   workspaceRoot: string,
   languageService: ts.LanguageService,
-): ReadonlyArray<RegisteredTool> => [makeFindReferencesTool(workspaceRoot, languageService)]
+): ReadonlyArray<RegisteredTool> => [makeFindReferencesTool(workspaceRoot, languageService)];

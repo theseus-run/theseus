@@ -5,5 +5,6 @@
  * agents depend on the `ChatMessage` / `ChatResponse` types and a
  * `callLLM` function with the same signature, regardless of backend.
  */
-export { CopilotProvider, CopilotProviderLive } from "./copilot.ts"
-export type { ChatMessage, ChatResponse, ToolDefinition, LLMToolCall } from "./copilot.ts"
+
+export type { ChatMessage, ChatResponse, LLMToolCall, ToolDefinition } from "./copilot.ts";
+export { CopilotProvider, CopilotProviderLive } from "./copilot.ts";

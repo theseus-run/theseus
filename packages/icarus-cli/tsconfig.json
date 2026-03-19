@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "paths": {
+      "@theseus.run/runtime": ["../theseus-runtime/src/index.ts"],
+      "@theseus.run/runtime/*": ["../theseus-runtime/src/*"]
+    }
+  },
+  "include": ["src/**/*", "bin/**/*"]
+}

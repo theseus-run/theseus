@@ -18,7 +18,8 @@ The concurrency model is deliberately Erlang/OTP-flavoured: each agent is an act
 | Decision | Choice | What it rules out |
 |---|---|---|
 | **LLM provider** | GitHub Copilot only | Multi-provider routing, API key management, separate billing |
-| **UI** | Headless — `TuiLogger` (ANSI stdout) only | Panes, re-render, keyboard input loop, streaming to UI |
+| **Runtime** | Headless server/process — no UI code inside `theseus-runtime` | Bundling UI deps into the runtime, port-specific UI assumptions |
+| **Interface layer** | Separate `icarus-*` packages connect to the runtime via `RuntimeBus` | Inline stdin/stdout in the runtime, hard-coded terminal assumptions |
 | **Concurrency model** | Effect fibers + typed queues (actor-style) | Thread pools, callback hell, ad-hoc async/await orchestration |
 | **State** | `Ref` / `Queue` / `PubSub` — no shared mutable state | Global singletons, event emitters, in-process pub/sub hacks |
 | **Resource cleanup** | Effect `Scope` / `Layer` / fiber interruption | Manual teardown, `finally` blocks, process exit handlers |
@@ -51,6 +52,63 @@ The concurrency model is deliberately Erlang/OTP-flavoured: each agent is an act
 ```
 
 No separate API key. No additional subscription. Reuses the existing Copilot seat.
+
+---
+
+## Package structure (locked)
+
+```
+packages/
+  theseus-runtime/     @theseus.run/runtime   — headless server/process; no UI code
+  icarus-cli/          @theseus.run/icarus-cli — Ink/React terminal interface
+  icarus-web/          @theseus.run/icarus-web — (future) web/native interface for iPad etc.
+  jsx-md/              @theseus.run/jsx-md     — JSX → Markdown renderer
+```
+
+### Icarus — the interface layer
+
+`theseus-runtime` is designed to run as a **headless process** — locally, or on a VPS. It exposes no UI. All operator interaction goes through an `icarus-*` package that connects to the runtime via the `RuntimeBus` Effect Service.
+
+```
+Operator (terminal / iPad / web)
+  │
+  ▼
+icarus-cli / icarus-web           ← "Icarus" — the interface layer
+  │  RuntimeBus (Queue transport)
+  ▼
+theseus-runtime                   ← headless, UI-free
+  │
+  ▼
+Coordinator → Forge → Tools
+```
+
+The `RuntimeBus` service is defined in `@theseus.run/runtime`. Each `icarus-*` package provides a `Live` layer for it:
+
+- **`icarus-cli`**: `InkRuntimeBusLive` — Queues bridged to Ink React state + `useInput`
+- **`icarus-web`** (future): `WsRuntimeBusLive` — Queues bridged over WebSocket / SSE
+
+The runtime never imports from any `icarus-*` package.
+
+### RuntimeBus — Effect Service
+
+```typescript
+// Exported from @theseus.run/runtime
+export class RuntimeBus extends ServiceMap.Service<RuntimeBus, {
+  // runtime → interface: structured events (logs, tool calls, forge responses)
+  eventQueue: Queue.Queue<UIEvent>
+  // interface → runtime: raw user instructions
+  inputQueue: Queue.Queue<string>
+}>()("RuntimeBus") {}
+
+export type UIEvent =
+  | { _tag: "Log";           level: "info"|"warn"|"error"; agent: string; message: string; ts: number }
+  | { _tag: "ToolCall";      taskId: string; tool: string; args: string }
+  | { _tag: "ToolResult";    taskId: string; tool: string; preview: string }
+  | { _tag: "ForgeResponse"; taskId: string; content: string }
+  | { _tag: "StatusChange";  status: "idle"|"working" }
+```
+
+The runtime calls `Queue.offer(eventQueue, event)` to emit. It calls `Queue.take(inputQueue)` to receive user instructions — replacing the current `Bun.stdin.stream()` loop. This transport is in-process today; in the VPS scenario, `WsRuntimeBusLive` would bridge the same queues over the network.
 
 ---
 

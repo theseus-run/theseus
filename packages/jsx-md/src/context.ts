@@ -9,8 +9,8 @@
  * the render() traversal. Not safe for async or concurrent rendering.
  */
 
-import { render } from './render.ts';
-import type { VNode } from './jsx-runtime.ts';
+import type { VNode } from "./jsx-runtime.ts";
+import { render } from "./render.ts";
 
 export interface Context<T> {
   readonly _id: symbol;

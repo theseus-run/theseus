@@ -1,8 +1,8 @@
-import { Codeblock } from '@theseus.run/jsx-md';
-import { renderMermaidASCII } from 'beautiful-mermaid';
-import type { AsciiRenderOptions } from 'beautiful-mermaid';
+import { Codeblock } from "@theseus.run/jsx-md";
+import type { AsciiRenderOptions } from "beautiful-mermaid";
+import { renderMermaidASCII } from "beautiful-mermaid";
 
-export interface BeautifulMermaidProps extends Omit<AsciiRenderOptions, 'colorMode'> {
+export interface BeautifulMermaidProps extends Omit<AsciiRenderOptions, "colorMode"> {
   /** Mermaid diagram source. Alternatively pass the diagram string as children. */
   diagram?: string;
   children?: string;
@@ -44,7 +44,7 @@ export function BeautifulMermaid({
   block = true,
   ...asciiOptions
 }: BeautifulMermaidProps): string {
-  const source = diagram ?? children ?? '';
+  const source = diagram ?? children ?? "";
   const ascii = renderMermaidASCII(source, asciiOptions);
 
   if (!block) return ascii;
