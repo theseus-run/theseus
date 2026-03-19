@@ -3,14 +3,17 @@
  *
  * Layer dependency graph:
  *
- *   RuntimeBusLive        ──────────────────────────────────────────┐
- *   TuiLoggerLive         ← requires RuntimeBus                     │
- *   MessageBusLive        ───────────────────────────────────────┐  │
- *   TheseusAgent          ← the root coordinator agent; routes tasks to Forge
- *   CopilotProviderLive   ← owns its own BunHttpClient           │  │
- *   TsServiceLive         ← initialised from workspace root      │  │
- *   ToolRegistryLive      ← built from fs + shell + ts tools     │  │
- *   AppLayer              = all of the above merged              ┘  ┘
+ *   RuntimeBusLive   ← standalone fallback (icarus-cli replaces this with InkRuntimeBusLive)
+ *   TuiLoggerLive    ← requires RuntimeBus
+ *   AgentRegistryLive← requires TuiLogger
+ *   CopilotProviderLive ← owns its own BunHttpClient
+ *   TsServiceLive    ← initialised from workspace root
+ *   AppLayer         = all of the above merged
+ *
+ * Tool sets are built inside main() where TsService is available,
+ * and passed directly to TheseusAgent — no shared ToolRegistry layer.
+ * Atlas receives read-only tools (no searchReplace).
+ * Forge receives the full tool set.
  *
  * The main program reads RuntimeCommands from RuntimeBus instead of
  * reading raw stdin — the interface layer (icarus-cli) is responsible
@@ -19,7 +22,6 @@
 import { Cause, Effect, Layer, Queue, Schedule } from "effect";
 import type { TheseusMsg } from "./agents/theseus-agent.ts";
 import { TheseusAgent } from "./agents/theseus-agent.ts";
-import { MessageBusLive } from "./bus.ts";
 import { Config } from "./config.ts";
 import type { ChatMessage, ToolDefinition } from "./llm/index.ts";
 import { CopilotProvider, CopilotProviderLive } from "./llm/index.ts";
@@ -27,12 +29,11 @@ import { AgentRegistry, AgentRegistryLive } from "./registry.ts";
 import type { RuntimeCommand, UIEvent } from "./runtime-bus.ts";
 import { RuntimeBus } from "./runtime-bus.ts";
 import {
-  buildToolRegistryService,
   makeFsTools,
+  makeReadOnlyFsTools,
   makeShellTool,
   makeTsServiceLayer,
   makeTsTools,
-  ToolRegistry,
   TsService,
 } from "./tools/index.ts";
 import { TuiLogger, TuiLoggerLive } from "./tui.ts";
@@ -48,22 +49,6 @@ const WORKSPACE_ROOT = new URL("../../../", import.meta.url).pathname.replace(/\
 // ---------------------------------------------------------------------------
 
 const TsServiceLive = makeTsServiceLayer(WORKSPACE_ROOT);
-
-// ---------------------------------------------------------------------------
-// Tool Registry layer — built after TsService is available
-// ---------------------------------------------------------------------------
-
-const ToolRegistryLive = Layer.effect(ToolRegistry)(
-  Effect.gen(function* () {
-    const { languageService } = yield* TsService;
-    const allTools = [
-      ...makeFsTools(WORKSPACE_ROOT),
-      makeShellTool(WORKSPACE_ROOT),
-      ...makeTsTools(WORKSPACE_ROOT, languageService),
-    ];
-    return buildToolRegistryService(allTools);
-  }),
-).pipe(Layer.provide(TsServiceLive));
 
 // ---------------------------------------------------------------------------
 // RuntimeBus live — allocate the two queues
@@ -83,16 +68,13 @@ export const RuntimeBusLive: Layer.Layer<RuntimeBus> = Layer.effect(RuntimeBus)(
 // Layer composition
 // ---------------------------------------------------------------------------
 
-export const RuntimeLayer = AgentRegistryLive.pipe(
-  Layer.provide(Layer.merge(TuiLoggerLive, MessageBusLive)),
-);
+export const RuntimeLayer = AgentRegistryLive.pipe(Layer.provide(TuiLoggerLive));
 
 export const AppLayer = Layer.mergeAll(
   RuntimeLayer,
   TuiLoggerLive,
   CopilotProviderLive,
   TsServiceLive,
-  ToolRegistryLive,
 );
 
 // ---------------------------------------------------------------------------
@@ -104,9 +86,18 @@ export const main = Effect.gen(function* () {
   const registry = yield* AgentRegistry;
   const copilot = yield* CopilotProvider;
   const bus = yield* RuntimeBus;
+  const { languageService } = yield* TsService;
 
   yield* tui.info("theseus runtime starting…");
   yield* tui.info(`workspace: ${WORKSPACE_ROOT}`);
+
+  // Build per-agent tool sets.
+  // Atlas: read-only (no searchReplace). Forge: full set.
+  const tsTools = makeTsTools(WORKSPACE_ROOT, languageService);
+  const leafTools = {
+    atlas: [...makeReadOnlyFsTools(WORKSPACE_ROOT), makeShellTool(WORKSPACE_ROOT), ...tsTools],
+    forge: [...makeFsTools(WORKSPACE_ROOT), makeShellTool(WORKSPACE_ROOT), ...tsTools],
+  };
 
   // Wrap copilot.chat — retry transient errors, timeout + errors become content so the agent loop never crashes
   const retrySchedule = Schedule.spaced("2 seconds").pipe(Schedule.take(2));
@@ -126,7 +117,7 @@ export const main = Effect.gen(function* () {
       }),
     );
 
-  const theseus = new TheseusAgent(callLLM, bus.events);
+  const theseus = new TheseusAgent(callLLM, leafTools, bus.events);
   const coordinatorId = theseus.id;
   yield* registry.spawn(theseus);
 

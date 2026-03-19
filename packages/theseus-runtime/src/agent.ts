@@ -18,7 +18,6 @@ export const AgentId = Brand.nominal<AgentId>();
 
 export interface RuntimeContext {
   readonly send: (agentId: AgentId, msg: unknown) => Effect.Effect<void>;
-  readonly publish: (topic: string, msg: unknown) => Effect.Effect<void>;
   readonly log: (content: string) => Effect.Effect<void>;
 }
 
@@ -44,7 +43,7 @@ export abstract class BaseAgent<Msg, State> {
 
   /**
    * Handle one message, return the next state.
-   * Use `this.send / this.publish / this.log` (available after spawn).
+   * Use `this.send / this.log` (available after spawn).
    *
    * Used by the default registry loop. Agents that override `run()` may
    * not use this method at all.
@@ -86,10 +85,6 @@ export abstract class BaseAgent<Msg, State> {
 
   protected send<M>(agentId: AgentId, msg: M): Effect.Effect<void> {
     return this.ctx.send(agentId, msg);
-  }
-
-  protected publish(topic: string, msg: unknown): Effect.Effect<void> {
-    return this.ctx.publish(topic, msg);
   }
 
   protected log(content: string): Effect.Effect<void> {

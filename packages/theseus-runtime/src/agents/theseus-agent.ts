@@ -19,14 +19,14 @@
  *   Start    — initialise (spawn leaf agents, enter dispatch loop)
  *   Dispatch — new user instruction; triggers one full LLM turn
  *   Steer    — mid-session guidance; treated as a new user message
- *   TaskDone — reply from a leaf agent; consumed inside consultAgent
  */
-import { Cause, Effect, Queue, Ref } from "effect";
+import { Cause, Deferred, Effect, Queue, Ref } from "effect";
 import type { AgentId as AgentIdType } from "../agent.ts";
 import { AgentId, BaseAgent } from "../agent.ts";
 import type { ChatMessage, ToolDefinition } from "../llm/index.ts";
 import { AgentRegistry } from "../registry.ts";
 import type { UIEvent } from "../runtime-bus.ts";
+import type { RegisteredTool } from "../tools/index.ts";
 import type { CallLLM } from "./persistent-agent.ts";
 import { PersistentAgent } from "./persistent-agent.ts";
 
@@ -37,14 +37,7 @@ import { PersistentAgent } from "./persistent-agent.ts";
 export type TheseusMsg =
   | { readonly _tag: "Start" }
   | { readonly _tag: "Dispatch"; readonly instruction: string }
-  | { readonly _tag: "Steer"; readonly guidance: string }
-  | {
-      readonly _tag: "TaskDone";
-      readonly taskId: string;
-      readonly agentId: AgentIdType;
-      readonly historySize: number;
-      readonly finalResponse: string;
-    };
+  | { readonly _tag: "Steer"; readonly guidance: string };
 
 export interface TheseusState {
   readonly conversationHistory: ReadonlyArray<ChatMessage>;
@@ -60,6 +53,8 @@ interface LeafAgentConfig {
   /** One-line role description shown in Theseus's system prompt. */
   readonly role: string;
   readonly systemPrompt: string;
+  /** Tools this agent is allowed to use. Atlas gets read-only tools; Forge gets the full set. */
+  readonly tools: ReadonlyArray<RegisteredTool>;
   /**
    * When true, the agent's raw response is emitted as an AgentResponse
    * UIEvent so the interface layer can display it alongside TheseusResponse.
@@ -183,6 +178,15 @@ Critical constraints:
 }
 
 // ---------------------------------------------------------------------------
+// Rolling history window
+// ---------------------------------------------------------------------------
+
+const MAX_HISTORY = 80;
+
+const trimHistory = <T>(arr: ReadonlyArray<T>): ReadonlyArray<T> =>
+  arr.length > MAX_HISTORY ? arr.slice(arr.length - MAX_HISTORY) : arr;
+
+// ---------------------------------------------------------------------------
 // Agent
 // ---------------------------------------------------------------------------
 
@@ -194,11 +198,23 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
   };
 
   private readonly _callLLM: CallLLM;
+  private readonly _leafTools: {
+    readonly atlas: ReadonlyArray<RegisteredTool>;
+    readonly forge: ReadonlyArray<RegisteredTool>;
+  };
   private readonly _uiEvents: Queue.Queue<UIEvent>;
 
-  constructor(callLLM: CallLLM, uiEvents: Queue.Queue<UIEvent>) {
+  constructor(
+    callLLM: CallLLM,
+    leafTools: {
+      readonly atlas: ReadonlyArray<RegisteredTool>;
+      readonly forge: ReadonlyArray<RegisteredTool>;
+    },
+    uiEvents: Queue.Queue<UIEvent>,
+  ) {
     super();
     this._callLLM = callLLM;
+    this._leafTools = leafTools;
     this._uiEvents = uiEvents;
   }
 
@@ -221,12 +237,14 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
           id: AgentId("atlas"),
           role: "architect/planner — reads the codebase and produces implementation plans (read-only)",
           systemPrompt: ATLAS_SYSTEM_PROMPT,
+          tools: self._leafTools.atlas,
           showOutput: false, // Atlas output is synthesised by Theseus; no raw display
         },
         {
           id: AgentId("forge-1"),
           role: "coding agent — implements changes, edits files, runs tests",
           systemPrompt: FORGE_SYSTEM_PROMPT,
+          tools: self._leafTools.forge,
           showOutput: true, // Show raw implementation output alongside Theseus's summary
         },
       ];
@@ -234,7 +252,7 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
       // Spawn all leaf agents
       for (const cfg of leafAgents) {
         yield* registry.spawn(
-          new PersistentAgent(cfg.id, self._callLLM, cfg.systemPrompt, self._uiEvents),
+          new PersistentAgent(cfg.id, self._callLLM, cfg.systemPrompt, cfg.tools, self._uiEvents),
         );
       }
 
@@ -256,13 +274,10 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
       // consultAgent — blocking delegation to one leaf agent.
       //
       // 1. Emits StatusChange(agentId, "working") for the leaf
-      // 2. Sends Task{taskId, instruction, replyTo: "theseus"} via registry
-      // 3. Inner loop: Queue.take(self._inbox)
-      //    → TaskDone matching taskId → done
-      //    → anything else           → push to deferred buffer
-      // 4. Re-offers deferred messages back to inbox (Steer etc. are safe)
-      // 5. Emits StatusChange(agentId, "idle")
-      // 6. For agents with showOutput: true, emits AgentResponse (raw output alongside TheseusResponse)
+      // 2. Creates a Deferred<string> and sends Task{taskId, instruction, reply}
+      // 3. Awaits Deferred.await(reply) — PersistentAgent resolves it when done
+      // 4. Emits StatusChange(agentId, "idle")
+      // 5. For agents with showOutput: true, emits AgentResponse (raw output alongside TheseusResponse)
       // ----------------------------------------------------------------
       const consultAgent = (agentId: AgentIdType, instruction: string): Effect.Effect<string> =>
         Effect.gen(function* () {
@@ -280,34 +295,20 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
             `delegate → ${agentId} | ${taskId}: ${instruction.slice(0, 80)}${instruction.length > 80 ? "…" : ""}`,
           );
 
+          const reply = yield* Deferred.make<string>();
+
           yield* self.send(agentId, {
             _tag: "Task",
             taskId,
             instruction,
-            replyTo: self.id,
+            reply,
           });
 
-          // Wait for TaskDone from this specific task; buffer everything else
-          const deferred: TheseusMsg[] = [];
-          let finalResponse = "";
-
-          while (true) {
-            const msg = yield* Queue.take(self._inbox);
-            if (msg._tag === "TaskDone" && msg.taskId === taskId) {
-              finalResponse = msg.finalResponse;
-              break;
-            }
-            deferred.push(msg);
-          }
-
-          // Re-offer deferred messages so the outer loop processes them next
-          for (const msg of deferred) {
-            yield* Queue.offer(self._inbox, msg);
-          }
+          const finalResponse = yield* Deferred.await(reply);
 
           yield* push({ _tag: "StatusChange", agentId, status: "idle", ts: Date.now() });
 
-          // Emit raw agent output if the config requests it (Option A: per-agent showOutput flag)
+          // Emit raw agent output for agents with showOutput: true
           const cfg = leafAgentMap.get(String(agentId));
           if (cfg?.showOutput) {
             yield* push({
@@ -343,10 +344,10 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
           // Append user turn to persistent conversation history
           yield* Ref.update(self._stateRef, (s) => ({
             ...s,
-            conversationHistory: [
+            conversationHistory: trimHistory([
               ...s.conversationHistory,
               { role: "user" as const, content: userMessage },
-            ],
+            ]),
           }));
 
           const tools: ReadonlyArray<ToolDefinition> = [DELEGATE_TOOL];
@@ -373,7 +374,7 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
                 // Append assistant message with tool_calls for API continuity
                 yield* Ref.update(self._stateRef, (s) => ({
                   ...s,
-                  conversationHistory: [
+                  conversationHistory: trimHistory([
                     ...s.conversationHistory,
                     {
                       role: "assistant" as const,
@@ -384,7 +385,7 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
                         function: { name: tc.name, arguments: tc.arguments },
                       })),
                     },
-                  ],
+                  ]),
                 }));
 
                 // Execute each tool call sequentially
@@ -416,14 +417,14 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
                   // Append tool result to history
                   yield* Ref.update(self._stateRef, (s) => ({
                     ...s,
-                    conversationHistory: [
+                    conversationHistory: trimHistory([
                       ...s.conversationHistory,
                       {
                         role: "tool" as const,
                         content: toolResult,
                         tool_call_id: tc.id,
                       },
-                    ],
+                    ]),
                   }));
                 }
 
@@ -436,10 +437,10 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
                 // finish_reason === "stop" — model finished its turn
                 yield* Ref.update(self._stateRef, (s) => ({
                   ...s,
-                  conversationHistory: [
+                  conversationHistory: trimHistory([
                     ...s.conversationHistory,
                     { role: "assistant" as const, content: response.content },
-                  ],
+                  ]),
                   tasksCompleted: s.tasksCompleted + 1,
                 }));
                 finalContent = response.content;
@@ -463,7 +464,6 @@ export class TheseusAgent extends BaseAgent<TheseusMsg, TheseusState> {
         } else if (msg._tag === "Steer") {
           yield* runLLMTurn(`[Mid-session guidance from user]: ${msg.guidance}`);
         }
-        // TaskDone arriving here (outside consultAgent) is a stray reply — ignore.
         // Duplicate Start messages after startup are ignored.
       }
     }) as Effect.Effect<never, never, never>;

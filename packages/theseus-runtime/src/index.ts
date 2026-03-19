@@ -9,12 +9,19 @@ export type { CallLLM, PersistentMsg, PersistentState } from "./agents/persisten
 export { PersistentAgent } from "./agents/persistent-agent.ts";
 export type { TheseusMsg, TheseusState } from "./agents/theseus-agent.ts";
 export { TheseusAgent } from "./agents/theseus-agent.ts";
-export type { BusEnvelope } from "./bus.ts";
-export { MessageBus, MessageBusLive } from "./bus.ts";
 export type { ChatMessage, ChatResponse } from "./llm/index.ts";
 export { CopilotProvider, CopilotProviderLive } from "./llm/index.ts";
 export { AgentRegistry, AgentRegistryLive } from "./registry.ts";
 export { AppLayer, main, RuntimeBusLive, RuntimeLayer } from "./runtime.ts";
 export type { ForgeStatus, LogLevel, NodeStatus, RuntimeCommand, UIEvent } from "./runtime-bus.ts";
 export { emit, nextCommand, RuntimeBus } from "./runtime-bus.ts";
+export type { RegisteredTool, ToolHandler } from "./tools/index.ts";
+export {
+  makeFsTools,
+  makeReadOnlyFsTools,
+  makeShellTool,
+  makeTsServiceLayer,
+  makeTsTools,
+  TsService,
+} from "./tools/index.ts";
 export { TuiLogger, TuiLoggerLive } from "./tui.ts";

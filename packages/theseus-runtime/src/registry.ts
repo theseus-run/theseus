@@ -3,7 +3,6 @@
  */
 import { Cause, Effect, Fiber, HashMap, Layer, Queue, Ref, ServiceMap } from "effect";
 import type { AgentId, AgentInfo, BaseAgent } from "./agent.ts";
-import { MessageBus } from "./bus.ts";
 import { TuiLogger } from "./tui.ts";
 
 // ---------------------------------------------------------------------------
@@ -11,7 +10,6 @@ import { TuiLogger } from "./tui.ts";
 // ---------------------------------------------------------------------------
 
 interface AgentEntry {
-  readonly id: AgentId;
   // biome-ignore lint/suspicious/noExplicitAny: inbox erases message type at registry boundary
   readonly inbox: Queue.Queue<any>;
   readonly fiber: Fiber.Fiber<void, never>;
@@ -39,7 +37,6 @@ export class AgentRegistry extends ServiceMap.Service<
 export const AgentRegistryLive = Layer.effect(AgentRegistry)(
   Effect.gen(function* () {
     const tui = yield* TuiLogger;
-    const bus = yield* MessageBus;
 
     const entriesRef = yield* Ref.make(HashMap.empty<AgentId, AgentEntry>());
 
@@ -69,7 +66,6 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
                 const ok = yield* sendToAgent(targetId, msg);
                 if (!ok) yield* tui.warn(`send failed — no agent "${targetId}" registered`);
               }),
-            publish: (topic, msg) => bus.publish(topic, agent.id, msg),
             log: (content) => tui.info(`[${agent.id}] ${content}`),
           });
 
@@ -97,7 +93,6 @@ export const AgentRegistryLive = Layer.effect(AgentRegistry)(
 
           yield* Ref.update(entriesRef, (m) =>
             HashMap.set(m, agent.id, {
-              id: agent.id,
               inbox,
               fiber,
               messagesHandled: msgCount,

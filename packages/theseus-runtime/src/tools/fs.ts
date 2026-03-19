@@ -307,8 +307,15 @@ const makeSearchReplace = (workspaceRoot: string): RegisteredTool => ({
 // Exports
 // ---------------------------------------------------------------------------
 
+/** All FS tools: readFile + listDir + searchReplace (for Forge). */
 export const makeFsTools = (workspaceRoot: string): ReadonlyArray<RegisteredTool> => [
   makeReadFile(workspaceRoot),
   makeListDir(workspaceRoot),
   makeSearchReplace(workspaceRoot),
+];
+
+/** Read-only FS tools: readFile + listDir only (for Atlas — no write access). */
+export const makeReadOnlyFsTools = (workspaceRoot: string): ReadonlyArray<RegisteredTool> => [
+  makeReadFile(workspaceRoot),
+  makeListDir(workspaceRoot),
 ];

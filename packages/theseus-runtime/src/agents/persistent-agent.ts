@@ -13,12 +13,12 @@
  *     if finish_reason === "tool_calls": execute tools, append results, repeat
  *     if finish_reason === "stop":       append final response, task done
  */
-import { Cause, Effect, Queue, Ref } from "effect";
+import { Cause, Deferred, Effect, Queue, Ref } from "effect";
 import type { AgentId } from "../agent.ts";
 import { BaseAgent } from "../agent.ts";
 import type { ChatMessage, ToolDefinition } from "../llm/index.ts";
 import type { UIEvent } from "../runtime-bus.ts";
-import { ToolRegistry } from "../tools/index.ts";
+import type { RegisteredTool } from "../tools/index.ts";
 
 // ---------------------------------------------------------------------------
 // Messages
@@ -29,7 +29,8 @@ export type PersistentMsg =
       readonly _tag: "Task";
       readonly taskId: string;
       readonly instruction: string;
-      readonly replyTo: AgentId;
+      /** Complete this Deferred with the final response when the task finishes. */
+      readonly reply: Deferred.Deferred<string>;
     }
   | { readonly _tag: "Steer"; readonly guidance: string };
 
@@ -37,10 +38,8 @@ export type PersistentMsg =
 // State
 // ---------------------------------------------------------------------------
 
-export type HistoryMessage = ChatMessage;
-
 export interface PersistentState {
-  readonly conversationHistory: ReadonlyArray<HistoryMessage>;
+  readonly conversationHistory: ReadonlyArray<ChatMessage>;
   readonly totalPromptTokens: number;
   readonly totalCompletionTokens: number;
 }
@@ -63,6 +62,16 @@ export type CallLLM = (
 >;
 
 // ---------------------------------------------------------------------------
+// Rolling history window — keep the most recent N messages to avoid
+// silently overflowing the model's context window on long sessions.
+// ---------------------------------------------------------------------------
+
+const MAX_HISTORY = 80;
+
+const trimHistory = <T>(arr: ReadonlyArray<T>): ReadonlyArray<T> =>
+  arr.length > MAX_HISTORY ? arr.slice(arr.length - MAX_HISTORY) : arr;
+
+// ---------------------------------------------------------------------------
 // Agent
 // ---------------------------------------------------------------------------
 
@@ -76,13 +85,21 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
   private readonly _callLLM: CallLLM;
   private readonly _systemPrompt: string;
+  private readonly _tools: ReadonlyArray<RegisteredTool>;
   private readonly _uiEvents: Queue.Queue<UIEvent>;
 
-  constructor(id: AgentId, callLLM: CallLLM, systemPrompt: string, uiEvents: Queue.Queue<UIEvent>) {
+  constructor(
+    id: AgentId,
+    callLLM: CallLLM,
+    systemPrompt: string,
+    tools: ReadonlyArray<RegisteredTool>,
+    uiEvents: Queue.Queue<UIEvent>,
+  ) {
     super();
     this.id = id;
     this._callLLM = callLLM;
     this._systemPrompt = systemPrompt;
+    this._tools = tools;
     this._uiEvents = uiEvents;
   }
 
@@ -92,7 +109,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
     const push = (event: UIEvent): Effect.Effect<void> => Queue.offer(self._uiEvents, event);
 
     return Effect.gen(function* () {
-      const toolRegistry = yield* ToolRegistry;
+      // Build per-agent tool lookup once — no shared ToolRegistry in env
+      const toolHandlers = new Map(self._tools.map((t) => [t.definition.function.name, t.handler]));
+      const toolDefs: ReadonlyArray<ToolDefinition> = self._tools.map((t) => t.definition);
+
       yield* self.log(
         `ready | history: ${(yield* Ref.get(self._stateRef)).conversationHistory.length} entries`,
       );
@@ -107,19 +127,17 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
           continue;
         }
 
-        const { taskId, instruction, replyTo } = msg;
+        const { taskId, instruction, reply } = msg;
         yield* self.log(`${taskId} | starting`);
 
         // Append the user turn
         yield* Ref.update(self._stateRef, (s) => ({
           ...s,
-          conversationHistory: [
+          conversationHistory: trimHistory([
             ...s.conversationHistory,
             { role: "user" as const, content: instruction },
-          ],
+          ]),
         }));
-
-        const tools = toolRegistry.definitions();
 
         // Tool calling loop — continues while model calls tools
         let continueLoop = true;
@@ -133,10 +151,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
             ];
 
             yield* self.log(
-              `${taskId} | calling LLM (${messages.length} msgs, ${tools.length} tools)…`,
+              `${taskId} | calling LLM (${messages.length} msgs, ${toolDefs.length} tools)…`,
             );
 
-            const response = yield* self._callLLM(messages, tools).pipe(
+            const response = yield* self._callLLM(messages, toolDefs).pipe(
               Effect.withSpan("llm.chat", {
                 attributes: { taskId, agentId: self.id, messageCount: messages.length },
               }),
@@ -161,10 +179,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
               yield* self.log(`${taskId} | steer (after llm): "${guidance}"`);
               yield* Ref.update(self._stateRef, (s) => ({
                 ...s,
-                conversationHistory: [
+                conversationHistory: trimHistory([
                   ...s.conversationHistory,
                   { role: "user" as const, content: `[Guidance from operator: ${guidance}]` },
-                ],
+                ]),
               }));
             }
 
@@ -172,7 +190,7 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
               // Append the assistant message with tool_calls (needed for API continuity)
               yield* Ref.update(self._stateRef, (s) => ({
                 ...s,
-                conversationHistory: [
+                conversationHistory: trimHistory([
                   ...s.conversationHistory,
                   {
                     role: "assistant" as const,
@@ -183,7 +201,7 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
                       function: { name: tc.name, arguments: tc.arguments },
                     })),
                   },
-                ],
+                ]),
               }));
 
               // Execute each tool call and append results
@@ -211,7 +229,13 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
                   }),
                 );
 
-                const result = yield* toolRegistry.execute(tc.name, parsedArgs).pipe(
+                const handler = toolHandlers.get(tc.name);
+                const result = yield* (
+                  handler ? handler(parsedArgs) : Effect.succeed(`Error: unknown tool "${tc.name}"`)
+                ).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.succeed(`Tool error: ${Cause.pretty(cause)}`),
+                  ),
                   Effect.withSpan("tool.execute", {
                     attributes: { toolName: tc.name, taskId, agentId: self.id },
                   }),
@@ -230,14 +254,14 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
 
                 yield* Ref.update(self._stateRef, (s) => ({
                   ...s,
-                  conversationHistory: [
+                  conversationHistory: trimHistory([
                     ...s.conversationHistory,
                     {
                       role: "tool" as const,
                       content: result,
                       tool_call_id: tc.id,
                     },
-                  ],
+                  ]),
                 }));
               }
 
@@ -248,10 +272,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
                 yield* self.log(`${taskId} | steer (after tools): "${guidance}"`);
                 yield* Ref.update(self._stateRef, (s) => ({
                   ...s,
-                  conversationHistory: [
+                  conversationHistory: trimHistory([
                     ...s.conversationHistory,
                     { role: "user" as const, content: `[Guidance from operator: ${guidance}]` },
-                  ],
+                  ]),
                 }));
               }
 
@@ -267,10 +291,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
               // finish_reason === "stop" — model is done
               yield* Ref.update(self._stateRef, (s) => ({
                 ...s,
-                conversationHistory: [
+                conversationHistory: trimHistory([
                   ...s.conversationHistory,
                   { role: "assistant" as const, content: response.content },
-                ],
+                ]),
               }));
 
               finalResponse = response.content;
@@ -281,13 +305,10 @@ export class PersistentAgent extends BaseAgent<PersistentMsg, PersistentState> {
         }
 
         const stateAfter = yield* Ref.get(self._stateRef);
-        yield* self.send(replyTo, {
-          _tag: "TaskDone",
-          taskId,
-          agentId: self.id,
-          historySize: stateAfter.conversationHistory.length,
-          finalResponse,
-        });
+        yield* self.log(
+          `${taskId} | done (${finalResponse.length} chars, history: ${stateAfter.conversationHistory.length})`,
+        );
+        yield* Deferred.succeed(reply, finalResponse);
       }
     }) as Effect.Effect<never, never, never>;
   }
