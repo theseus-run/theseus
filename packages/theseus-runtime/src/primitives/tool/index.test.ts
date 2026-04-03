@@ -294,7 +294,8 @@ describe("validate", () => {
       encode: (o) => String(o.result),
     });
 
-    const result = await Effect.runPromise(toolWithOutput.validate?.({ result: 42 }));
+    // biome-ignore lint/style/noNonNullAssertion: we know outputSchema was provided
+    const result = await Effect.runPromise(toolWithOutput.validate!({ result: 42 }));
     expect(result).toEqual({ result: 42 });
   });
 
@@ -314,9 +315,10 @@ describe("validate", () => {
       encode: (o) => String(o.result),
     });
 
-    // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
     const err = await Effect.runPromise(
-      toolWithOutput.validate?.({ result: "nope" } as any).pipe(Effect.flip),
+      // biome-ignore lint/style/noNonNullAssertion: we know outputSchema was provided
+      // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
+      toolWithOutput.validate!({ result: "nope" } as any).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolErrorOutput");
     expect(err.tool).toBe("validated");

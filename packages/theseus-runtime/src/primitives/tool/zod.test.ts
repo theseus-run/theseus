@@ -42,7 +42,8 @@ describe("fromZod", () => {
     const decoded = await Effect.runPromise(tool.decode({ name: "world" }));
     expect(decoded.name).toBe("world");
     const output = await Effect.runPromise(tool.execute(decoded));
-    const validated = await Effect.runPromise(tool.validate?.(output));
+    // biome-ignore lint/style/noNonNullAssertion: we know outputSchema was provided
+    const validated = await Effect.runPromise(tool.validate!(output));
     expect(validated.greeting).toBe("hello world");
     const encoded = await Effect.runPromise(tool.encode(output));
     expect(encoded).toBe("hello world");
@@ -60,12 +61,14 @@ describe("fromZod", () => {
       encode: (o) => String(o.result),
     });
 
-    const ok = await Effect.runPromise(tool.validate?.({ result: 42 }));
+    // biome-ignore lint/style/noNonNullAssertion: we know outputSchema was provided
+    const ok = await Effect.runPromise(tool.validate!({ result: 42 }));
     expect(ok).toEqual({ result: 42 });
 
-    // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
     const err = await Effect.runPromise(
-      tool.validate?.({ result: "not a number" } as any).pipe(Effect.flip),
+      // biome-ignore lint/style/noNonNullAssertion: we know outputSchema was provided
+      // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
+      tool.validate!({ result: "not a number" } as any).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolErrorOutput");
   });
