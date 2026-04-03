@@ -49,3 +49,10 @@ export type {
   LLMToolDef,
   LLMUsage,
 } from "./llm/index.ts";
+
+// Agent primitives — shared types for all agent strategies
+export { AgentError } from "./agent/index.ts";
+export type { AgentResult, Blueprint } from "./agent/index.ts";
+
+// Grunt — stateless agent dispatch loop
+export { dispatch, DEFAULT_LLM_RETRY_SCHEDULE } from "./grunt/index.ts";
