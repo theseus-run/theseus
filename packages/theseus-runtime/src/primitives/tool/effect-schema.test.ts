@@ -29,9 +29,7 @@ describe("fromEffectSchema", () => {
       description: "Greet someone",
       inputSchema: fromEffectSchema(Schema.Struct({ name: Schema.String })),
       safety: "readonly",
-      retry: "idempotent",
       capabilities: [],
-      tags: [],
       execute: ({ name }, _ctx) => Effect.succeed(`hello ${name}`),
       serialize: (s) => s,
     });

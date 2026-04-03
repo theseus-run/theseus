@@ -4,21 +4,36 @@
  * Five primitives: Mission, Tool, Capsule, Dispatch, RuntimeBus.
  * This module exports Tool (first built). Others will follow.
  */
+
+// Tool — core types, errors, helpers
 export {
-  capabilities,
-  compareSafety,
+  ToolError,
+  ToolErrorRetriable,
+  ToolErrorInput,
+  ToolErrorOutput,
+  compareToolSafety,
   defineTool,
-  hasCapability,
   manualSchema,
-  ToolDeniedError,
-  ToolExecutionError,
-  ToolInputError,
-  ToolOutputError,
-  ToolTransientError,
-  withMaxSafety,
-  withoutCapability,
-  withTag,
+  toolCapabilities,
+  toolContext,
+  toolHasCapability,
+  toolsWithMaxSafety,
+  toolsWithoutCapability,
 } from "./tool/index.ts";
-export type { AnyTool, Retry, Safety, SchemaAdapter, Tool, ToolError } from "./tool/index.ts";
+
+export type {
+  SchemaAdapter,
+  Tool,
+  ToolAny,
+  ToolContext,
+  ToolDef,
+  ToolErrors,
+  ToolSafety,
+} from "./tool/index.ts";
+
+// Tool — schema adapters
 export { fromZod } from "./tool/zod.ts";
 export { fromEffectSchema } from "./tool/effect-schema.ts";
+
+// Tool — execution pipeline
+export { callTool, DEFAULT_RETRY_SCHEDULE } from "./tool/run.ts";

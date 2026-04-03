@@ -1,20 +1,19 @@
 import { Effect } from "effect";
 import { describe, expect, test } from "bun:test";
 import {
-  type AnyTool,
-  type Safety,
-  capabilities,
-  compareSafety,
+  type ToolAny,
+  type ToolSafety,
+  ToolError,
+  ToolErrorInput,
+  ToolErrorOutput,
+  compareToolSafety,
   defineTool,
-  hasCapability,
   manualSchema,
-  ToolDeniedError,
-  ToolExecutionError,
-  ToolTransientError,
-  toolErrors,
-  withMaxSafety,
-  withTag,
-  withoutCapability,
+  toolCapabilities,
+  toolContext,
+  toolHasCapability,
+  toolsWithMaxSafety,
+  toolsWithoutCapability,
 } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -33,9 +32,7 @@ const echoTool = defineTool({
     (raw) => raw as { message: string },
   ),
   safety: "readonly",
-  retry: "idempotent",
   capabilities: ["test.echo"],
-  tags: ["test"],
   execute: ({ message }, _ctx) => Effect.succeed({ echoed: message }),
   serialize: (output) => output.echoed,
 });
@@ -55,16 +52,14 @@ const addTool = defineTool({
     (raw) => raw as { a: number; b: number },
   ),
   safety: "readonly",
-  retry: "idempotent",
   capabilities: ["math"],
-  tags: ["compute"],
   execute: ({ a, b }, _ctx) => Effect.succeed(a + b),
   serialize: (n) => String(n),
 });
 
 const failTool = defineTool({
   name: "fail",
-  description: "Always fails with execution error",
+  description: "Always fails with permanent error",
   inputSchema: manualSchema(
     {
       type: "object",
@@ -74,26 +69,22 @@ const failTool = defineTool({
     (raw) => raw as { reason: string },
   ),
   safety: "readonly",
-  retry: "once",
   capabilities: ["test.fail"],
-  tags: ["test"],
   execute: ({ reason }, { fail }) => Effect.fail(fail(reason)),
   serialize: () => "unreachable",
 });
 
-const transientTool = defineTool({
+const retriableTool = defineTool({
   name: "flaky",
-  description: "Fails with transient error",
+  description: "Fails with retriable error",
   inputSchema: manualSchema(
     { type: "object", properties: {}, required: [] },
     (raw) => raw as Record<string, never>,
   ),
   safety: "readonly",
-  retry: "retriable",
   capabilities: [],
-  tags: ["test"],
-  execute: (_input, { transient }) =>
-    Effect.fail(transient("rate limited", { retryAfter: "1 second" })),
+  execute: (_input, { retriable }) =>
+    Effect.fail(retriable("rate limited")),
   serialize: () => "unreachable",
 });
 
@@ -109,9 +100,7 @@ const readTool = defineTool({
     (raw) => raw as { path: string },
   ),
   safety: "readonly",
-  retry: "idempotent",
   capabilities: ["fs.read"],
-  tags: ["filesystem"],
   execute: ({ path }, _ctx) => Effect.succeed(`contents of ${path}`),
   serialize: (s) => s,
 });
@@ -131,9 +120,7 @@ const writeTool = defineTool({
     (raw) => raw as { path: string; content: string },
   ),
   safety: "write",
-  retry: "retriable",
   capabilities: ["fs.read", "fs.write"],
-  tags: ["filesystem"],
   execute: ({ path, content }, _ctx) => Effect.succeed(`wrote ${content.length} bytes to ${path}`),
   serialize: (s) => s,
 });
@@ -150,9 +137,7 @@ const deleteTool = defineTool({
     (raw) => raw as { path: string },
   ),
   safety: "destructive",
-  retry: "once",
   capabilities: ["fs.write"],
-  tags: ["filesystem"],
   execute: ({ path }, _ctx) => Effect.succeed(`deleted ${path}`),
   serialize: (s) => s,
 });
@@ -166,8 +151,6 @@ describe("defineTool", () => {
     expect(echoTool.name).toBe("echo");
     expect(echoTool.capabilities).toEqual(["test.echo"]);
     expect(echoTool.safety).toBe("readonly");
-    expect(echoTool.retry).toBe("idempotent");
-    expect(echoTool.tags).toEqual(["test"]);
   });
 
   test("inputSchema.json is a plain JSON schema object", () => {
@@ -216,207 +199,105 @@ describe("execute + serialize", () => {
 // Error types
 // ---------------------------------------------------------------------------
 
-describe("ToolExecutionError", () => {
-  test("has correct _tag", async () => {
+describe("ToolError", () => {
+  test("has correct _tag via ctx.fail", async () => {
     const result = await Effect.runPromise(
-      failTool.execute({ reason: "not found" }).pipe(
-        Effect.flip, // flip so the error becomes the success value
-      ),
+      failTool.execute({ reason: "not found" }).pipe(Effect.flip),
     );
-    expect(result._tag).toBe("ToolExecutionError");
+    expect(result._tag).toBe("ToolError");
     expect(result.tool).toBe("fail");
     expect(result.message).toBe("not found");
   });
 });
 
-describe("ToolTransientError", () => {
-  test("has correct _tag and retryAfter", async () => {
+describe("ToolErrorRetriable", () => {
+  test("has correct _tag via ctx.retriable", async () => {
     const result = await Effect.runPromise(
-      transientTool.execute({} as never).pipe(Effect.flip),
+      retriableTool.execute({} as never).pipe(Effect.flip),
     );
-    expect(result._tag).toBe("ToolTransientError");
+    expect(result._tag).toBe("ToolErrorRetriable");
     expect(result.tool).toBe("flaky");
-    expect((result as ToolTransientError).retryAfter).toBe("1 second");
+    expect(result.message).toBe("rate limited");
   });
 });
 
-describe("ToolDeniedError", () => {
-  test("can be constructed with reason", () => {
-    const error = new ToolDeniedError({
-      tool: "deleteFile",
-      message: 'Safety "destructive" exceeds max "readonly"',
-      reason: "safety",
+describe("ToolErrorInput", () => {
+  test("can be constructed directly", () => {
+    const error = new ToolErrorInput({
+      tool: "readFile",
+      message: "Invalid input",
+      cause: new Error("decode failed"),
     });
-    expect(error._tag).toBe("ToolDeniedError");
-    expect(error.reason).toBe("safety");
+    expect(error._tag).toBe("ToolErrorInput");
+    expect(error.tool).toBe("readFile");
+  });
+});
+
+describe("ToolErrorOutput", () => {
+  test("can be constructed with output value", () => {
+    const error = new ToolErrorOutput({
+      tool: "readFile",
+      message: "Output validation failed",
+      output: { bad: "data" },
+    });
+    expect(error._tag).toBe("ToolErrorOutput");
+    expect(error.output).toEqual({ bad: "data" });
   });
 });
 
 describe("catchTags dispatches on error type", () => {
-  test("catches ToolExecutionError specifically", async () => {
+  test("catches ToolError specifically", async () => {
     const result = await Effect.runPromise(
       failTool.execute({ reason: "boom" }).pipe(
         Effect.catchTags({
-          ToolExecutionError: (e) => Effect.succeed(`caught execution: ${e.message}`),
-          ToolTransientError: () => Effect.succeed("caught transient"),
+          ToolError: (e) => Effect.succeed(`caught: ${e.message}`),
+          ToolErrorRetriable: () => Effect.succeed("caught retriable"),
         }),
       ),
     );
-    expect(result).toBe("caught execution: boom");
+    expect(result).toBe("caught: boom");
   });
 
-  test("catches ToolTransientError specifically", async () => {
+  test("catches ToolErrorRetriable specifically", async () => {
     const result = await Effect.runPromise(
-      transientTool.execute({} as never).pipe(
+      retriableTool.execute({} as never).pipe(
         Effect.catchTags({
-          ToolExecutionError: () => Effect.succeed("caught execution"),
-          ToolTransientError: (e) => Effect.succeed(`caught transient: ${e.message}`),
+          ToolError: () => Effect.succeed("caught error"),
+          ToolErrorRetriable: (e) => Effect.succeed(`caught: ${e.message}`),
         }),
       ),
     );
-    expect(result).toBe("caught transient: rate limited");
+    expect(result).toBe("caught: rate limited");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Safety
+// ToolContext
 // ---------------------------------------------------------------------------
 
-describe("compareSafety", () => {
-  test("readonly < write < destructive", () => {
-    expect(compareSafety("readonly", "write")).toBeLessThan(0);
-    expect(compareSafety("write", "destructive")).toBeLessThan(0);
-    expect(compareSafety("readonly", "destructive")).toBeLessThan(0);
-  });
-
-  test("equal levels return 0", () => {
-    const levels: Safety[] = ["readonly", "write", "destructive"];
-    for (const level of levels) {
-      expect(compareSafety(level, level)).toBe(0);
-    }
-  });
-
-  test("higher > lower", () => {
-    expect(compareSafety("destructive", "readonly")).toBeGreaterThan(0);
-  });
-});
-
-describe("withMaxSafety", () => {
-  const tools: ReadonlyArray<AnyTool> = [readTool, writeTool, deleteTool];
-
-  test("readonly filters to only readonly tools", () => {
-    const filtered = withMaxSafety(tools, "readonly");
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.name).toBe("readFile");
-  });
-
-  test("write includes readonly and write tools", () => {
-    const filtered = withMaxSafety(tools, "write");
-    expect(filtered).toHaveLength(2);
-    expect(filtered.map((t) => t.name)).toEqual(["readFile", "writeFile"]);
-  });
-
-  test("destructive includes all tools", () => {
-    const filtered = withMaxSafety(tools, "destructive");
-    expect(filtered).toHaveLength(3);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tags
-// ---------------------------------------------------------------------------
-
-describe("withTag", () => {
-  const tools: ReadonlyArray<AnyTool> = [echoTool, readTool, writeTool, addTool];
-
-  test("filters by tag", () => {
-    const fs = withTag(tools, "filesystem");
-    expect(fs.map((t) => t.name)).toEqual(["readFile", "writeFile"]);
-  });
-
-  test("returns empty for unknown tag", () => {
-    expect(withTag(tools, "network")).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Capability helpers
-// ---------------------------------------------------------------------------
-
-describe("capabilities", () => {
-  const tools: ReadonlyArray<AnyTool> = [readTool, writeTool];
-
-  test("extracts unique capabilities from tool array", () => {
-    const caps = capabilities(tools);
-    expect(caps).toContain("fs.read");
-    expect(caps).toContain("fs.write");
-    expect(caps.filter((c) => c === "fs.read")).toHaveLength(1);
-  });
-
-  test("returns empty array for empty tool list", () => {
-    expect(capabilities([])).toEqual([]);
-  });
-});
-
-describe("hasCapability", () => {
-  const tools: ReadonlyArray<AnyTool> = [readTool, writeTool];
-
-  test("returns true when capability exists", () => {
-    expect(hasCapability(tools, "fs.write")).toBe(true);
-  });
-
-  test("returns false when capability missing", () => {
-    expect(hasCapability([readTool], "fs.write")).toBe(false);
-  });
-});
-
-describe("withoutCapability", () => {
-  const tools: ReadonlyArray<AnyTool> = [readTool, writeTool];
-
-  test("filters out tools with the given capability", () => {
-    const filtered = withoutCapability(tools, "fs.write");
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.name).toBe("readFile");
-  });
-
-  test("returns all tools when none have the capability", () => {
-    const filtered = withoutCapability(tools, "network");
-    expect(filtered).toHaveLength(2);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// toolErrors — standalone factory
-// ---------------------------------------------------------------------------
-
-describe("toolErrors", () => {
-  test("creates ToolExecutionError with correct tool name", () => {
-    const ctx = toolErrors("myTool");
+describe("toolContext", () => {
+  test("creates ToolError with correct tool name", () => {
+    const ctx = toolContext("myTool");
     const err = ctx.fail("something went wrong");
-    expect(err._tag).toBe("ToolExecutionError");
+    expect(err._tag).toBe("ToolError");
     expect(err.tool).toBe("myTool");
     expect(err.message).toBe("something went wrong");
   });
 
-  test("creates ToolExecutionError with cause", () => {
-    const ctx = toolErrors("myTool");
+  test("creates ToolError with cause", () => {
+    const ctx = toolContext("myTool");
     const cause = new Error("underlying");
     const err = ctx.fail("wrapped", cause);
     expect(err.cause).toBe(cause);
   });
 
-  test("creates ToolTransientError with retryAfter", () => {
-    const ctx = toolErrors("myTool");
-    const err = ctx.transient("rate limited", { retryAfter: "2 seconds" });
-    expect(err._tag).toBe("ToolTransientError");
+  test("creates ToolErrorRetriable with correct tool name", () => {
+    const ctx = toolContext("myTool");
+    const err = ctx.retriable("rate limited");
+    expect(err._tag).toBe("ToolErrorRetriable");
     expect(err.tool).toBe("myTool");
-    expect(err.retryAfter).toBe("2 seconds");
   });
 });
-
-// ---------------------------------------------------------------------------
-// ToolContext via defineTool — ctx is pre-bound
-// ---------------------------------------------------------------------------
 
 describe("ToolContext via defineTool", () => {
   const ctxTool = defineTool({
@@ -427,9 +308,7 @@ describe("ToolContext via defineTool", () => {
       (raw) => raw as { shouldFail: boolean },
     ),
     safety: "readonly",
-    retry: "once",
     capabilities: [],
-    tags: ["test"],
     execute: ({ shouldFail }, { fail }) =>
       shouldFail
         ? Effect.fail(fail("deliberate failure"))
@@ -441,13 +320,103 @@ describe("ToolContext via defineTool", () => {
     const err = await Effect.runPromise(
       ctxTool.execute({ shouldFail: true }).pipe(Effect.flip),
     );
-    expect(err._tag).toBe("ToolExecutionError");
-    expect((err as ToolExecutionError).tool).toBe("ctxDemo");
-    expect((err as ToolExecutionError).message).toBe("deliberate failure");
+    expect(err._tag).toBe("ToolError");
+    expect((err as ToolError).tool).toBe("ctxDemo");
+    expect((err as ToolError).message).toBe("deliberate failure");
   });
 
   test("success path still works", async () => {
     const result = await Effect.runPromise(ctxTool.execute({ shouldFail: false }));
     expect(result).toBe("ok");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ToolSafety
+// ---------------------------------------------------------------------------
+
+describe("compareToolSafety", () => {
+  test("readonly < write < destructive", () => {
+    expect(compareToolSafety("readonly", "write")).toBeLessThan(0);
+    expect(compareToolSafety("write", "destructive")).toBeLessThan(0);
+    expect(compareToolSafety("readonly", "destructive")).toBeLessThan(0);
+  });
+
+  test("equal levels return 0", () => {
+    const levels: ToolSafety[] = ["readonly", "write", "destructive"];
+    for (const level of levels) {
+      expect(compareToolSafety(level, level)).toBe(0);
+    }
+  });
+
+  test("higher > lower", () => {
+    expect(compareToolSafety("destructive", "readonly")).toBeGreaterThan(0);
+  });
+});
+
+describe("toolsWithMaxSafety", () => {
+  const tools: ReadonlyArray<ToolAny> = [readTool, writeTool, deleteTool];
+
+  test("readonly filters to only readonly tools", () => {
+    const filtered = toolsWithMaxSafety(tools, "readonly");
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]!.name).toBe("readFile");
+  });
+
+  test("write includes readonly and write tools", () => {
+    const filtered = toolsWithMaxSafety(tools, "write");
+    expect(filtered).toHaveLength(2);
+    expect(filtered.map((t) => t.name)).toEqual(["readFile", "writeFile"]);
+  });
+
+  test("destructive includes all tools", () => {
+    const filtered = toolsWithMaxSafety(tools, "destructive");
+    expect(filtered).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Capability helpers
+// ---------------------------------------------------------------------------
+
+describe("toolCapabilities", () => {
+  const tools: ReadonlyArray<ToolAny> = [readTool, writeTool];
+
+  test("extracts unique capabilities from tool array", () => {
+    const caps = toolCapabilities(tools);
+    expect(caps).toContain("fs.read");
+    expect(caps).toContain("fs.write");
+    expect(caps.filter((c) => c === "fs.read")).toHaveLength(1);
+  });
+
+  test("returns empty array for empty tool list", () => {
+    expect(toolCapabilities([])).toEqual([]);
+  });
+});
+
+describe("toolHasCapability", () => {
+  const tools: ReadonlyArray<ToolAny> = [readTool, writeTool];
+
+  test("returns true when capability exists", () => {
+    expect(toolHasCapability(tools, "fs.write")).toBe(true);
+  });
+
+  test("returns false when capability missing", () => {
+    expect(toolHasCapability([readTool], "fs.write")).toBe(false);
+  });
+});
+
+describe("toolsWithoutCapability", () => {
+  const tools: ReadonlyArray<ToolAny> = [readTool, writeTool];
+
+  test("filters out tools with the given capability", () => {
+    const filtered = toolsWithoutCapability(tools, "fs.write");
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]!.name).toBe("readFile");
+  });
+
+  test("returns all tools when none have the capability", () => {
+    const filtered = toolsWithoutCapability(tools, "network");
+    expect(filtered).toHaveLength(2);
   });
 });

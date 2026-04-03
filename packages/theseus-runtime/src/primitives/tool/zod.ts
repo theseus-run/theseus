@@ -9,10 +9,11 @@
  *     description: "Read a file",
  *     inputSchema: fromZod(z.object({ path: z.string() })),
  *     safety: "readonly",
- *     retry: "idempotent",
  *     capabilities: ["fs.read"],
- *     tags: ["filesystem"],
- *     execute: ({ path }) => Effect.succeed(path),
+ *     execute: ({ path }, { fail }) =>
+ *       Effect.tryPromise(() => Bun.file(path).text()).pipe(
+ *         Effect.mapError((e) => fail(`Cannot read: ${path}`, e)),
+ *       ),
  *     serialize: (s) => s,
  *   })
  */

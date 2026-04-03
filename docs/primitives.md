@@ -40,10 +40,7 @@ effect is always needed.
 
 ```typescript
 // Mutation level — ordered, each implies access to levels below
-type Safety = "readonly" | "write" | "destructive"
-
-// Retry semantics — declares tool nature, runtime decides schedule
-type Retry = "idempotent" | "retriable" | "once"
+type ToolSafety = "readonly" | "write" | "destructive"
 
 // Typed contract between schema libraries (Zod, Effect Schema) and Tool
 interface SchemaAdapter<T> {
@@ -55,41 +52,66 @@ interface Tool<I, O> {
   readonly name:          string
   readonly description:   string
   readonly inputSchema:   SchemaAdapter<I>           // JSON schema + decoder for LLM args
-  readonly outputSchema?: SchemaAdapter<O>           // optional — enables validation + Effect retry
-  readonly safety:        Safety                     // mutation level: readonly < write < destructive
-  readonly retry:         Retry                      // retry behavior: idempotent > retriable > once
-  readonly capabilities:  ReadonlyArray<string>      // "fs.read", "fs.write", "shell.exec" — strings, not a union
-  readonly tags:          ReadonlyArray<string>       // "filesystem", "git", "search" — UI/human grouping
-  readonly execute:       (input: I) => Effect<O, ToolError>
+  readonly outputSchema?: SchemaAdapter<O>           // optional — enables runtime validation
+  readonly safety:        ToolSafety                 // mutation level: readonly < write < destructive
+  readonly capabilities:  ReadonlyArray<string>      // "fs.read", "fs.write", "shell.exec" — strings
+  readonly execute:       (input: I) => Effect<O, ToolError | ToolErrorRetriable>
   readonly serialize:     (output: O) => string      // what the model reads back
 }
 ```
 
+**Errors — four types, one naming convention (`ToolError*`):**
+
+| Type | Created by | Meaning |
+|---|---|---|
+| `ToolError` | Tool author via `ctx.fail()` | Permanent — LLM sees and reacts |
+| `ToolErrorRetriable` | Tool author via `ctx.retriable()` | Retriable — runtime retries silently |
+| `ToolErrorInput` | Runtime (`callTool`) | LLM sent bad args — decode failed |
+| `ToolErrorOutput` | Runtime (`callTool`) | Tool returned invalid shape — validate failed |
+
+Defects (bugs in tools) propagate via `Effect.die` — no special class.
+
+**ToolContext** — error factories pre-bound to the tool name, passed as second arg
+to execute. Tool authors never repeat the tool name in errors:
+
+```typescript
+execute: ({ path }, { fail, retriable }) =>
+  Effect.tryPromise(() => fetch(path)).pipe(
+    Effect.mapError(e =>
+      e instanceof TypeError
+        ? retriable("network blip", e)   // runtime retries silently
+        : fail("http error", e),         // LLM sees this
+    ),
+  )
+```
+
 **Safety** is a single ordered enum — not independent booleans. A tool that destroys
-also writes. `readonly < write < destructive`. Runtime derives confirmation policy from
-this. No boolean explosion.
+also writes. `readonly < write < destructive`. Runtime derives confirmation policy and
+retry safety from this. No boolean explosion.
 
-**Retry** declares the tool's nature: `idempotent` (same input → same result, retry
-freely), `retriable` (side effects but retry acceptable with backoff), `once` (never
-auto-retry). The tool declares its nature; the runtime decides the Effect Schedule.
+**No separate retry classification.** Tools compose their own resilience inside
+`execute` using Effect combinators (retry, timeout, fallback). The runtime provides a
+default retry for `ToolErrorRetriable` (3x exponential jittered) via `callTool`. Safety
+informs retry safety: `readonly` = always safe to retry, `write`/`destructive` = not.
 
-**Output schema** enables the runtime to validate tool output and re-invoke via
-`Effect.retry` on mismatch. Optional — deterministic tools may skip it.
+**Output schema** enables the runtime to validate tool output. Optional — deterministic
+tools may skip it.
 
 **Capabilities** are strings, not an exhaustive union — unions go stale. Used for
 structural toolset assembly (read-only grunt = no tool with `"fs.write"`).
 Orthogonal to safety: capabilities describe WHAT the tool touches, safety describes
 HOW MUCH it changes the world.
 
-**Tags** are flat strings for human/UI grouping. Different from capabilities — tags
-are for humans, capabilities are for architecture.
-
 Schema-agnostic: `SchemaAdapter` wraps JSON Schema + decoder. Adapters for Zod
 (`fromZod`) and Effect Schema (`fromEffectSchema`) ship separately. MCPs are Tools.
 Deterministic functions are Tools. Same interface throughout.
 
-**Effect:** `(input: I) => Effect<O, ToolError>` — a named, typed effectful operation.
-Output schema + retry policy feeds directly into Effect's retry + Schedule system.
+**`callTool` — the runtime execution pipeline:**
+decode input → execute → retry `ToolErrorRetriable` → validate output → return.
+One function. "Try 3 times and die." Exhausted retries become `ToolError`.
+
+**Effect:** `(input: I) => Effect<O, ToolError | ToolErrorRetriable>` — a named, typed
+effectful operation. Error handling composed in the pipeline, not configured in data.
 
 **Ship:** *Instruments.* Sensors, manipulators, drives. Nothing touches the universe
 bare-handed.

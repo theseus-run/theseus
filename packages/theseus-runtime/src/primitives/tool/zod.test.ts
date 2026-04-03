@@ -31,9 +31,7 @@ describe("fromZod", () => {
       inputSchema: fromZod(z.object({ name: z.string() })),
       outputSchema: fromZod(z.object({ greeting: z.string() })),
       safety: "readonly",
-      retry: "idempotent",
       capabilities: [],
-      tags: [],
       execute: ({ name }, _ctx) => Effect.succeed({ greeting: `hello ${name}` }),
       serialize: (o) => o.greeting,
     });
@@ -44,7 +42,6 @@ describe("fromZod", () => {
     const decoded = tool.inputSchema.decode({ name: "world" });
     expect(decoded.name).toBe("world");
     const output = await Effect.runPromise(tool.execute(decoded));
-    // Validate output against outputSchema
     const validated = tool.outputSchema!.decode(output);
     expect(validated.greeting).toBe("hello world");
     expect(tool.serialize(output)).toBe("hello world");
@@ -57,16 +54,12 @@ describe("fromZod", () => {
       inputSchema: fromZod(z.object({ x: z.number() })),
       outputSchema: fromZod(z.object({ result: z.number() })),
       safety: "readonly",
-      retry: "idempotent",
       capabilities: [],
-      tags: [],
       execute: ({ x }, _ctx) => Effect.succeed({ result: x * 2 }),
       serialize: (o) => String(o.result),
     });
 
-    // Valid output passes
     expect(tool.outputSchema!.decode({ result: 42 })).toEqual({ result: 42 });
-    // Invalid output throws
     expect(() => tool.outputSchema!.decode({ result: "not a number" })).toThrow();
   });
 
