@@ -38,6 +38,10 @@ The boundary between AI reasoning and the world. Even a perfect model in a 3M co
 window needs to read files, run commands, fetch data. The channel between thought and
 effect is always needed.
 
+**All-Effect pipeline.** Every step on `Tool<I, O>` is an Effect — decode, execute,
+validate, encode. Spread+override any step (inject logging, security scans, permission
+tracking at any boundary). No sync chokepoints.
+
 ```typescript
 // Mutation level — ordered, each implies access to levels below
 type ToolSafety = "readonly" | "write" | "destructive"
@@ -48,15 +52,48 @@ interface SchemaAdapter<T> {
   readonly decode: (raw: unknown) => T      // parse/validate — throws on invalid
 }
 
+// Runtime-facing — all pipeline steps are Effects
 interface Tool<I, O> {
+  // Metadata (6 fields)
   readonly name:          string
   readonly description:   string
-  readonly inputSchema:   SchemaAdapter<I>           // JSON schema + decoder for LLM args
-  readonly outputSchema?: SchemaAdapter<O>           // optional — enables runtime validation
-  readonly safety:        ToolSafety                 // mutation level: readonly < write < destructive
-  readonly capabilities:  ReadonlyArray<string>      // "fs.read", "fs.write", "shell.exec" — strings
-  readonly execute:       (input: I) => Effect<O, ToolError | ToolErrorRetriable>
-  readonly serialize:     (output: O) => string      // what the model reads back
+  readonly inputSchema:   Record<string, unknown>    // JSON Schema for LLM
+  readonly outputSchema?: Record<string, unknown>    // JSON Schema for LLM (optional)
+  readonly safety:        ToolSafety
+  readonly capabilities:  ReadonlyArray<string>
+
+  // Pipeline steps (4 fields, all Effects)
+  readonly decode:    (raw: unknown) => Effect<I, ToolErrorInput>
+  readonly execute:   (input: I) => Effect<O, ToolError | ToolErrorRetriable>
+  readonly validate?: (output: O) => Effect<O, ToolErrorOutput>
+  readonly encode:    (output: O) => Effect<string, ToolError>
+}
+
+// Author-facing — ergonomic, SchemaAdapter generates decode/validate
+type ToolDef<I, O> = {
+  readonly name:          string
+  readonly description:   string
+  readonly inputSchema:   SchemaAdapter<I>           // generates decode + json
+  readonly outputSchema?: SchemaAdapter<O>           // generates validate + json
+  readonly safety:        ToolSafety
+  readonly capabilities:  ReadonlyArray<string>
+  readonly execute: (input: I, ctx: ToolContext) => Effect<O, ToolError | ToolErrorRetriable>
+  readonly encode:  (output: O) => string            // sync — defineTool wraps in Effect
+}
+```
+
+`defineTool(ToolDef) → Tool` bridges the ergonomic author config into the all-Effect
+runtime interface. `inputSchema.json` becomes `inputSchema`, sync `encode` wraps in
+`Effect.try`, `inputSchema.decode` wraps in `Effect.try` → `ToolErrorInput`, etc.
+
+**Decoration via spread:** override any pipeline step without subclassing.
+```typescript
+const guarded = { ...readFile, decode: (raw) =>
+  readFile.decode(raw).pipe(
+    Effect.flatMap(input => input.path.includes(".env")
+      ? Effect.fail(new ToolErrorInput({ tool: "readFile", message: "blocked" }))
+      : Effect.succeed(input)),
+  ),
 }
 ```
 
@@ -66,8 +103,8 @@ interface Tool<I, O> {
 |---|---|---|
 | `ToolError` | Tool author via `ctx.fail()` | Permanent — LLM sees and reacts |
 | `ToolErrorRetriable` | Tool author via `ctx.retriable()` | Retriable — runtime retries silently |
-| `ToolErrorInput` | Runtime (`callTool`) | LLM sent bad args — decode failed |
-| `ToolErrorOutput` | Runtime (`callTool`) | Tool returned invalid shape — validate failed |
+| `ToolErrorInput` | Runtime (`callTool`) / decoration | LLM sent bad args — decode failed |
+| `ToolErrorOutput` | Runtime (`callTool`) / decoration | Tool returned invalid shape — validate failed |
 
 Defects (bugs in tools) propagate via `Effect.die` — no special class.
 
@@ -102,16 +139,16 @@ structural toolset assembly (read-only grunt = no tool with `"fs.write"`).
 Orthogonal to safety: capabilities describe WHAT the tool touches, safety describes
 HOW MUCH it changes the world.
 
-Schema-agnostic: `SchemaAdapter` wraps JSON Schema + decoder. Adapters for Zod
+Schema-agnostic: `SchemaAdapter` wraps JSON Schema + sync decoder. Adapters for Zod
 (`fromZod`) and Effect Schema (`fromEffectSchema`) ship separately. MCPs are Tools.
 Deterministic functions are Tools. Same interface throughout.
 
 **`callTool` — the runtime execution pipeline:**
-decode input → execute → retry `ToolErrorRetriable` → validate output → return.
+`decode → execute → retry ToolErrorRetriable → validate → encode → string`.
 One function. "Try 3 times and die." Exhausted retries become `ToolError`.
 
-**Effect:** `(input: I) => Effect<O, ToolError | ToolErrorRetriable>` — a named, typed
-effectful operation. Error handling composed in the pipeline, not configured in data.
+**Effect:** Every pipeline step is `Effect<T, E>` — a named, typed effectful operation.
+Error handling composed in the pipeline, not configured in data.
 
 **Ship:** *Instruments.* Sensors, manipulators, drives. Nothing touches the universe
 bare-handed.

@@ -1,7 +1,10 @@
 /**
  * Tool — the boundary between AI reasoning and the world.
  *
- * Schema-agnostic: the Tool takes a SchemaAdapter (JSON schema + decoder).
+ * All-Effect pipeline: every step (decode, execute, validate, encode)
+ * is an Effect on the Tool itself. Spread+override any step.
+ *
+ * Schema-agnostic: the ToolDef takes a SchemaAdapter (JSON schema + decoder).
  * Use fromZod, fromEffectSchema, or hand-roll with manualSchema.
  *
  * Usage:
@@ -17,11 +20,11 @@
  *         Effect.map((content) => ({ content })),
  *         Effect.mapError((e) => fail(`Cannot read: ${path}`, e)),
  *       ),
- *     serialize: (o) => o.content,
+ *     encode: (o) => o.content,
  *   })
  */
 
-import { Data, type Effect } from "effect";
+import { Data, Effect } from "effect";
 
 // ---------------------------------------------------------------------------
 // Tool errors — flat tagged union, Effect v4 style
@@ -61,11 +64,7 @@ export class ToolErrorOutput extends Data.TaggedError("ToolErrorOutput")<{
 }> {}
 
 /** Union of all tool errors. Use Effect.catchTags to handle. */
-export type ToolErrors =
-  | ToolError
-  | ToolErrorRetriable
-  | ToolErrorInput
-  | ToolErrorOutput;
+export type ToolErrors = ToolError | ToolErrorRetriable | ToolErrorInput | ToolErrorOutput;
 
 // ---------------------------------------------------------------------------
 // ToolSafety — ordered mutation level
@@ -120,7 +119,7 @@ export const toolContext = (tool: string): ToolContext => ({
 });
 
 // ---------------------------------------------------------------------------
-// Tool<I, O> — runtime-facing interface (execute takes input only)
+// Tool<I, O> — runtime-facing interface (all-Effect pipeline)
 // ---------------------------------------------------------------------------
 
 export interface Tool<I, O> {
@@ -128,40 +127,95 @@ export interface Tool<I, O> {
   readonly name: string;
   /** Human/LLM-readable description of what this tool does. */
   readonly description: string;
-  /** Input schema: JSON schema + decoder for LLM args. */
-  readonly inputSchema: SchemaAdapter<I>;
-  /** Output schema: optional JSON schema + validator for runtime validation. */
-  readonly outputSchema?: SchemaAdapter<O>;
+  /** Input JSON Schema for the LLM. */
+  readonly inputSchema: Record<string, unknown>;
+  /** Output JSON Schema for the LLM (optional). */
+  readonly outputSchema?: Record<string, unknown>;
   /** Mutation level: readonly < write < destructive. */
   readonly safety: ToolSafety;
   /** Structural capability declarations: "fs.read", "fs.write", "shell.exec", etc. */
   readonly capabilities: ReadonlyArray<string>;
+
+  // Pipeline steps — all Effects
+  /** Decode raw LLM args into typed input. */
+  readonly decode: (raw: unknown) => Effect.Effect<I, ToolErrorInput>;
   /** Execute the tool. Returns ToolError (permanent) or ToolErrorRetriable (retriable). */
   readonly execute: (input: I) => Effect.Effect<O, ToolError | ToolErrorRetriable>;
-  /** Serialize output to string for the LLM's tool result message. */
-  readonly serialize: (output: O) => string;
+  /** Validate output shape (optional). */
+  readonly validate?: (output: O) => Effect.Effect<O, ToolErrorOutput>;
+  /** Encode output to string for the LLM's tool result message. */
+  readonly encode: (output: O) => Effect.Effect<string, ToolError>;
 }
 
 // ---------------------------------------------------------------------------
-// ToolDef<I, O> — author-facing config (execute receives ToolContext)
+// ToolDef<I, O> — author-facing config (ergonomic)
 // ---------------------------------------------------------------------------
 
 /** What tool authors pass to defineTool. execute receives (input, ctx). */
-export type ToolDef<I, O> = Omit<Tool<I, O>, "execute"> & {
+export type ToolDef<I, O> = {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: SchemaAdapter<I>;
+  readonly outputSchema?: SchemaAdapter<O>;
+  readonly safety: ToolSafety;
+  readonly capabilities: ReadonlyArray<string>;
   readonly execute: (
     input: I,
     ctx: ToolContext,
   ) => Effect.Effect<O, ToolError | ToolErrorRetriable>;
+  /** Sync encoder — defineTool wraps in Effect. */
+  readonly encode: (output: O) => string;
 };
 
 // ---------------------------------------------------------------------------
-// defineTool — construct a Tool with all types inferred
+// defineTool — bridges ToolDef → Tool (all-Effect pipeline)
 // ---------------------------------------------------------------------------
 
-/** Define a tool. Bridges author's (input, ctx) → runtime's (input) by pre-binding ToolContext. */
-export const defineTool = <I, O>(config: ToolDef<I, O>): Tool<I, O> => {
-  const ctx = toolContext(config.name);
-  return { ...config, execute: (input) => config.execute(input, ctx) };
+/** Define a tool. Bridges author's ergonomic ToolDef into the all-Effect Tool pipeline. */
+export const defineTool = <I, O>(def: ToolDef<I, O>): Tool<I, O> => {
+  const ctx = toolContext(def.name);
+  const base = {
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema.json,
+    safety: def.safety,
+    capabilities: def.capabilities,
+    decode: (raw: unknown) =>
+      Effect.try({
+        try: () => def.inputSchema.decode(raw),
+        catch: (cause: unknown) =>
+          new ToolErrorInput({ tool: def.name, message: "Invalid input", cause }),
+      }),
+    execute: (input: I) => def.execute(input, ctx),
+    encode: (output: O) =>
+      Effect.try({
+        try: () => def.encode(output),
+        catch: (cause: unknown) =>
+          new ToolError({ tool: def.name, message: "Encode failed", cause }),
+      }),
+  };
+  if (def.outputSchema) {
+    const os = def.outputSchema;
+    return {
+      ...base,
+      outputSchema: os.json,
+      validate: (output: O) =>
+        Effect.try({
+          try: () => {
+            os.decode(output);
+            return output;
+          },
+          catch: (cause: unknown) =>
+            new ToolErrorOutput({
+              tool: def.name,
+              message: "Output validation failed",
+              output,
+              cause,
+            }),
+        }),
+    };
+  }
+  return base;
 };
 
 // ---------------------------------------------------------------------------
@@ -176,8 +230,9 @@ export type ToolAny = Tool<any, any>;
 // ---------------------------------------------------------------------------
 
 /** Extract all unique capabilities from an array of tools. */
-export const toolCapabilities = (tools: ReadonlyArray<ToolAny>): ReadonlyArray<string> =>
-  [...new Set(tools.flatMap((t) => t.capabilities))];
+export const toolCapabilities = (tools: ReadonlyArray<ToolAny>): ReadonlyArray<string> => [
+  ...new Set(tools.flatMap((t) => t.capabilities)),
+];
 
 /** Check whether a tool set contains a specific capability. */
 export const toolHasCapability = (tools: ReadonlyArray<ToolAny>, capability: string): boolean =>
@@ -193,5 +248,4 @@ export const toolsWithoutCapability = (
 export const toolsWithMaxSafety = (
   tools: ReadonlyArray<ToolAny>,
   maxSafety: ToolSafety,
-): ReadonlyArray<ToolAny> =>
-  tools.filter((t) => compareToolSafety(t.safety, maxSafety) <= 0);
+): ReadonlyArray<ToolAny> => tools.filter((t) => compareToolSafety(t.safety, maxSafety) <= 0);

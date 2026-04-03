@@ -1,14 +1,14 @@
-import { Effect } from "effect";
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import {
-  type ToolAny,
-  type ToolSafety,
-  ToolError,
-  ToolErrorInput,
-  ToolErrorOutput,
   compareToolSafety,
   defineTool,
   manualSchema,
+  type ToolAny,
+  type ToolError,
+  ToolErrorInput,
+  ToolErrorOutput,
+  type ToolSafety,
   toolCapabilities,
   toolContext,
   toolHasCapability,
@@ -34,7 +34,7 @@ const echoTool = defineTool({
   safety: "readonly",
   capabilities: ["test.echo"],
   execute: ({ message }, _ctx) => Effect.succeed({ echoed: message }),
-  serialize: (output) => output.echoed,
+  encode: (output) => output.echoed,
 });
 
 const addTool = defineTool({
@@ -54,7 +54,7 @@ const addTool = defineTool({
   safety: "readonly",
   capabilities: ["math"],
   execute: ({ a, b }, _ctx) => Effect.succeed(a + b),
-  serialize: (n) => String(n),
+  encode: (n) => String(n),
 });
 
 const failTool = defineTool({
@@ -71,7 +71,7 @@ const failTool = defineTool({
   safety: "readonly",
   capabilities: ["test.fail"],
   execute: ({ reason }, { fail }) => Effect.fail(fail(reason)),
-  serialize: () => "unreachable",
+  encode: () => "unreachable",
 });
 
 const retriableTool = defineTool({
@@ -83,9 +83,8 @@ const retriableTool = defineTool({
   ),
   safety: "readonly",
   capabilities: [],
-  execute: (_input, { retriable }) =>
-    Effect.fail(retriable("rate limited")),
-  serialize: () => "unreachable",
+  execute: (_input, { retriable }) => Effect.fail(retriable("rate limited")),
+  encode: () => "unreachable",
 });
 
 const readTool = defineTool({
@@ -102,7 +101,7 @@ const readTool = defineTool({
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ path }, _ctx) => Effect.succeed(`contents of ${path}`),
-  serialize: (s) => s,
+  encode: (s) => s,
 });
 
 const writeTool = defineTool({
@@ -122,7 +121,7 @@ const writeTool = defineTool({
   safety: "write",
   capabilities: ["fs.read", "fs.write"],
   execute: ({ path, content }, _ctx) => Effect.succeed(`wrote ${content.length} bytes to ${path}`),
-  serialize: (s) => s,
+  encode: (s) => s,
 });
 
 const deleteTool = defineTool({
@@ -139,7 +138,7 @@ const deleteTool = defineTool({
   safety: "destructive",
   capabilities: ["fs.write"],
   execute: ({ path }, _ctx) => Effect.succeed(`deleted ${path}`),
-  serialize: (s) => s,
+  encode: (s) => s,
 });
 
 // ---------------------------------------------------------------------------
@@ -153,45 +152,209 @@ describe("defineTool", () => {
     expect(echoTool.safety).toBe("readonly");
   });
 
-  test("inputSchema.json is a plain JSON schema object", () => {
-    expect(echoTool.inputSchema.json).toEqual({
+  test("inputSchema is a plain JSON schema object (not SchemaAdapter)", () => {
+    expect(echoTool.inputSchema).toEqual({
       type: "object",
       properties: { message: { type: "string", description: "Message to echo" } },
       required: ["message"],
     });
   });
+
+  test("outputSchema is plain JSON when provided", () => {
+    const toolWithOutput = defineTool({
+      name: "test",
+      description: "test",
+      inputSchema: manualSchema({ type: "object" }, (r) => r),
+      outputSchema: manualSchema(
+        { type: "object", properties: { x: { type: "number" } } },
+        (r) => r as { x: number },
+      ),
+      safety: "readonly",
+      capabilities: [],
+      execute: (_i, _c) => Effect.succeed({ x: 1 }),
+      encode: (o) => String(o.x),
+    });
+    expect(toolWithOutput.outputSchema).toEqual({
+      type: "object",
+      properties: { x: { type: "number" } },
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
-// decode
+// decode (Effect-based)
 // ---------------------------------------------------------------------------
 
 describe("decode", () => {
-  test("decodes valid input", () => {
-    const input = echoTool.inputSchema.decode({ message: "hello" });
+  test("decodes valid input as Effect", async () => {
+    const input = await Effect.runPromise(echoTool.decode({ message: "hello" }));
     expect(input.message).toBe("hello");
   });
 
-  test("decodes multi-field input", () => {
-    const input = addTool.inputSchema.decode({ a: 2, b: 3 });
+  test("decodes multi-field input", async () => {
+    const input = await Effect.runPromise(addTool.decode({ a: 2, b: 3 }));
     expect(input.a).toBe(2);
     expect(input.b).toBe(3);
+  });
+
+  test("fails with ToolErrorInput on bad input", async () => {
+    const decodingTool = defineTool({
+      name: "strict",
+      description: "Strict decode",
+      inputSchema: manualSchema(
+        { type: "object", properties: { x: { type: "number" } }, required: ["x"] },
+        (raw) => {
+          const r = raw as { x?: unknown };
+          if (typeof r.x !== "number") throw new Error("x must be a number");
+          return r as { x: number };
+        },
+      ),
+      safety: "readonly",
+      capabilities: [],
+      execute: (i, _c) => Effect.succeed(i.x),
+      encode: (n) => String(n),
+    });
+
+    const err = await Effect.runPromise(decodingTool.decode({ x: "bad" }).pipe(Effect.flip));
+    expect(err._tag).toBe("ToolErrorInput");
+    expect(err.tool).toBe("strict");
   });
 });
 
 // ---------------------------------------------------------------------------
-// execute + serialize
+// execute + encode
 // ---------------------------------------------------------------------------
 
-describe("execute + serialize", () => {
+describe("execute + encode", () => {
   test("echo tool round-trips", async () => {
     const output = await Effect.runPromise(echoTool.execute({ message: "hello" }));
-    expect(echoTool.serialize(output)).toBe("hello");
+    const encoded = await Effect.runPromise(echoTool.encode(output));
+    expect(encoded).toBe("hello");
   });
 
-  test("add tool computes and serializes", async () => {
+  test("add tool computes and encodes", async () => {
     const output = await Effect.runPromise(addTool.execute({ a: 10, b: 32 }));
-    expect(addTool.serialize(output)).toBe("42");
+    const encoded = await Effect.runPromise(addTool.encode(output));
+    expect(encoded).toBe("42");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// encode (Effect-based)
+// ---------------------------------------------------------------------------
+
+describe("encode", () => {
+  test("returns Effect<string>", async () => {
+    const result = await Effect.runPromise(echoTool.encode({ echoed: "test" }));
+    expect(result).toBe("test");
+  });
+
+  test("wraps sync encode errors in ToolError", async () => {
+    const badEncodeTool = defineTool({
+      name: "badEncode",
+      description: "Encode throws",
+      inputSchema: manualSchema({ type: "object" }, (r) => r),
+      safety: "readonly",
+      capabilities: [],
+      execute: (_i, _c) => Effect.succeed({ x: 1 }),
+      encode: () => {
+        throw new Error("encode boom");
+      },
+    });
+
+    const err = await Effect.runPromise(badEncodeTool.encode({ x: 1 }).pipe(Effect.flip));
+    expect(err._tag).toBe("ToolError");
+    expect(err.tool).toBe("badEncode");
+    expect(err.message).toBe("Encode failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validate (Effect-based)
+// ---------------------------------------------------------------------------
+
+describe("validate", () => {
+  test("is undefined when no outputSchema", () => {
+    expect(echoTool.validate).toBeUndefined();
+  });
+
+  test("succeeds when output matches schema", async () => {
+    const toolWithOutput = defineTool({
+      name: "validated",
+      description: "test",
+      inputSchema: manualSchema({ type: "object" }, (r) => r as { x: number }),
+      outputSchema: manualSchema({ type: "object" }, (r) => {
+        const o = r as { result?: unknown };
+        if (typeof o.result !== "number") throw new Error("bad");
+        return o as { result: number };
+      }),
+      safety: "readonly",
+      capabilities: [],
+      execute: ({ x }, _c) => Effect.succeed({ result: x * 2 }),
+      encode: (o) => String(o.result),
+    });
+
+    const result = await Effect.runPromise(toolWithOutput.validate?.({ result: 42 }));
+    expect(result).toEqual({ result: 42 });
+  });
+
+  test("fails with ToolErrorOutput when output is invalid", async () => {
+    const toolWithOutput = defineTool({
+      name: "validated",
+      description: "test",
+      inputSchema: manualSchema({ type: "object" }, (r) => r as { x: number }),
+      outputSchema: manualSchema({ type: "object" }, (r) => {
+        const o = r as { result?: unknown };
+        if (typeof o.result !== "number") throw new Error("bad result");
+        return o as { result: number };
+      }),
+      safety: "readonly",
+      capabilities: [],
+      execute: ({ x }, _c) => Effect.succeed({ result: x * 2 }),
+      encode: (o) => String(o.result),
+    });
+
+    // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
+    const err = await Effect.runPromise(
+      toolWithOutput.validate?.({ result: "nope" } as any).pipe(Effect.flip),
+    );
+    expect(err._tag).toBe("ToolErrorOutput");
+    expect(err.tool).toBe("validated");
+    expect(err.output).toEqual({ result: "nope" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tool decoration via spread
+// ---------------------------------------------------------------------------
+
+describe("tool decoration via spread", () => {
+  test("override decode to block .env files", async () => {
+    const guardedTool: typeof readTool = {
+      ...readTool,
+      decode: (raw) =>
+        readTool.decode(raw).pipe(
+          Effect.flatMap((input) =>
+            input.path.includes(".env")
+              ? Effect.fail(
+                  new ToolErrorInput({
+                    tool: readTool.name,
+                    message: "Access to .env files is blocked",
+                  }),
+                )
+              : Effect.succeed(input),
+          ),
+        ),
+    };
+
+    // Normal path works
+    const ok = await Effect.runPromise(guardedTool.decode({ path: "src/index.ts" }));
+    expect(ok.path).toBe("src/index.ts");
+
+    // .env path blocked
+    const err = await Effect.runPromise(guardedTool.decode({ path: ".env" }).pipe(Effect.flip));
+    expect(err._tag).toBe("ToolErrorInput");
+    expect(err.message).toBe("Access to .env files is blocked");
   });
 });
 
@@ -212,9 +375,7 @@ describe("ToolError", () => {
 
 describe("ToolErrorRetriable", () => {
   test("has correct _tag via ctx.retriable", async () => {
-    const result = await Effect.runPromise(
-      retriableTool.execute({} as never).pipe(Effect.flip),
-    );
+    const result = await Effect.runPromise(retriableTool.execute({} as never).pipe(Effect.flip));
     expect(result._tag).toBe("ToolErrorRetriable");
     expect(result.tool).toBe("flaky");
     expect(result.message).toBe("rate limited");
@@ -310,16 +471,12 @@ describe("ToolContext via defineTool", () => {
     safety: "readonly",
     capabilities: [],
     execute: ({ shouldFail }, { fail }) =>
-      shouldFail
-        ? Effect.fail(fail("deliberate failure"))
-        : Effect.succeed("ok"),
-    serialize: (s) => s,
+      shouldFail ? Effect.fail(fail("deliberate failure")) : Effect.succeed("ok"),
+    encode: (s) => s,
   });
 
   test("ctx.fail auto-fills tool name", async () => {
-    const err = await Effect.runPromise(
-      ctxTool.execute({ shouldFail: true }).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(ctxTool.execute({ shouldFail: true }).pipe(Effect.flip));
     expect(err._tag).toBe("ToolError");
     expect((err as ToolError).tool).toBe("ctxDemo");
     expect((err as ToolError).message).toBe("deliberate failure");
@@ -360,7 +517,7 @@ describe("toolsWithMaxSafety", () => {
   test("readonly filters to only readonly tools", () => {
     const filtered = toolsWithMaxSafety(tools, "readonly");
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.name).toBe("readFile");
+    expect(filtered[0]?.name).toBe("readFile");
   });
 
   test("write includes readonly and write tools", () => {
@@ -412,7 +569,7 @@ describe("toolsWithoutCapability", () => {
   test("filters out tools with the given capability", () => {
     const filtered = toolsWithoutCapability(tools, "fs.write");
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.name).toBe("readFile");
+    expect(filtered[0]?.name).toBe("readFile");
   });
 
   test("returns all tools when none have the capability", () => {

@@ -1,18 +1,18 @@
 /**
- * Tool execution wrappers — decode, execute, retry, validate.
+ * Tool execution pipeline — decode, execute, retry, validate, encode.
  *
  * callTool: the standard pipeline for calling a tool from the runtime.
- *   1. Decode raw LLM args via inputSchema
+ *   1. Decode raw LLM args via tool.decode
  *   2. Execute the tool
  *   3. Retry ToolErrorRetriable (3x, exponential backoff, jittered)
  *   4. Convert exhausted ToolErrorRetriable → ToolError
- *   5. Validate output against outputSchema (if provided)
- *   6. Return raw output (caller serializes when needed)
+ *   5. Validate output via tool.validate (if provided)
+ *   6. Encode output to string via tool.encode
  */
 
 import { Effect, Schedule } from "effect";
 import type { Tool } from "./index.ts";
-import { ToolError, ToolErrorInput, ToolErrorOutput, ToolErrorRetriable } from "./index.ts";
+import { ToolError, type ToolErrorRetriable } from "./index.ts";
 
 // ---------------------------------------------------------------------------
 // Default retry schedule — 3 attempts, exponential backoff, jittered
@@ -24,52 +24,29 @@ export const DEFAULT_RETRY_SCHEDULE = Schedule.both(
 );
 
 // ---------------------------------------------------------------------------
-// callTool — the standard tool execution pipeline
+// callTool — the standard tool execution pipeline (returns string)
 // ---------------------------------------------------------------------------
 
-/** Call a tool: decode input → execute → retry retriable → validate output. */
+/** Call a tool: decode → execute → retry retriable → validate → encode → string. */
 export const callTool = <I, O>(
   tool: Tool<I, O>,
   raw: unknown,
-): Effect.Effect<O, ToolError | ToolErrorInput | ToolErrorOutput> =>
-  // 1. Decode input
-  Effect.try({
-    try: () => tool.inputSchema.decode(raw),
-    catch: (cause) =>
-      new ToolErrorInput({ tool: tool.name, message: "Invalid input", cause }),
-  }).pipe(
-    // 2. Execute + retry retriable errors
+): Effect.Effect<string, ToolError | ToolErrorInput | ToolErrorOutput> =>
+  tool.decode(raw).pipe(
     Effect.flatMap((input) =>
       Effect.suspend(() => tool.execute(input)).pipe(
         Effect.retry({
-          while: (e): e is ToolErrorRetriable =>
-            e._tag === "ToolErrorRetriable",
+          while: (e): e is ToolErrorRetriable => e._tag === "ToolErrorRetriable",
           schedule: DEFAULT_RETRY_SCHEDULE,
         }),
-        // 3. Convert exhausted ToolErrorRetriable → ToolError
         Effect.catchTag("ToolErrorRetriable", (e) =>
-          Effect.fail(
-            new ToolError({ tool: e.tool, message: e.message, cause: e }),
-          ),
+          Effect.fail(new ToolError({ tool: e.tool, message: e.message, cause: e })),
         ),
       ),
     ),
-    // 4. Validate output (if outputSchema provided)
-    Effect.flatMap((output) =>
-      tool.outputSchema
-        ? Effect.try({
-            try: () => {
-              tool.outputSchema!.decode(output);
-              return output;
-            },
-            catch: (cause) =>
-              new ToolErrorOutput({
-                tool: tool.name,
-                message: "Output validation failed",
-                output,
-                cause,
-              }),
-          })
-        : Effect.succeed(output),
-    ),
+    Effect.flatMap((output) => (tool.validate ? tool.validate(output) : Effect.succeed(output))),
+    Effect.flatMap(tool.encode),
   );
+
+// Re-export error types used in the return type
+import type { ToolErrorInput, ToolErrorOutput } from "./index.ts";

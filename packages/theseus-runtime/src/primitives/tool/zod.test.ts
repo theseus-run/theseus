@@ -1,5 +1,5 @@
-import { Effect } from "effect";
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { z } from "zod";
 import { defineTool } from "./index.ts";
 import { fromZod } from "./zod.ts";
@@ -33,21 +33,22 @@ describe("fromZod", () => {
       safety: "readonly",
       capabilities: [],
       execute: ({ name }, _ctx) => Effect.succeed({ greeting: `hello ${name}` }),
-      serialize: (o) => o.greeting,
+      encode: (o) => o.greeting,
     });
 
     expect(tool.name).toBe("greet");
-    expect(tool.inputSchema.json).toHaveProperty("type", "object");
-    expect(tool.outputSchema?.json).toHaveProperty("type", "object");
-    const decoded = tool.inputSchema.decode({ name: "world" });
+    expect(tool.inputSchema).toHaveProperty("type", "object");
+    expect(tool.outputSchema).toHaveProperty("type", "object");
+    const decoded = await Effect.runPromise(tool.decode({ name: "world" }));
     expect(decoded.name).toBe("world");
     const output = await Effect.runPromise(tool.execute(decoded));
-    const validated = tool.outputSchema!.decode(output);
+    const validated = await Effect.runPromise(tool.validate?.(output));
     expect(validated.greeting).toBe("hello world");
-    expect(tool.serialize(output)).toBe("hello world");
+    const encoded = await Effect.runPromise(tool.encode(output));
+    expect(encoded).toBe("hello world");
   });
 
-  test("outputSchema.decode rejects invalid output", () => {
+  test("validate rejects invalid output", async () => {
     const tool = defineTool({
       name: "typed",
       description: "Typed output",
@@ -56,11 +57,17 @@ describe("fromZod", () => {
       safety: "readonly",
       capabilities: [],
       execute: ({ x }, _ctx) => Effect.succeed({ result: x * 2 }),
-      serialize: (o) => String(o.result),
+      encode: (o) => String(o.result),
     });
 
-    expect(tool.outputSchema!.decode({ result: 42 })).toEqual({ result: 42 });
-    expect(() => tool.outputSchema!.decode({ result: "not a number" })).toThrow();
+    const ok = await Effect.runPromise(tool.validate?.({ result: 42 }));
+    expect(ok).toEqual({ result: 42 });
+
+    // biome-ignore lint/suspicious/noExplicitAny: intentionally testing bad output
+    const err = await Effect.runPromise(
+      tool.validate?.({ result: "not a number" } as any).pipe(Effect.flip),
+    );
+    expect(err._tag).toBe("ToolErrorOutput");
   });
 
   test("handles optional fields", () => {

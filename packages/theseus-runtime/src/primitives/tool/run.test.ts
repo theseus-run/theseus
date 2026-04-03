@@ -1,16 +1,16 @@
-import { Effect } from "effect";
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
+import { z } from "zod";
 import {
-  ToolError,
-  ToolErrorInput,
-  ToolErrorOutput,
-  ToolErrorRetriable,
   defineTool,
   manualSchema,
+  type ToolError,
+  type ToolErrorInput,
+  type ToolErrorOutput,
+  ToolErrorRetriable,
 } from "./index.ts";
-import { fromZod } from "./zod.ts";
-import { z } from "zod";
 import { callTool } from "./run.ts";
+import { fromZod } from "./zod.ts";
 
 // ---------------------------------------------------------------------------
 // Test tools
@@ -30,7 +30,7 @@ const echoTool = defineTool({
   safety: "readonly",
   capabilities: ["test"],
   execute: ({ msg }, _ctx) => Effect.succeed(msg),
-  serialize: (s) => s,
+  encode: (s) => s,
 });
 
 const validatedTool = defineTool({
@@ -41,7 +41,7 @@ const validatedTool = defineTool({
   safety: "readonly",
   capabilities: [],
   execute: ({ x }, _ctx) => Effect.succeed({ result: x * 2 }),
-  serialize: (o) => String(o.result),
+  encode: (o) => String(o.result),
 });
 
 const badOutputTool = defineTool({
@@ -53,7 +53,7 @@ const badOutputTool = defineTool({
   capabilities: [],
   // biome-ignore lint/suspicious/noExplicitAny: intentionally returning wrong type for test
   execute: ({ x }, _ctx) => Effect.succeed({ result: `not-a-number-${x}` } as any),
-  serialize: (o) => String(o.result),
+  encode: (o) => String(o.result),
 });
 
 const permanentFailTool = defineTool({
@@ -66,22 +66,22 @@ const permanentFailTool = defineTool({
   safety: "readonly",
   capabilities: [],
   execute: (_input, { fail }) => Effect.fail(fail("permanent")),
-  serialize: () => "unreachable",
+  encode: () => "unreachable",
 });
 
 // ---------------------------------------------------------------------------
-// callTool — happy path
+// callTool — happy path (returns string)
 // ---------------------------------------------------------------------------
 
 describe("callTool", () => {
-  test("decodes input, executes, returns output", async () => {
+  test("decodes input, executes, encodes to string", async () => {
     const result = await Effect.runPromise(callTool(echoTool, { msg: "hello" }));
     expect(result).toBe("hello");
   });
 
-  test("validates output when outputSchema provided", async () => {
+  test("validates output and encodes when outputSchema provided", async () => {
     const result = await Effect.runPromise(callTool(validatedTool, { x: 21 }));
-    expect(result).toEqual({ result: 42 });
+    expect(result).toBe("42");
   });
 
   test("skips output validation when no outputSchema", async () => {
@@ -96,17 +96,13 @@ describe("callTool", () => {
 
 describe("callTool — ToolErrorInput", () => {
   test("returns ToolErrorInput when decode fails", async () => {
-    const err = await Effect.runPromise(
-      callTool(echoTool, { msg: 123 }).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(echoTool, { msg: 123 }).pipe(Effect.flip));
     expect(err._tag).toBe("ToolErrorInput");
     expect((err as ToolErrorInput).tool).toBe("echo");
   });
 
   test("returns ToolErrorInput when required field missing", async () => {
-    const err = await Effect.runPromise(
-      callTool(echoTool, {}).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(echoTool, {}).pipe(Effect.flip));
     expect(err._tag).toBe("ToolErrorInput");
   });
 });
@@ -117,9 +113,7 @@ describe("callTool — ToolErrorInput", () => {
 
 describe("callTool — ToolErrorOutput", () => {
   test("returns ToolErrorOutput when output validation fails", async () => {
-    const err = await Effect.runPromise(
-      callTool(badOutputTool, { x: 5 }).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(badOutputTool, { x: 5 }).pipe(Effect.flip));
     expect(err._tag).toBe("ToolErrorOutput");
     expect((err as ToolErrorOutput).tool).toBe("badOutput");
     expect((err as ToolErrorOutput).output).toEqual({ result: "not-a-number-5" });
@@ -132,9 +126,7 @@ describe("callTool — ToolErrorOutput", () => {
 
 describe("callTool — ToolError", () => {
   test("propagates permanent ToolError without retry", async () => {
-    const err = await Effect.runPromise(
-      callTool(permanentFailTool, {}).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(permanentFailTool, {}).pipe(Effect.flip));
     expect(err._tag).toBe("ToolError");
     expect((err as ToolError).message).toBe("permanent");
   });
@@ -159,11 +151,9 @@ describe("callTool — retry", () => {
       execute: (_input, { retriable }) =>
         Effect.suspend(() => {
           attempts++;
-          return attempts <= 2
-            ? Effect.fail(retriable("not yet"))
-            : Effect.succeed("done");
+          return attempts <= 2 ? Effect.fail(retriable("not yet")) : Effect.succeed("done");
         }),
-      serialize: (s) => s,
+      encode: (s) => s,
     });
 
     const result = await Effect.runPromise(callTool(flakyTool, {}));
@@ -181,14 +171,11 @@ describe("callTool — retry", () => {
       ),
       safety: "readonly",
       capabilities: [],
-      execute: (_input, { retriable }) =>
-        Effect.fail(retriable("always failing")),
-      serialize: () => "unreachable",
+      execute: (_input, { retriable }) => Effect.fail(retriable("always failing")),
+      encode: () => "unreachable",
     });
 
-    const err = await Effect.runPromise(
-      callTool(alwaysRetriableTool, {}).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(alwaysRetriableTool, {}).pipe(Effect.flip));
     expect(err._tag).toBe("ToolError");
     expect((err as ToolError).message).toBe("always failing");
     expect((err as ToolError).cause).toBeInstanceOf(ToolErrorRetriable);
@@ -210,12 +197,10 @@ describe("callTool — retry", () => {
           attempts++;
           return Effect.fail(fail("permanent failure"));
         }),
-      serialize: () => "unreachable",
+      encode: () => "unreachable",
     });
 
-    const err = await Effect.runPromise(
-      callTool(permTool, {}).pipe(Effect.flip),
-    );
+    const err = await Effect.runPromise(callTool(permTool, {}).pipe(Effect.flip));
     expect(err._tag).toBe("ToolError");
     expect(attempts).toBe(1);
   });

@@ -1,7 +1,7 @@
-import { Effect, Schema } from "effect";
 import { describe, expect, test } from "bun:test";
-import { defineTool } from "./index.ts";
+import { Effect, Schema } from "effect";
 import { fromEffectSchema } from "./effect-schema.ts";
+import { defineTool } from "./index.ts";
 
 describe("fromEffectSchema", () => {
   test("generates JSON schema from Effect Schema struct", () => {
@@ -31,15 +31,16 @@ describe("fromEffectSchema", () => {
       safety: "readonly",
       capabilities: [],
       execute: ({ name }, _ctx) => Effect.succeed(`hello ${name}`),
-      serialize: (s) => s,
+      encode: (s) => s,
     });
 
     expect(tool.name).toBe("greet");
-    expect(tool.inputSchema.json).toHaveProperty("type", "object");
-    const decoded = tool.inputSchema.decode({ name: "world" });
+    expect(tool.inputSchema).toHaveProperty("type", "object");
+    const decoded = await Effect.runPromise(tool.decode({ name: "world" }));
     expect(decoded.name).toBe("world");
     const output = await Effect.runPromise(tool.execute(decoded));
-    expect(tool.serialize(output)).toBe("hello world");
+    const encoded = await Effect.runPromise(tool.encode(output));
+    expect(encoded).toBe("hello world");
   });
 
   test("handles optional fields", () => {
@@ -59,9 +60,7 @@ describe("fromEffectSchema", () => {
   });
 
   test("includes required array in json", () => {
-    const adapter = fromEffectSchema(
-      Schema.Struct({ name: Schema.String, age: Schema.Number }),
-    );
+    const adapter = fromEffectSchema(Schema.Struct({ name: Schema.String, age: Schema.Number }));
     expect(adapter.json).toHaveProperty("required");
     const req = adapter.json["required"] as string[];
     expect(req).toContain("name");
