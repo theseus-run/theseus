@@ -74,19 +74,20 @@ const permanentFailTool = defineTool({
 // ---------------------------------------------------------------------------
 
 describe("callTool", () => {
-  test("decodes input, executes, encodes to string", async () => {
+  test("returns ToolResult with llmContent", async () => {
     const result = await Effect.runPromise(callTool(echoTool, { msg: "hello" }));
-    expect(result).toBe("hello");
+    expect(result.llmContent).toBe("hello");
+    expect(result.displayContent).toBeUndefined();
   });
 
   test("validates output and encodes when outputSchema provided", async () => {
     const result = await Effect.runPromise(callTool(validatedTool, { x: 21 }));
-    expect(result).toBe("42");
+    expect(result.llmContent).toBe("42");
   });
 
   test("skips output validation when no outputSchema", async () => {
     const result = await Effect.runPromise(callTool(echoTool, { msg: "no schema" }));
-    expect(result).toBe("no schema");
+    expect(result.llmContent).toBe("no schema");
   });
 });
 
@@ -157,7 +158,7 @@ describe("callTool — retry", () => {
     });
 
     const result = await Effect.runPromise(callTool(flakyTool, {}));
-    expect(result).toBe("done");
+    expect(result.llmContent).toBe("done");
     expect(attempts).toBe(3);
   });
 

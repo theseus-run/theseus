@@ -28,6 +28,7 @@ export type {
   ToolContext,
   ToolDef,
   ToolErrors,
+  ToolResult,
   ToolSafety,
 } from "./tool/index.ts";
 
@@ -37,3 +38,14 @@ export { fromEffectSchema } from "./tool/effect-schema.ts";
 
 // Tool — execution pipeline
 export { callTool, DEFAULT_RETRY_SCHEDULE } from "./tool/run.ts";
+
+// LLM provider interface
+export { LLMProvider, LLMError, LLMErrorRetriable } from "./llm/index.ts";
+export type {
+  LLMCallOptions,
+  LLMMessage,
+  LLMResponse,
+  LLMToolCall,
+  LLMToolDef,
+  LLMUsage,
+} from "./llm/index.ts";

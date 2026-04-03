@@ -219,6 +219,23 @@ export const defineTool = <I, O>(def: ToolDef<I, O>): Tool<I, O> => {
 };
 
 // ---------------------------------------------------------------------------
+// ToolResult — what callTool returns: separate LLM and display content
+//
+// llmContent   → goes into message history (what the model reads back)
+// displayContent → shown in the UI (defaults to llmContent when absent)
+//
+// Most tools return the same string for both. Split when output is truncated
+// or reformatted for the model but you want the raw content in the UI.
+// ---------------------------------------------------------------------------
+
+export interface ToolResult {
+  /** The string fed back into the LLM message history. */
+  readonly llmContent: string;
+  /** What the UI renders. Defaults to llmContent when absent. */
+  readonly displayContent?: string;
+}
+
+// ---------------------------------------------------------------------------
 // ToolAny — type-erased Tool for collections
 // ---------------------------------------------------------------------------
 
