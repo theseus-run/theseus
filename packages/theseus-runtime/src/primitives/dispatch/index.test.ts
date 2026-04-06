@@ -4,7 +4,7 @@ import type { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { LLMError, LLMErrorRetriable, LLMProvider, type LLMResponse } from "../llm/provider.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
-import { dispatch, dispatchAwait, type GruntEvent } from "./index.ts";
+import { dispatch, dispatchAwait, extractToolDefs, runToolCall, runToolCalls, step, type DispatchEvent } from "./index.ts";
 
 // ---------------------------------------------------------------------------
 // Mock LLM provider
@@ -89,9 +89,171 @@ const blueprint: Blueprint = {
   tools: [echoTool, failingTool],
 };
 
-// ---------------------------------------------------------------------------
-// Existing behavior — all now use dispatchAwait
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// step — pure LLM round
+// ===========================================================================
+
+describe("step — text response", () => {
+  test("returns StepText for text response", async () => {
+    const messages = [
+      { role: "system" as const, content: "system" },
+      { role: "user" as const, content: "hello" },
+    ];
+    const result = await Effect.runPromise(
+      Effect.provide(
+        step(messages, [], "test-agent"),
+        makeLLMProvider([textResp("hi", 10, 5)]),
+      ),
+    );
+    expect(result._tag).toBe("text");
+    if (result._tag === "text") {
+      expect(result.content).toBe("hi");
+      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    }
+  });
+});
+
+describe("step — tool_calls response", () => {
+  test("returns StepToolCalls with updated messages and calls", async () => {
+    const messages = [
+      { role: "system" as const, content: "system" },
+      { role: "user" as const, content: "task" },
+    ];
+    const result = await Effect.runPromise(
+      Effect.provide(
+        step(messages, [echoTool], "test-agent"),
+        makeLLMProvider([
+          toolCallsResp([{ id: "c1", name: "echo", arguments: '{"msg":"world"}' }]),
+        ]),
+      ),
+    );
+    expect(result._tag).toBe("tool_calls");
+    if (result._tag === "tool_calls") {
+      expect(result.calls).toHaveLength(1);
+      expect(result.calls[0]!.name).toBe("echo");
+      expect(result.calls[0]!.args).toEqual({ msg: "world" });
+      expect(result.calls[0]!.content).toBe("world");
+      // messages = original 2 + assistant + tool result = 4
+      expect(result.messages).toHaveLength(4);
+    }
+  });
+});
+
+describe("step — retries", () => {
+  test(
+    "retries LLMErrorRetriable and succeeds",
+    async () => {
+      const messages = [{ role: "user" as const, content: "task" }];
+      const result = await Effect.runPromise(
+        Effect.provide(
+          step(messages, [], "test-agent"),
+          makeLLMProvider([
+            new LLMErrorRetriable({ message: "rate limit" }),
+            textResp("ok"),
+          ]),
+        ),
+      );
+      expect(result._tag).toBe("text");
+      if (result._tag === "text") expect(result.content).toBe("ok");
+    },
+    10_000,
+  );
+
+  test("converts permanent LLMError to AgentError", async () => {
+    const messages = [{ role: "user" as const, content: "task" }];
+    const err = await Effect.runPromise(
+      Effect.provide(
+        Effect.flip(step(messages, [], "test-agent")),
+        makeLLMProvider([new LLMError({ message: "bad creds" })]),
+      ),
+    );
+    expect(err._tag).toBe("AgentError");
+    expect((err as AgentError).message).toBe("bad creds");
+  });
+});
+
+describe("step — usage accumulation", () => {
+  test("adds prior usage to response usage", async () => {
+    const messages = [{ role: "user" as const, content: "task" }];
+    const result = await Effect.runPromise(
+      Effect.provide(
+        step(messages, [], "test-agent", { inputTokens: 100, outputTokens: 50 }),
+        makeLLMProvider([textResp("ok", 10, 5)]),
+      ),
+    );
+    expect(result._tag).toBe("text");
+    if (result._tag === "text") {
+      expect(result.usage).toEqual({ inputTokens: 110, outputTokens: 55 });
+    }
+  });
+});
+
+// ===========================================================================
+// runToolCall / runToolCalls — tool execution helpers
+// ===========================================================================
+
+describe("runToolCall", () => {
+  test("unknown tool returns error string", async () => {
+    const tc = { id: "c1", name: "nope", arguments: "{}" };
+    const result = await Effect.runPromise(runToolCall([], tc));
+    expect(result.content).toContain("unknown tool");
+  });
+
+  test("invalid JSON returns error string", async () => {
+    const tc = { id: "c1", name: "echo", arguments: "bad" };
+    const result = await Effect.runPromise(runToolCall([echoTool], tc));
+    expect(result.content).toContain("invalid JSON");
+  });
+
+  test("ToolError returns error string", async () => {
+    const tc = { id: "c1", name: "fail", arguments: "{}" };
+    const result = await Effect.runPromise(runToolCall([failingTool], tc));
+    expect(result.content).toContain("tool blew up");
+  });
+
+  test("success returns tool output", async () => {
+    const tc = { id: "c1", name: "echo", arguments: '{"msg":"hi"}' };
+    const result = await Effect.runPromise(runToolCall([echoTool], tc));
+    expect(result.content).toBe("hi");
+    expect(result.args).toEqual({ msg: "hi" });
+  });
+});
+
+describe("runToolCalls", () => {
+  test("executes multiple tool calls in parallel", async () => {
+    const tcs = [
+      { id: "c1", name: "echo", arguments: '{"msg":"a"}' },
+      { id: "c2", name: "echo", arguments: '{"msg":"b"}' },
+    ];
+    const results = await Effect.runPromise(runToolCalls([echoTool], tcs));
+    expect(results).toHaveLength(2);
+    expect(results[0]!.content).toBe("a");
+    expect(results[1]!.content).toBe("b");
+  });
+});
+
+// ===========================================================================
+// extractToolDefs
+// ===========================================================================
+
+describe("extractToolDefs", () => {
+  test("extracts name, description, inputSchema from tools", () => {
+    const defs = extractToolDefs([echoTool, failingTool]);
+    expect(defs).toHaveLength(2);
+    expect(defs[0]!.name).toBe("echo");
+    expect(defs[0]!.description).toBe("Echo a message");
+    expect(defs[0]!.inputSchema).toEqual({
+      type: "object",
+      properties: { msg: { type: "string" } },
+      required: ["msg"],
+    });
+    expect(defs[1]!.name).toBe("fail");
+  });
+});
+
+// ===========================================================================
+// dispatchAwait — existing behavior tests (migrated from grunt/)
+// ===========================================================================
 
 describe("dispatchAwait — text-only", () => {
   test("returns content from single text response", async () => {
@@ -220,7 +382,7 @@ describe("dispatchAwait — LLMErrorRetriable retry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GruntHandle — events stream
+// DispatchHandle — events stream
 // ---------------------------------------------------------------------------
 
 const collectEvents = (blueprint: Blueprint, task: string, calls: MockCall[]) =>
@@ -228,7 +390,7 @@ const collectEvents = (blueprint: Blueprint, task: string, calls: MockCall[]) =>
     Effect.provide(
       Effect.gen(function* () {
         const handle = yield* dispatch(blueprint, task);
-        const events: GruntEvent[] = [];
+        const events: DispatchEvent[] = [];
         yield* Stream.tap(handle.events, (e) =>
           Effect.sync(() => { events.push(e); }),
         ).pipe(Stream.runDrain);
@@ -238,11 +400,11 @@ const collectEvents = (blueprint: Blueprint, task: string, calls: MockCall[]) =>
     ),
   );
 
-describe("GruntHandle — events stream", () => {
+describe("DispatchHandle — events stream", () => {
   test("text-only: emits Thinking then Done", async () => {
     const events = await collectEvents(blueprint, "task", [textResp("hello")]);
     expect(events.map((e) => e._tag)).toEqual(["Thinking", "Done"]);
-    const done = events[1] as Extract<GruntEvent, { _tag: "Done" }>;
+    const done = events[1] as Extract<DispatchEvent, { _tag: "Done" }>;
     expect(done.result.content).toBe("hello");
   });
 
@@ -272,7 +434,7 @@ describe("GruntHandle — events stream", () => {
 
   test("Done event carries AgentResult", async () => {
     const events = await collectEvents(blueprint, "task", [textResp("result text", 5, 3)]);
-    const done = events.find((e) => e._tag === "Done") as Extract<GruntEvent, { _tag: "Done" }>;
+    const done = events.find((e) => e._tag === "Done") as Extract<DispatchEvent, { _tag: "Done" }>;
     expect(done.result.content).toBe("result text");
     expect(done.result.usage).toEqual({ inputTokens: 5, outputTokens: 3 });
   });
@@ -286,10 +448,10 @@ describe("GruntHandle — events stream", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GruntHandle — preemptive interrupt
+// DispatchHandle — preemptive interrupt
 // ---------------------------------------------------------------------------
 
-describe("GruntHandle — interrupt", () => {
+describe("DispatchHandle — interrupt", () => {
   test("cancels mid-flight LLM call, result fails with AgentError", async () => {
     const neverProvider = Layer.succeed(LLMProvider)(
       LLMProvider.of({ call: () => Effect.never }),
@@ -324,10 +486,10 @@ describe("GruntHandle — interrupt", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GruntHandle — inject
+// DispatchHandle — inject
 // ---------------------------------------------------------------------------
 
-describe("GruntHandle — inject", () => {
+describe("DispatchHandle — inject", () => {
   test("inject AppendMessages: messages appear in subsequent LLM call", async () => {
     let secondCallMessageCount = 0;
 

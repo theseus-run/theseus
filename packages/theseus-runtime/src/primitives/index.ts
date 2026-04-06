@@ -54,6 +54,22 @@ export type {
 export { AgentError } from "./agent/index.ts";
 export type { AgentResult, Blueprint } from "./agent/index.ts";
 
-// Grunt — stateless agent dispatch loop
-export { dispatch, dispatchAwait, DEFAULT_LLM_RETRY_SCHEDULE } from "./grunt/index.ts";
-export type { GruntEvent, GruntHandle, Injection } from "./grunt/index.ts";
+// Dispatch — LLM dispatch primitive (step, loop, events, injection)
+export {
+  dispatch,
+  dispatchAwait,
+  step,
+  runToolCall,
+  runToolCalls,
+  extractToolDefs,
+  DEFAULT_LLM_RETRY_SCHEDULE,
+} from "./dispatch/index.ts";
+export type {
+  DispatchEvent,
+  DispatchHandle,
+  Injection,
+  StepResult,
+  StepText,
+  StepToolCalls,
+  ToolCallResult,
+} from "./dispatch/index.ts";

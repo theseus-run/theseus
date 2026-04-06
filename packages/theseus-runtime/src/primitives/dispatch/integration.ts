@@ -1,14 +1,14 @@
 /**
- * Grunt integration — real LLM via CopilotProvider, streaming events to console.
+ * Dispatch integration — real LLM via CopilotProvider, streaming events to console.
  *
- * Run:  bun run src/primitives/grunt/integration.ts
+ * Run:  bun run src/primitives/dispatch/integration.ts
  */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { Effect, Stream } from "effect";
 import type { Blueprint } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
-import { dispatch, type GruntEvent } from "./index.ts";
+import { dispatch, type DispatchEvent } from "./index.ts";
 import { CopilotProviderLive } from "../../providers/copilot.ts";
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ const readFile = defineTool<{ path: string }, string>({
 // Render event to console
 // ---------------------------------------------------------------------------
 
-const renderEvent = (e: GruntEvent): void => {
+const renderEvent = (e: DispatchEvent): void => {
   switch (e._tag) {
     case "Thinking":
       console.log(`  [${e.iteration}] thinking...`);
@@ -82,7 +82,7 @@ const renderEvent = (e: GruntEvent): void => {
 // ---------------------------------------------------------------------------
 
 const primitivesDir =
-  new URL(".", import.meta.url).pathname.replace(/\/grunt\/?$/, "");
+  new URL(".", import.meta.url).pathname.replace(/\/dispatch\/?$/, "");
 
 const blueprint: Blueprint = {
   name: "explorer",
