@@ -219,6 +219,51 @@ export const defineTool = <I, O>(def: ToolDef<I, O>): Tool<I, O> => {
 };
 
 // ---------------------------------------------------------------------------
+// ToolDefEffect<I, O> — author-facing config (all-Effect pipeline)
+// ---------------------------------------------------------------------------
+
+/** What tool authors pass to defineToolEffect. All pipeline steps are Effects. */
+export type ToolDefEffect<I, O> = {
+  readonly name: string;
+  readonly description: string;
+  /** Plain JSON Schema for the LLM. Use SchemaAdapter.json, fromZod().json, or a literal. */
+  readonly inputSchema: Record<string, unknown>;
+  /** Optional output JSON Schema for documentation/LLM. */
+  readonly outputSchema?: Record<string, unknown>;
+  readonly safety: ToolSafety;
+  readonly capabilities: ReadonlyArray<string>;
+  /** Decode raw LLM args into typed input. */
+  readonly decode: (raw: unknown, ctx: ToolContext) => Effect.Effect<I, ToolErrorInput>;
+  /** Execute the tool. */
+  readonly execute: (input: I, ctx: ToolContext) => Effect.Effect<O, ToolError | ToolErrorRetriable>;
+  /** Validate output shape (optional). */
+  readonly validate?: (output: O, ctx: ToolContext) => Effect.Effect<O, ToolErrorOutput>;
+  /** Encode output to string for the LLM. */
+  readonly encode: (output: O, ctx: ToolContext) => Effect.Effect<string, ToolError>;
+};
+
+// ---------------------------------------------------------------------------
+// defineToolEffect — effectful pipeline from the get-go
+// ---------------------------------------------------------------------------
+
+/** Define a tool with an all-Effect pipeline. For when you need effectful decode/encode. */
+export const defineToolEffect = <I, O>(def: ToolDefEffect<I, O>): Tool<I, O> => {
+  const ctx = toolContext(def.name);
+  return {
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
+    safety: def.safety,
+    capabilities: def.capabilities,
+    decode: (raw) => def.decode(raw, ctx),
+    execute: (input) => def.execute(input, ctx),
+    ...(def.validate ? { validate: (output: O) => def.validate!(output, ctx) } : {}),
+    encode: (output) => def.encode(output, ctx),
+  };
+};
+
+// ---------------------------------------------------------------------------
 // ToolResult — what callTool returns: separate LLM and display content
 //
 // llmContent   → goes into message history (what the model reads back)

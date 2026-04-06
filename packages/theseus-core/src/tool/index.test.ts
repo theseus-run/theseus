@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import {
   compareToolSafety,
   defineTool,
+  defineToolEffect,
   manualSchema,
   type ToolAny,
   type ToolError,
@@ -577,5 +578,118 @@ describe("toolsWithoutCapability", () => {
   test("returns all tools when none have the capability", () => {
     const filtered = toolsWithoutCapability(tools, "network");
     expect(filtered).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// defineToolEffect — all-Effect pipeline authoring
+// ---------------------------------------------------------------------------
+
+describe("defineToolEffect", () => {
+  const effectTool = defineToolEffect<{ msg: string }, string>({
+    name: "effectEcho",
+    description: "Echo via effectful pipeline",
+    inputSchema: { type: "object", properties: { msg: { type: "string" } }, required: ["msg"] },
+    safety: "readonly",
+    capabilities: [],
+    decode: (raw, _ctx) => {
+      const r = raw as { msg?: unknown };
+      if (typeof r.msg !== "string")
+        return Effect.fail(new ToolErrorInput({ tool: "effectEcho", message: "msg required" }));
+      return Effect.succeed(r as { msg: string });
+    },
+    execute: ({ msg }) => Effect.succeed(msg.toUpperCase()),
+    encode: (output) => Effect.succeed(output),
+  });
+
+  test("decode + execute + encode pipeline works", async () => {
+    const result = await Effect.runPromise(
+      effectTool.decode({ msg: "hello" }).pipe(
+        Effect.flatMap(effectTool.execute),
+        Effect.flatMap(effectTool.encode),
+      ),
+    );
+    expect(result).toBe("HELLO");
+  });
+
+  test("decode fails with ToolErrorInput on bad input", async () => {
+    const err = await Effect.runPromise(
+      effectTool.decode({ msg: 42 }).pipe(Effect.flip),
+    );
+    expect(err._tag).toBe("ToolErrorInput");
+    expect(err.message).toBe("msg required");
+  });
+
+  test("ctx.fail creates ToolError with tool name", async () => {
+    const failTool = defineToolEffect<unknown, never>({
+      name: "failDemo",
+      description: "Fails via ctx",
+      inputSchema: { type: "object", properties: {} },
+      safety: "readonly",
+      capabilities: [],
+      decode: (raw) => Effect.succeed(raw),
+      execute: (_input, { fail }) => Effect.fail(fail("intentional")),
+      encode: () => Effect.succeed("unreachable"),
+    });
+
+    const err = await Effect.runPromise(
+      failTool.decode({}).pipe(
+        Effect.flatMap(failTool.execute),
+        Effect.flip,
+      ),
+    );
+    expect(err._tag).toBe("ToolError");
+    expect((err as ToolError).tool).toBe("failDemo");
+    expect((err as ToolError).message).toBe("intentional");
+  });
+
+  test("validate step is wired when provided", async () => {
+    const validated = defineToolEffect<{ n: number }, number>({
+      name: "validated",
+      description: "Tool with validate",
+      inputSchema: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+      safety: "readonly",
+      capabilities: [],
+      decode: (raw) => Effect.succeed(raw as { n: number }),
+      execute: ({ n }) => Effect.succeed(n * 2),
+      validate: (output) =>
+        output > 100
+          ? Effect.fail(new ToolErrorOutput({ tool: "validated", message: "Too large", output }))
+          : Effect.succeed(output),
+      encode: (output) => Effect.succeed(String(output)),
+    });
+
+    expect(validated.validate).toBeDefined();
+
+    // Valid output
+    const ok = await Effect.runPromise(validated.validate!(10));
+    expect(ok).toBe(10);
+
+    // Invalid output
+    const err = await Effect.runPromise(validated.validate!(200).pipe(Effect.flip));
+    expect(err._tag).toBe("ToolErrorOutput");
+  });
+
+  test("inputSchema is plain JSON (not SchemaAdapter)", () => {
+    expect(effectTool.inputSchema).toEqual({
+      type: "object",
+      properties: { msg: { type: "string" } },
+      required: ["msg"],
+    });
+  });
+
+  test("outputSchema passed through when provided", () => {
+    const withOutput = defineToolEffect<unknown, string>({
+      name: "withOutput",
+      description: "Has output schema",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "string" },
+      safety: "readonly",
+      capabilities: [],
+      decode: (raw) => Effect.succeed(raw),
+      execute: () => Effect.succeed("ok"),
+      encode: (s) => Effect.succeed(s),
+    });
+    expect(withOutput.outputSchema).toEqual({ type: "string" });
   });
 });
