@@ -118,11 +118,16 @@ export const dispatch = (
             }),
           );
 
-        yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations });
+        yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
         // step() is pure — one LLM call, no tool execution
         const result = yield* step(next, blueprint.tools, blueprint.name);
         const totalUsage = addUsage(usage, result.usage);
+
+        // Emit thinking content when the model provides reasoning
+        if (result.thinking) {
+          yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
+        }
 
         if (result._tag === "text") {
           return { content: result.content, usage: totalUsage };

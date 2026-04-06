@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun-types"],
+    "paths": {
+      "@theseus.run/core": ["./src/index.ts"],
+      "@theseus.run/core/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

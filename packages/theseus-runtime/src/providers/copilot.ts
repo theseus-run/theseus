@@ -30,7 +30,7 @@ import {
   type LLMResponse,
   type LLMToolCall,
   type LLMToolDef,
-} from "../primitives/llm/provider.ts";
+} from "@theseus.run/core";
 
 // ---------------------------------------------------------------------------
 // Internal errors — private to this module, mapped to LLMError* at the boundary
@@ -157,6 +157,9 @@ const parseChatCompletionsResponse = (data: any, _model: string): LLMResponse =>
     outputTokens: (rawUsage.completion_tokens as number | undefined) ?? 0,
   };
 
+  // Some models expose reasoning via reasoning_content on the message
+  const thinking = (message.reasoning_content as string | undefined) || undefined;
+
   if (finishReason === "tool_calls") {
     const toolCalls: ReadonlyArray<LLMToolCall> =
       (
@@ -168,10 +171,10 @@ const parseChatCompletionsResponse = (data: any, _model: string): LLMResponse =>
         name: tc.function.name,
         arguments: tc.function.arguments,
       })) ?? [];
-    return { type: "tool_calls", toolCalls, usage };
+    return { type: "tool_calls", toolCalls, ...(thinking ? { thinking } : {}), usage };
   }
 
-  return { type: "text", content: (message.content as string | null) ?? "", usage };
+  return { type: "text", content: (message.content as string | null) ?? "", ...(thinking ? { thinking } : {}), usage };
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: external JSON
@@ -184,6 +187,7 @@ const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
   };
   const toolCalls: LLMToolCall[] = [];
   let content = "";
+  let thinkingParts = "";
 
   for (const item of output) {
     if (item.type === "function_call") {
@@ -192,6 +196,12 @@ const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
         name: item["name"] as string,
         arguments: item["arguments"] as string,
       });
+    } else if (item.type === "reasoning") {
+      // OpenAI reasoning output — extract reasoning_text parts
+      const parts = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
+      for (const part of parts) {
+        if (part.type === "reasoning_text" && part.text) thinkingParts += part.text;
+      }
     } else if (item.type === "message") {
       const parts = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
       for (const part of parts) {
@@ -200,8 +210,10 @@ const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
     }
   }
 
-  if (toolCalls.length > 0) return { type: "tool_calls", toolCalls, usage };
-  return { type: "text", content, usage };
+  const thinking = thinkingParts || undefined;
+
+  if (toolCalls.length > 0) return { type: "tool_calls", toolCalls, thinking, usage };
+  return { type: "text", content, thinking, usage };
 };
 
 // ---------------------------------------------------------------------------

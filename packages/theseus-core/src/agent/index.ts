@@ -5,7 +5,7 @@
  * AgentResult: typed return from any agent dispatch.
  * AgentError: unified failure type.
  *
- * These are reused by both stateless (Grunt) and persistent agents.
+ * These are reused by both stateless and persistent agents.
  */
 
 import { Data } from "effect";

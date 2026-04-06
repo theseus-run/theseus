@@ -27,12 +27,14 @@ export type StepResult = StepText | StepToolCalls;
 export interface StepText {
   readonly _tag: "text";
   readonly content: string;
+  readonly thinking?: string;
   readonly usage: LLMUsage;
 }
 
 export interface StepToolCalls {
   readonly _tag: "tool_calls";
   readonly toolCalls: ReadonlyArray<LLMToolCall>;
+  readonly thinking?: string;
   readonly usage: LLMUsage;
 }
 
@@ -41,7 +43,8 @@ export interface StepToolCalls {
 // ---------------------------------------------------------------------------
 
 export type DispatchEvent =
-  | { readonly _tag: "Thinking";    readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "Calling";     readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "Thinking";    readonly agent: string; readonly iteration: number; readonly content: string }
   | { readonly _tag: "ToolCalling"; readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
   | { readonly _tag: "ToolResult";  readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
   | { readonly _tag: "Done";        readonly agent: string; readonly result: AgentResult }

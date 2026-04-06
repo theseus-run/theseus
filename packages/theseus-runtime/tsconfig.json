@@ -3,7 +3,9 @@
   "compilerOptions": {
     "paths": {
       "@theseus.run/runtime": ["./src/index.ts"],
-      "@theseus.run/runtime/*": ["./src/*"]
+      "@theseus.run/runtime/*": ["./src/*"],
+      "@theseus.run/core": ["../theseus-core/src/index.ts"],
+      "@theseus.run/core/*": ["../theseus-core/src/*"]
     }
   },
   "include": ["src/**/*", "bin/**/*"]

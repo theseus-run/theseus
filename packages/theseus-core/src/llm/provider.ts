@@ -69,8 +69,8 @@ export interface LLMUsage {
 // ---------------------------------------------------------------------------
 
 export type LLMResponse =
-  | { readonly type: "text"; readonly content: string; readonly usage: LLMUsage }
-  | { readonly type: "tool_calls"; readonly toolCalls: ReadonlyArray<LLMToolCall>; readonly usage: LLMUsage };
+  | { readonly type: "text"; readonly content: string; readonly thinking?: string; readonly usage: LLMUsage }
+  | { readonly type: "tool_calls"; readonly toolCalls: ReadonlyArray<LLMToolCall>; readonly thinking?: string; readonly usage: LLMUsage };
 
 // ---------------------------------------------------------------------------
 // Call options — overrides provider-level defaults per call

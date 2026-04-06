@@ -1,8 +1,7 @@
 /**
- * Theseus primitives — the irreducible building blocks.
+ * @theseus.run/core — typed primitives for LLM agent systems.
  *
- * Five primitives: Mission, Tool, Capsule, Dispatch, RuntimeBus.
- * This module exports Tool (first built). Others will follow.
+ * Tool, LLM provider interface, Agent types, Dispatch, Grunt.
  */
 
 // Tool — core types, errors, helpers
@@ -74,3 +73,7 @@ export type {
   StepToolCalls,
   ToolCallResult,
 } from "./dispatch/index.ts";
+
+// Grunt — stateless, ephemeral LLM agent (fire and forget)
+export { grunt, gruntAwait } from "./grunt/index.ts";
+export type { GruntHandle } from "./grunt/index.ts";

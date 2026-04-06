@@ -1,15 +1,13 @@
 /**
- * Dispatch integration — real LLM via CopilotProvider, streaming events to console.
+ * Grunt integration — fire-and-forget agent with real LLM, streaming events to console.
  *
- * Run:  bun run src/primitives/dispatch/integration.ts
+ * Run:  bun run packages/theseus-runtime/src/integration/grunt.ts
  */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { Effect, Stream } from "effect";
-import type { Blueprint } from "../agent/index.ts";
-import { defineTool, manualSchema } from "../tool/index.ts";
-import { dispatch, type DispatchEvent } from "./index.ts";
-import { CopilotProviderLive } from "../../providers/copilot.ts";
+import { type Blueprint, defineTool, type DispatchEvent, grunt, manualSchema } from "@theseus.run/core";
+import { CopilotProviderLive } from "../providers/copilot.ts";
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -61,17 +59,31 @@ const readFile = defineTool<{ path: string }, string>({
 // Render event to console
 // ---------------------------------------------------------------------------
 
+const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
+const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
+const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
+const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
+
 const renderEvent = (e: DispatchEvent): void => {
   switch (e._tag) {
-    case "Thinking":
-      console.log(`  [${e.iteration}] thinking...`);
+    case "Calling":
+      console.log(dim(`  [iter ${e.iteration}] calling LLM...`));
       break;
+    case "Thinking": {
+      const preview = e.content.slice(0, 200);
+      const truncated = e.content.length > 200 ? "…" : "";
+      console.log(yellow(`  [iter ${e.iteration}] thinking: ${preview}${truncated}`));
+      break;
+    }
     case "ToolCalling":
-      console.log(`  [${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`);
+      console.log(cyan(`  [iter ${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`));
       break;
-    case "ToolResult":
-      console.log(`  [${e.iteration}] ← ${e.tool}: ${e.content.slice(0, 80)}${e.content.length > 80 ? "…" : ""}`);
+    case "ToolResult": {
+      const preview = e.content.slice(0, 120);
+      const truncated = e.content.length > 120 ? "…" : "";
+      console.log(green(`  [iter ${e.iteration}] ← ${e.tool}: ${preview}${truncated}`));
       break;
+    }
     case "Done":
       break;
   }
@@ -81,8 +93,7 @@ const renderEvent = (e: DispatchEvent): void => {
 // Main
 // ---------------------------------------------------------------------------
 
-const primitivesDir =
-  new URL(".", import.meta.url).pathname.replace(/\/dispatch\/?$/, "");
+const coreDir = new URL("../../theseus-core/src", import.meta.url).pathname;
 
 const blueprint: Blueprint = {
   name: "explorer",
@@ -92,15 +103,16 @@ const blueprint: Blueprint = {
   maxIterations: 10,
 };
 
+const task =
+  process.argv[2] ??
+  `List the contents of "${coreDir}" and give me a one-paragraph summary of what primitives are implemented there.`;
+
 const program = Effect.gen(function* () {
-  console.log("Dispatching...\n");
+  console.log(yellow(`\n  grunt "${blueprint.name}" dispatched\n`));
 
-  const handle = yield* dispatch(
-    blueprint,
-    `List the contents of "${primitivesDir}" and give me a one-paragraph summary of what primitives are implemented there.`,
-  );
+  const handle = yield* grunt(blueprint, task);
 
-  // Drain events to console in the background
+  // Drain events to console
   yield* Stream.tap(handle.events, (e) => Effect.sync(() => renderEvent(e))).pipe(
     Stream.runDrain,
     Effect.forkDetach,
@@ -108,11 +120,11 @@ const program = Effect.gen(function* () {
 
   const result = yield* handle.result;
 
-  console.log("\n" + "─".repeat(60));
+  console.log(`\n${"─".repeat(60)}`);
   console.log(result.content);
   console.log("─".repeat(60));
   console.log(
-    `\nUsage: ${result.usage.inputTokens} input tokens, ${result.usage.outputTokens} output tokens`,
+    dim(`\n  tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out\n`),
   );
 });
 

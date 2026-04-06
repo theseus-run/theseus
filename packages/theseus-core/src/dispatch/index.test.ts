@@ -416,7 +416,7 @@ const collectEvents = (blueprint: Blueprint, task: string, calls: MockCall[]) =>
 describe("DispatchHandle — events stream", () => {
   test("text-only: emits Thinking then Done", async () => {
     const events = await collectEvents(blueprint, "task", [textResp("hello")]);
-    expect(events.map((e) => e._tag)).toEqual(["Thinking", "Done"]);
+    expect(events.map((e) => e._tag)).toEqual(["Calling", "Done"]);
     const done = events[1] as Extract<DispatchEvent, { _tag: "Done" }>;
     expect(done.result.content).toBe("hello");
   });
@@ -427,7 +427,7 @@ describe("DispatchHandle — events stream", () => {
       textResp("done"),
     ]);
     const tags = events.map((e) => e._tag);
-    expect(tags).toEqual(["Thinking", "ToolCalling", "ToolResult", "Thinking", "Done"]);
+    expect(tags).toEqual(["Calling", "ToolCalling", "ToolResult", "Calling", "Done"]);
   });
 
   test("parallel tool calls: both ToolCalling events emitted before any ToolResult", async () => {
@@ -450,6 +450,26 @@ describe("DispatchHandle — events stream", () => {
     const done = events.find((e) => e._tag === "Done") as Extract<DispatchEvent, { _tag: "Done" }>;
     expect(done.result.content).toBe("result text");
     expect(done.result.usage).toEqual({ inputTokens: 5, outputTokens: 3 });
+  });
+
+  test("emits Thinking event when LLM response includes thinking content", async () => {
+    const thinkingResp: LLMResponse = {
+      type: "text",
+      content: "answer",
+      thinking: "Let me reason about this...",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
+    const events = await collectEvents(blueprint, "task", [thinkingResp]);
+    const tags = events.map((e) => e._tag);
+    expect(tags).toEqual(["Calling", "Thinking", "Done"]);
+    const thinking = events[1] as Extract<DispatchEvent, { _tag: "Thinking" }>;
+    expect(thinking.content).toBe("Let me reason about this...");
+  });
+
+  test("no Thinking event when LLM response has no thinking", async () => {
+    const events = await collectEvents(blueprint, "task", [textResp("hello")]);
+    const tags = events.map((e) => e._tag);
+    expect(tags).toEqual(["Calling", "Done"]);
   });
 
   test("agent name on all events", async () => {
@@ -493,7 +513,7 @@ describe("DispatchHandle — interrupt", () => {
     const eventsP = Effect.runPromise(Stream.runCollect(handle.events));
     await Effect.runPromise(handle.interrupt);
     const events = await eventsP;
-    // stream terminated (may have 0 or 1 Thinking events depending on fiber scheduling)
+    // stream terminated (may have 0 or 1 Calling events depending on fiber scheduling)
     expect(Array.from(events).every((e) => e._tag !== "Done")).toBe(true);
   });
 });

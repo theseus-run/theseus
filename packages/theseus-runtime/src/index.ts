@@ -12,5 +12,5 @@ export type {
   UIEvent,
 } from "./runtime-bus.ts";
 
-// Primitives
-export * from "./primitives/index.ts";
+// Core primitives (re-export for convenience)
+export * from "@theseus.run/core";

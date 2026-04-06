@@ -5,7 +5,9 @@
     "jsxImportSource": "react",
     "paths": {
       "@theseus.run/runtime": ["../theseus-runtime/src/index.ts"],
-      "@theseus.run/runtime/*": ["../theseus-runtime/src/*"]
+      "@theseus.run/runtime/*": ["../theseus-runtime/src/*"],
+      "@theseus.run/core": ["../theseus-core/src/index.ts"],
+      "@theseus.run/core/*": ["../theseus-core/src/*"]
     }
   },
   "include": ["src/**/*", "bin/**/*"]

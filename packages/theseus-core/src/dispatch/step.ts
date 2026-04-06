@@ -158,12 +158,18 @@ export const step = (
     );
 
     if (response.type === "text") {
-      return { _tag: "text" as const, content: response.content, usage: response.usage };
+      return {
+        _tag: "text" as const,
+        content: response.content,
+        ...(response.thinking ? { thinking: response.thinking } : {}),
+        usage: response.usage,
+      };
     }
 
     return {
       _tag: "tool_calls" as const,
       toolCalls: response.toolCalls,
+      ...(response.thinking ? { thinking: response.thinking } : {}),
       usage: response.usage,
     };
   });

@@ -48,13 +48,26 @@
         "@theseus.run/jsx-md": ">=0.2.0",
       },
     },
+    "packages/theseus-core": {
+      "name": "@theseus.run/core",
+      "version": "0.0.1",
+      "dependencies": {
+        "effect": "4.0.0-beta.33",
+        "zod": "4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.10",
+        "bun-types": "^1.3.10",
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/theseus-runtime": {
       "name": "@theseus.run/runtime",
       "version": "0.0.1",
       "dependencies": {
         "@effect/platform-bun": "4.0.0-beta.33",
+        "@theseus.run/core": "workspace:*",
         "effect": "4.0.0-beta.33",
-        "zod": "4.3.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.10",
@@ -102,6 +115,8 @@
     "@msgpackr-extract/msgpackr-extract-win32-x64": ["@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3", "", { "os": "win32", "cpu": "x64" }, "sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
+
+    "@theseus.run/core": ["@theseus.run/core@workspace:packages/theseus-core"],
 
     "@theseus.run/icarus-cli": ["@theseus.run/icarus-cli@workspace:packages/icarus-cli"],
 
