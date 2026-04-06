@@ -214,7 +214,7 @@ Layer.effect(Service)(Effect.gen(...))
 
 // Queues and deferred
 Queue.unbounded
-Deferred.make / Deferred.await / Deferred.succeed
+Deferred.make<A, E>() / Deferred.await / Deferred.succeed / Deferred.fail / Deferred.failCause
 
 // Retry
 Schedule.both(...)       // not Schedule.intersect (renamed in v4)
@@ -223,6 +223,49 @@ Schedule.exponential("200 millis").pipe(Schedule.jittered)
 
 // Schema
 Schema.optional(Schema.String)   // not Schema.optionalWith
+
+// Forking fibers — Effect.fork does NOT exist in v4
+Effect.forkDetach(effect)   // detached, not supervised — use for fire-and-forget fibers
+Effect.forkChild(effect)    // supervised by parent fiber
+Effect.forkScoped(effect)   // tied to current Scope (adds Scope to R)
+Effect.forkIn(effect, scope) // fork in a specific scope
+
+// Cause — checking interrupt
+Cause.hasInterruptsOnly(cause)  // not Cause.isInterruptedOnly (renamed)
+Cause.hasInterrupts(cause)      // has at least one interrupt
+
+// Exit matching
+Exit.isSuccess(exit) / Exit.isFailure(exit)
+Exit.match(exit, { onSuccess: a => ..., onFailure: cause => ... })
+
+// Fiber
+Fiber.await(fiber)      // → Effect<Exit<E, A>> — prefer Deferred over this for cross-fiber results
+Fiber.join(fiber)       // → Effect<A, E>
+Fiber.interrupt(fiber)  // → Effect<Exit<E, A>>
+
+// Lifecycle hooks
+Effect.onExit(exit => ...)   // runs on any exit: success, failure, or interrupt
+Effect.ensuring(cleanup)     // runs on any exit, ignores cleanup result
+
+// Queue → Stream bridge
+Stream.fromQueue(queue)                          // streams until queue is shut down
+  .pipe(Stream.takeUntil(e => e._tag === "Done")) // completes after matching element
+Queue.shutdown(queue)                            // terminates any Stream.fromQueue consumer
+
+// Cross-fiber result communication — use Deferred, not Fiber.await
+// Deferred works reliably across forkDetach boundaries; Fiber.await may hang
+const d = yield* Deferred.make<A, E>()
+yield* Effect.forkDetach(
+  work.pipe(
+    Effect.onExit(exit => Exit.match(exit, {
+      onSuccess: a  => Deferred.succeed(d, a),
+      onFailure: c  => Cause.hasInterruptsOnly(c)
+                       ? Deferred.fail(d, new MyError(...))
+                       : Deferred.failCause(d, c),
+    }))
+  )
+)
+const result = yield* Deferred.await(d)
 ```
 
 ---

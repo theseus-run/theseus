@@ -1,17 +1,14 @@
 /**
- * Grunt integration test — real LLM via CopilotProvider.
+ * Grunt integration — real LLM via CopilotProvider, streaming events to console.
  *
  * Run:  bun run src/primitives/grunt/integration.ts
- *
- * Uses listDir + readFile tools. Asks the model to explore the primitives
- * directory and report what's there. Exercises the full tool-call loop.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
-import { Effect, Layer } from "effect";
+import { Effect, Stream } from "effect";
 import type { Blueprint } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
-import { dispatch } from "./index.ts";
+import { dispatch, type GruntEvent } from "./index.ts";
 import { CopilotProviderLive } from "../../providers/copilot.ts";
 
 // ---------------------------------------------------------------------------
@@ -20,7 +17,7 @@ import { CopilotProviderLive } from "../../providers/copilot.ts";
 
 const listDir = defineTool<{ path: string }, string>({
   name: "listDir",
-  description: "List files and directories at the given path. Returns newline-separated names.",
+  description: "List files and directories at the given path.",
   inputSchema: manualSchema(
     { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     (raw) => {
@@ -61,15 +58,23 @@ const readFile = defineTool<{ path: string }, string>({
 });
 
 // ---------------------------------------------------------------------------
-// Blueprint
+// Render event to console
 // ---------------------------------------------------------------------------
 
-const blueprint: Blueprint = {
-  name: "explorer",
-  systemPrompt:
-    "You are a code explorer. Use tools to inspect directories and files, then give a concise summary of what you find.",
-  tools: [listDir, readFile],
-  maxIterations: 10,
+const renderEvent = (e: GruntEvent): void => {
+  switch (e._tag) {
+    case "Thinking":
+      console.log(`  [${e.iteration}] thinking...`);
+      break;
+    case "ToolCalling":
+      console.log(`  [${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`);
+      break;
+    case "ToolResult":
+      console.log(`  [${e.iteration}] ← ${e.tool}: ${e.content.slice(0, 80)}${e.content.length > 80 ? "…" : ""}`);
+      break;
+    case "Done":
+      break;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -79,15 +84,33 @@ const blueprint: Blueprint = {
 const primitivesDir =
   new URL(".", import.meta.url).pathname.replace(/\/grunt\/?$/, "");
 
-const program = Effect.gen(function* () {
-  console.log(`\nDispatching to model via CopilotProvider...\n`);
+const blueprint: Blueprint = {
+  name: "explorer",
+  systemPrompt:
+    "You are a code explorer. Use tools to inspect directories and files, then give a concise summary of what you find.",
+  tools: [listDir, readFile],
+  maxIterations: 10,
+};
 
-  const result = yield* dispatch(
+const program = Effect.gen(function* () {
+  console.log("Dispatching...\n");
+
+  const handle = yield* dispatch(
     blueprint,
     `List the contents of "${primitivesDir}" and give me a one-paragraph summary of what primitives are implemented there.`,
   );
 
-  console.log("─".repeat(60));
+  // Stream events to console while waiting for result
+  const eventsP = Effect.runPromise(
+    Stream.tap(handle.events, (e) => Effect.sync(() => renderEvent(e))).pipe(
+      Stream.runDrain,
+    ),
+  );
+
+  const result = yield* handle.result;
+  await eventsP;
+
+  console.log("\n" + "─".repeat(60));
   console.log(result.content);
   console.log("─".repeat(60));
   console.log(

@@ -1,0 +1,6 @@
+language js(typescript)
+
+`$fn($args)` where {
+  $fn <: `Cause.isInterruptedOnly`,
+  register_diagnostic(span=$fn, message="Effect v4: Cause.isInterruptedOnly was renamed to Cause.hasInterruptsOnly.", severity="error")
+}

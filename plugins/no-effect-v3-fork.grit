@@ -1,0 +1,6 @@
+language js(typescript)
+
+`$fn($args)` where {
+  $fn <: `Effect.fork`,
+  register_diagnostic(span=$fn, message="Effect v4: Effect.fork was removed. Use Effect.forkDetach (detached, fire-and-forget), Effect.forkChild (supervised), or Effect.forkScoped (tied to Scope).", severity="error")
+}

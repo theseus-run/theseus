@@ -55,4 +55,5 @@ export { AgentError } from "./agent/index.ts";
 export type { AgentResult, Blueprint } from "./agent/index.ts";
 
 // Grunt — stateless agent dispatch loop
-export { dispatch, DEFAULT_LLM_RETRY_SCHEDULE } from "./grunt/index.ts";
+export { dispatch, dispatchAwait, DEFAULT_LLM_RETRY_SCHEDULE } from "./grunt/index.ts";
+export type { GruntEvent, GruntHandle, Injection } from "./grunt/index.ts";

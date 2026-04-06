@@ -1,18 +1,24 @@
 /**
- * Grunt — stateless agent dispatch loop.
+ * Grunt — stateless agent dispatch loop, observable and injectable.
  *
- * Given a Blueprint (name + systemPrompt + tools), dispatches a task to an LLM,
- * runs its tool calls in parallel, and loops until the model produces text.
+ * dispatch() returns a GruntHandle immediately — the loop runs as a forked fiber.
  *
- * Stateless: no history accumulates between dispatch calls.
- * Errors surface as AgentError — all LLM and tool failures are handled internally.
+ *   handle.events    Stream<GruntEvent> — observe every state transition
+ *   handle.inject    push Injection — processed at the start of the next iteration
+ *   handle.interrupt preemptive Fiber.interrupt — kills mid-LLM-call or mid-tool-call
+ *   handle.result    Effect<AgentResult, AgentError> — await the final value
  *
- * Usage:
- *   const result = yield* dispatch(blueprint, "Summarise the file at /tmp/data.txt")
- *   console.log(result.content)
+ * Two interruption modes:
+ *   cooperative  → inject({ _tag: "Interrupt" }) — finishes current op, stops at boundary
+ *   preemptive   → handle.interrupt — kills immediately, even inside an LLM call
+ *
+ * ToolCalling events are emitted BEFORE tools execute — gives interrupt a window
+ * before any side effects happen.
+ *
+ * dispatchAwait — convenience for callers that only care about the result.
  */
 
-import { Effect, Schedule } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Queue, Schedule, Stream } from "effect";
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
@@ -20,6 +26,48 @@ import type { LLMMessage, LLMToolCall, LLMUsage } from "../llm/provider.ts";
 import { LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
+
+// ---------------------------------------------------------------------------
+// GruntEvent — observable state transitions of the dispatch loop
+// ---------------------------------------------------------------------------
+
+export type GruntEvent =
+  | { readonly _tag: "Thinking";    readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "ToolCalling"; readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
+  | { readonly _tag: "ToolResult";  readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
+  | { readonly _tag: "Done";        readonly agent: string; readonly result: AgentResult }
+
+// ---------------------------------------------------------------------------
+// Injection — loop mutations pushed from outside
+// ---------------------------------------------------------------------------
+
+export type Injection =
+  | { readonly _tag: "AppendMessages";  readonly messages: ReadonlyArray<LLMMessage> }
+  | { readonly _tag: "ReplaceMessages"; readonly messages: ReadonlyArray<LLMMessage> }
+  | { readonly _tag: "CollapseContext" }
+  | { readonly _tag: "Interrupt";       readonly reason?: string }
+  | { readonly _tag: "Redirect";        readonly task: string }
+
+// ---------------------------------------------------------------------------
+// GruntHandle — live interface to a running dispatch
+// ---------------------------------------------------------------------------
+
+export interface GruntHandle {
+  /**
+   * Observable event stream. Completes after Done. Never fails —
+   * loop errors surface via result only.
+   */
+  readonly events: Stream.Stream<GruntEvent>
+  /** Push an injection — processed at the start of the next iteration. */
+  readonly inject: (i: Injection) => Effect.Effect<void>
+  /**
+   * Preemptive cancellation — kills the loop immediately, mid-call if needed.
+   * result will fail with AgentError("Interrupted").
+   */
+  readonly interrupt: Effect.Effect<void>
+  /** Await the final result. Fails with AgentError on loop failure or interrupt. */
+  readonly result: Effect.Effect<AgentResult, AgentError>
+}
 
 // ---------------------------------------------------------------------------
 // Default retry schedule — 3 retries, 500ms exponential jittered
@@ -39,115 +87,262 @@ const addUsage = (a: LLMUsage, b: LLMUsage): LLMUsage => ({
   outputTokens: a.outputTokens + b.outputTokens,
 });
 
-/** Execute a single tool call, converting all errors to error strings for the LLM. */
-const executeToolCall = (
-  tools: ReadonlyArray<ToolAny>,
-  tc: LLMToolCall,
-): Effect.Effect<LLMMessage, never> => {
-  const tool = tools.find((t) => t.name === tc.name);
-  if (!tool)
-    return Effect.succeed({
-      role: "tool",
-      toolCallId: tc.id,
-      content: `Error: unknown tool "${tc.name}"`,
-    });
-
-  let raw: unknown;
+const tryParseArgs = (tc: LLMToolCall): unknown => {
   try {
-    raw = JSON.parse(tc.arguments);
+    return JSON.parse(tc.arguments);
   } catch {
-    return Effect.succeed({
-      role: "tool",
-      toolCallId: tc.id,
-      content: "Error: invalid JSON in tool arguments",
-    });
+    return tc.arguments;
   }
-
-  return callTool(tool, raw).pipe(
-    Effect.map((r) => r.llmContent),
-    Effect.catchTags({
-      ToolError: (e) => Effect.succeed(`Error: ${e.message}`),
-      ToolErrorInput: (e) => Effect.succeed(`Error: ${e.message}`),
-      ToolErrorOutput: (e) => Effect.succeed(`Error: ${e.message}`),
-    }),
-    Effect.map((content) => ({ role: "tool" as const, toolCallId: tc.id, content })),
-  );
 };
 
 // ---------------------------------------------------------------------------
-// dispatch — main entry point
+// dispatch
 // ---------------------------------------------------------------------------
 
-/**
- * Dispatch a task to an LLM agent defined by the blueprint.
- *
- * Stateless: each call starts a fresh conversation.
- * Loop: text response → return; tool_calls → execute in parallel → append → repeat.
- * Cycle cap: AgentError when iterations reach blueprint.maxIterations (default 20).
- */
 export const dispatch = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LLMProvider> => {
-  const maxIter = blueprint.maxIterations ?? 20;
-  const toolDefs = blueprint.tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-  }));
-  const zeroUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
+): Effect.Effect<GruntHandle, never, LLMProvider> =>
+  Effect.gen(function* () {
+    const maxIter = blueprint.maxIterations ?? 20;
+    const zeroUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
+    const toolDefs = blueprint.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
 
-  const loop = (
-    messages: ReadonlyArray<LLMMessage>,
-    usage: LLMUsage,
-    iterations: number,
-  ): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
-    Effect.gen(function* () {
-      if (iterations >= maxIter)
-        return yield* Effect.fail(
-          new AgentError({
-            agent: blueprint.name,
-            message: `Cycle cap exceeded (${maxIter} iterations)`,
+    const eventQueue = yield* Queue.unbounded<GruntEvent>();
+    const injectionQueue = yield* Queue.unbounded<Injection>();
+    const resultDeferred = yield* Deferred.make<AgentResult, AgentError>();
+
+    const emit = (event: GruntEvent): Effect.Effect<void> =>
+      Queue.offer(eventQueue, event).pipe(Effect.asVoid);
+
+    // -----------------------------------------------------------------------
+    // drainInjections — apply all pending injections at iteration boundary.
+    // Returns modified messages, or null if Interrupt was seen.
+    // -----------------------------------------------------------------------
+
+    const drainInjections = (
+      messages: ReadonlyArray<LLMMessage>,
+    ): Effect.Effect<ReadonlyArray<LLMMessage> | null> =>
+      Queue.takeAll(injectionQueue).pipe(
+        Effect.map((chunk) => {
+          let current = messages;
+          for (const inj of chunk) {
+            if (inj._tag === "Interrupt") return null;
+            if (inj._tag === "AppendMessages") {
+              current = [...current, ...inj.messages];
+            } else if (inj._tag === "ReplaceMessages") {
+              current = inj.messages;
+            } else if (inj._tag === "Redirect") {
+              // Keep system message, replace task
+              current = [
+                current[0],
+                { role: "user" as const, content: inj.task },
+              ];
+            }
+            // CollapseContext — no-op for now
+          }
+          return current;
+        }),
+      );
+
+    // -----------------------------------------------------------------------
+    // runToolCall — execute a single tool call.
+    // Errors become error strings (never propagates failure).
+    // -----------------------------------------------------------------------
+
+    const runToolCall = (
+      tools: ReadonlyArray<ToolAny>,
+      tc: LLMToolCall,
+    ): Effect.Effect<{ readonly callId: string; readonly name: string; readonly content: string }, never> => {
+      const tool = tools.find((t) => t.name === tc.name);
+      if (!tool)
+        return Effect.succeed({
+          callId: tc.id,
+          name: tc.name,
+          content: `Error: unknown tool "${tc.name}"`,
+        });
+
+      let raw: unknown;
+      try {
+        raw = JSON.parse(tc.arguments);
+      } catch {
+        return Effect.succeed({
+          callId: tc.id,
+          name: tc.name,
+          content: "Error: invalid JSON in tool arguments",
+        });
+      }
+
+      return callTool(tool, raw).pipe(
+        Effect.map((r) => r.llmContent),
+        Effect.catchTags({
+          ToolError: (e) => Effect.succeed(`Error: ${e.message}`),
+          ToolErrorInput: (e) => Effect.succeed(`Error: ${e.message}`),
+          ToolErrorOutput: (e) => Effect.succeed(`Error: ${e.message}`),
+        }),
+        Effect.map((content) => ({ callId: tc.id, name: tc.name, content })),
+      );
+    };
+
+    // -----------------------------------------------------------------------
+    // loop — the dispatch loop, runs as a forked fiber
+    // -----------------------------------------------------------------------
+
+    const loop = (
+      messages: ReadonlyArray<LLMMessage>,
+      usage: LLMUsage,
+      iterations: number,
+    ): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
+      Effect.gen(function* () {
+        // Drain injection queue — may modify messages or signal interrupt
+        const next = yield* drainInjections(messages);
+        if (next === null)
+          return yield* Effect.fail(
+            new AgentError({
+              agent: blueprint.name,
+              message: "Interrupted via injection",
+            }),
+          );
+
+        if (iterations >= maxIter)
+          return yield* Effect.fail(
+            new AgentError({
+              agent: blueprint.name,
+              message: `Cycle cap exceeded (${maxIter} iterations)`,
+            }),
+          );
+
+        yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations });
+
+        const llm = yield* LLMProvider;
+        const response = yield* llm.call(next, toolDefs).pipe(
+          Effect.retry({
+            while: (e): e is LLMErrorRetriable => e._tag === "LLMErrorRetriable",
+            schedule: DEFAULT_LLM_RETRY_SCHEDULE,
           }),
+          Effect.catchTag("LLMErrorRetriable", (e) =>
+            Effect.fail(
+              new AgentError({ agent: blueprint.name, message: e.message, cause: e }),
+            ),
+          ),
+          Effect.catchTag("LLMError", (e) =>
+            Effect.fail(
+              new AgentError({ agent: blueprint.name, message: e.message, cause: e }),
+            ),
+          ),
         );
 
-      const llm = yield* LLMProvider;
-      const response = yield* llm.call(messages, toolDefs).pipe(
-        Effect.retry({
-          while: (e): e is LLMErrorRetriable => e._tag === "LLMErrorRetriable",
-          schedule: DEFAULT_LLM_RETRY_SCHEDULE,
-        }),
-        Effect.catchTag("LLMErrorRetriable", (e) =>
-          Effect.fail(new AgentError({ agent: blueprint.name, message: e.message, cause: e })),
+        const totalUsage = addUsage(usage, response.usage);
+
+        if (response.type === "text") return { content: response.content, usage: totalUsage };
+
+        // Emit ALL ToolCalling events BEFORE any tool runs.
+        // This gives an interrupt window before side effects happen.
+        yield* Effect.all(
+          response.toolCalls.map((tc) =>
+            emit({
+              _tag: "ToolCalling",
+              agent: blueprint.name,
+              iteration: iterations,
+              tool: tc.name,
+              args: tryParseArgs(tc),
+            }),
+          ),
+          { concurrency: "unbounded" },
+        );
+
+        // Execute all tools in parallel, then emit ToolResult for each
+        const results = yield* Effect.all(
+          response.toolCalls.map((tc) => runToolCall(blueprint.tools, tc)),
+          { concurrency: "unbounded" },
+        );
+
+        yield* Effect.all(
+          results.map((r) =>
+            emit({
+              _tag: "ToolResult",
+              agent: blueprint.name,
+              iteration: iterations,
+              tool: r.name,
+              content: r.content,
+            }),
+          ),
+          { concurrency: "unbounded" },
+        );
+
+        const toolMessages: ReadonlyArray<LLMMessage> = results.map((r) => ({
+          role: "tool" as const,
+          toolCallId: r.callId,
+          content: r.content,
+        }));
+
+        return yield* loop(
+          [
+            ...next,
+            { role: "assistant" as const, content: "", toolCalls: response.toolCalls },
+            ...toolMessages,
+          ],
+          totalUsage,
+          iterations + 1,
+        );
+      });
+
+    const initialMessages: ReadonlyArray<LLMMessage> = [
+      { role: "system", content: blueprint.systemPrompt },
+      { role: "user", content: task },
+    ];
+
+    // Capture the provider before forking — forkDetach does not inherit
+    // the parent fiber's environment in Effect v4.
+    const provider = yield* LLMProvider;
+
+    // Fork the loop. onExit writes the result into resultDeferred — decoupled
+    // from Fiber.await so forkDetach's supervision model doesn't matter.
+    const loopFiber = yield* Effect.forkDetach(
+      loop(initialMessages, zeroUsage, 0).pipe(
+        Effect.tap((result) =>
+          emit({ _tag: "Done", agent: blueprint.name, result }),
         ),
-        Effect.catchTag("LLMError", (e) =>
-          Effect.fail(new AgentError({ agent: blueprint.name, message: e.message, cause: e })),
+        Effect.onExit((exit) =>
+          Exit.match(exit, {
+            onSuccess: (result) => Deferred.succeed(resultDeferred, result),
+            onFailure: (cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Deferred.fail(
+                    resultDeferred,
+                    new AgentError({ agent: blueprint.name, message: "Interrupted" }),
+                  )
+                : Deferred.failCause(resultDeferred, cause),
+          }),
         ),
-      );
+        Effect.ensuring(Queue.shutdown(eventQueue)),
+        Effect.provideService(LLMProvider, provider),
+      ),
+    );
 
-      const totalUsage = addUsage(usage, response.usage);
-      if (response.type === "text") return { content: response.content, usage: totalUsage };
+    const result: Effect.Effect<AgentResult, AgentError> = Deferred.await(resultDeferred);
 
-      const toolMessages = yield* Effect.all(
-        response.toolCalls.map((tc) => executeToolCall(blueprint.tools, tc)),
-        { concurrency: "unbounded" },
-      );
+    return {
+      // Stream completes after Done (takeUntil) or when queue shuts down (error/interrupt)
+      events: Stream.fromQueue(eventQueue).pipe(
+        Stream.takeUntil((e) => e._tag === "Done"),
+      ),
+      inject: (i) => Queue.offer(injectionQueue, i).pipe(Effect.asVoid),
+      interrupt: Fiber.interrupt(loopFiber).pipe(Effect.asVoid),
+      result,
+    };
+  });
 
-      return yield* loop(
-        [
-          ...messages,
-          { role: "assistant" as const, content: "", toolCalls: response.toolCalls },
-          ...toolMessages,
-        ],
-        totalUsage,
-        iterations + 1,
-      );
-    });
+// ---------------------------------------------------------------------------
+// dispatchAwait — convenience when you only need the final result
+// ---------------------------------------------------------------------------
 
-  const initialMessages: ReadonlyArray<LLMMessage> = [
-    { role: "system", content: blueprint.systemPrompt },
-    { role: "user", content: task },
-  ];
-
-  return loop(initialMessages, zeroUsage, 0);
-};
+export const dispatchAwait = (
+  blueprint: Blueprint,
+  task: string,
+): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
+  dispatch(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));
