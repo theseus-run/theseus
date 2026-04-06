@@ -1,11 +1,13 @@
 /**
- * Step — one LLM round: call + tool execution.
- *
- * Pure — no fiber, no events, no loop. Caller decides what to do with the result.
+ * Step — one LLM call. Pure — no tool execution, no fiber, no events, no loop.
  *
  *   step(messages, tools, agentName)
- *     → StepText   { _tag: "text", content, usage }
- *     → StepToolCalls { _tag: "tool_calls", messages, usage, calls }
+ *     → StepText      { _tag: "text", content, usage }
+ *     → StepToolCalls  { _tag: "tool_calls", toolCalls, usage }
+ *
+ * Tool execution is the caller's responsibility. This keeps step() pure
+ * and gives callers control over intermediate steps (event emission,
+ * interrupt checks) between receiving tool_calls and executing them.
  *
  * Exported helpers:
  *   extractToolDefs — Tool[] → LLMToolDef[]
@@ -15,8 +17,9 @@
 
 import { Effect, Schedule } from "effect";
 import { AgentError } from "../agent/index.ts";
-import type { LLMMessage, LLMToolCall, LLMToolDef, LLMUsage } from "../llm/provider.ts";
+import type { LLMToolCall, LLMToolDef } from "../llm/provider.ts";
 import { LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
+import type { LLMMessage } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import type { StepResult, ToolCallResult } from "./types.ts";
@@ -47,7 +50,7 @@ export const extractToolDefs = (
 // tryParseArgs — best-effort JSON parse for event emission
 // ---------------------------------------------------------------------------
 
-const tryParseArgs = (tc: LLMToolCall): unknown => {
+export const tryParseArgs = (tc: LLMToolCall): unknown => {
   try {
     return JSON.parse(tc.arguments);
   } catch {
@@ -115,33 +118,22 @@ export const runToolCalls = (
   );
 
 // ---------------------------------------------------------------------------
-// addUsage — accumulate token counts
-// ---------------------------------------------------------------------------
-
-const addUsage = (a: LLMUsage, b: LLMUsage): LLMUsage => ({
-  inputTokens: a.inputTokens + b.inputTokens,
-  outputTokens: a.outputTokens + b.outputTokens,
-});
-
-// ---------------------------------------------------------------------------
-// step — one LLM round
+// step — one LLM call (pure, no tool execution)
 // ---------------------------------------------------------------------------
 
 /**
- * One LLM round: call LLM with retry → if text return, if tool_calls execute → return.
- * Pure — no events, no fiber, no loop. Caller decides what to do with the result.
+ * One LLM call: send messages + tool defs, retry retriable errors, return result.
+ * Does NOT execute tools — returns raw toolCalls for the caller to handle.
  *
  * @param messages - conversation so far
- * @param tools - available tools
+ * @param tools - available tools (extracted to LLMToolDef for the call)
  * @param agentName - for error attribution
- * @param usage - accumulated usage from prior steps (added to response usage)
  * @param retrySchedule - override default retry for LLMErrorRetriable
  */
 export const step = (
   messages: ReadonlyArray<LLMMessage>,
   tools: ReadonlyArray<ToolAny>,
   agentName: string,
-  usage: LLMUsage = { inputTokens: 0, outputTokens: 0 },
   retrySchedule: Schedule.Schedule<unknown, unknown> = DEFAULT_LLM_RETRY_SCHEDULE,
 ): Effect.Effect<StepResult, AgentError, LLMProvider> =>
   Effect.gen(function* () {
@@ -165,29 +157,13 @@ export const step = (
       ),
     );
 
-    const totalUsage = addUsage(usage, response.usage);
-
     if (response.type === "text") {
-      return { _tag: "text" as const, content: response.content, usage: totalUsage };
+      return { _tag: "text" as const, content: response.content, usage: response.usage };
     }
-
-    // Execute all tool calls in parallel
-    const calls = yield* runToolCalls(tools, response.toolCalls);
-
-    const toolMessages: ReadonlyArray<LLMMessage> = calls.map((r) => ({
-      role: "tool" as const,
-      toolCallId: r.callId,
-      content: r.content,
-    }));
 
     return {
       _tag: "tool_calls" as const,
-      messages: [
-        ...messages,
-        { role: "assistant" as const, content: "", toolCalls: response.toolCalls },
-        ...toolMessages,
-      ],
-      usage: totalUsage,
-      calls,
+      toolCalls: response.toolCalls,
+      usage: response.usage,
     };
   });

@@ -4,7 +4,10 @@ import type { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { LLMError, LLMErrorRetriable, LLMProvider, type LLMResponse } from "../llm/provider.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
-import { dispatch, dispatchAwait, extractToolDefs, runToolCall, runToolCalls, step, type DispatchEvent } from "./index.ts";
+import {
+  dispatch, dispatchAwait, extractToolDefs, runToolCall, runToolCalls,
+  step, tryParseArgs, type DispatchEvent,
+} from "./index.ts";
 
 // ---------------------------------------------------------------------------
 // Mock LLM provider
@@ -90,11 +93,11 @@ const blueprint: Blueprint = {
 };
 
 // ===========================================================================
-// step — pure LLM round
+// step — pure LLM call (no tool execution)
 // ===========================================================================
 
 describe("step — text response", () => {
-  test("returns StepText for text response", async () => {
+  test("returns StepText with content and usage", async () => {
     const messages = [
       { role: "system" as const, content: "system" },
       { role: "user" as const, content: "hello" },
@@ -114,7 +117,7 @@ describe("step — text response", () => {
 });
 
 describe("step — tool_calls response", () => {
-  test("returns StepToolCalls with updated messages and calls", async () => {
+  test("returns raw toolCalls without executing them", async () => {
     const messages = [
       { role: "system" as const, content: "system" },
       { role: "user" as const, content: "task" },
@@ -129,12 +132,11 @@ describe("step — tool_calls response", () => {
     );
     expect(result._tag).toBe("tool_calls");
     if (result._tag === "tool_calls") {
-      expect(result.calls).toHaveLength(1);
-      expect(result.calls[0]!.name).toBe("echo");
-      expect(result.calls[0]!.args).toEqual({ msg: "world" });
-      expect(result.calls[0]!.content).toBe("world");
-      // messages = original 2 + assistant + tool result = 4
-      expect(result.messages).toHaveLength(4);
+      // Returns raw LLMToolCall[], not executed results
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]!.name).toBe("echo");
+      expect(result.toolCalls[0]!.arguments).toBe('{"msg":"world"}');
+      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
     }
   });
 });
@@ -172,18 +174,17 @@ describe("step — retries", () => {
   });
 });
 
-describe("step — usage accumulation", () => {
-  test("adds prior usage to response usage", async () => {
+describe("step — returns own usage only", () => {
+  test("usage reflects only this call, not accumulated", async () => {
     const messages = [{ role: "user" as const, content: "task" }];
     const result = await Effect.runPromise(
       Effect.provide(
-        step(messages, [], "test-agent", { inputTokens: 100, outputTokens: 50 }),
+        step(messages, [], "test-agent"),
         makeLLMProvider([textResp("ok", 10, 5)]),
       ),
     );
-    expect(result._tag).toBe("text");
     if (result._tag === "text") {
-      expect(result.usage).toEqual({ inputTokens: 110, outputTokens: 55 });
+      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
     }
   });
 });
@@ -211,7 +212,7 @@ describe("runToolCall", () => {
     expect(result.content).toContain("tool blew up");
   });
 
-  test("success returns tool output", async () => {
+  test("success returns tool output with parsed args", async () => {
     const tc = { id: "c1", name: "echo", arguments: '{"msg":"hi"}' };
     const result = await Effect.runPromise(runToolCall([echoTool], tc));
     expect(result.content).toBe("hi");
@@ -233,7 +234,7 @@ describe("runToolCalls", () => {
 });
 
 // ===========================================================================
-// extractToolDefs
+// extractToolDefs / tryParseArgs
 // ===========================================================================
 
 describe("extractToolDefs", () => {
@@ -248,6 +249,18 @@ describe("extractToolDefs", () => {
       required: ["msg"],
     });
     expect(defs[1]!.name).toBe("fail");
+  });
+});
+
+describe("tryParseArgs", () => {
+  test("parses valid JSON", () => {
+    const result = tryParseArgs({ id: "c1", name: "t", arguments: '{"a":1}' });
+    expect(result).toEqual({ a: 1 });
+  });
+
+  test("returns raw string for invalid JSON", () => {
+    const result = tryParseArgs({ id: "c1", name: "t", arguments: "not-json" });
+    expect(result).toBe("not-json");
   });
 });
 

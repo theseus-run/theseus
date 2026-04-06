@@ -1,7 +1,7 @@
 /**
  * Dispatch — the reusable LLM dispatch primitive.
  *
- * step()          — one LLM round (pure, no fiber/events)
+ * step()          — one LLM call (pure, no tool execution, no fiber/events)
  * dispatch()      — full machine: loop + events + injection + fiber handle
  * dispatchAwait() — convenience for callers that only need the result
  */
@@ -21,6 +21,7 @@ export type {
 export {
   step,
   extractToolDefs,
+  tryParseArgs,
   runToolCall,
   runToolCalls,
   DEFAULT_LLM_RETRY_SCHEDULE,

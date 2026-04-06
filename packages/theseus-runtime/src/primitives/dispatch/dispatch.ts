@@ -22,10 +22,19 @@ import { Cause, Deferred, Effect, Exit, Fiber, Option, Queue, Stream } from "eff
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
-import type { LLMMessage } from "../llm/provider.ts";
+import type { LLMMessage, LLMUsage } from "../llm/provider.ts";
 import { LLMProvider } from "../llm/provider.ts";
-import { step } from "./step.ts";
+import { runToolCalls, step, tryParseArgs } from "./step.ts";
 import type { DispatchEvent, DispatchHandle, Injection } from "./types.ts";
+
+// ---------------------------------------------------------------------------
+// addUsage — accumulate token counts
+// ---------------------------------------------------------------------------
+
+const addUsage = (a: LLMUsage, b: LLMUsage): LLMUsage => ({
+  inputTokens: a.inputTokens + b.inputTokens,
+  outputTokens: a.outputTokens + b.outputTokens,
+});
 
 // ---------------------------------------------------------------------------
 // drainInjections — apply all pending injections at iteration boundary.
@@ -69,7 +78,7 @@ export const dispatch = (
 ): Effect.Effect<DispatchHandle, never, LLMProvider> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
-    const zeroUsage = { inputTokens: 0, outputTokens: 0 };
+    const zeroUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -84,7 +93,7 @@ export const dispatch = (
 
     const loop = (
       messages: ReadonlyArray<LLMMessage>,
-      usage: typeof zeroUsage,
+      usage: LLMUsage,
       iterations: number,
     ): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
       Effect.gen(function* () {
@@ -111,28 +120,35 @@ export const dispatch = (
 
         yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations });
 
-        const result = yield* step(next, blueprint.tools, blueprint.name, usage);
+        // step() is pure — one LLM call, no tool execution
+        const result = yield* step(next, blueprint.tools, blueprint.name);
+        const totalUsage = addUsage(usage, result.usage);
 
         if (result._tag === "text") {
-          return { content: result.content, usage: result.usage };
+          return { content: result.content, usage: totalUsage };
         }
 
-        // Emit ToolCalling events BEFORE ToolResult — gives interrupt window
+        // Emit ALL ToolCalling events BEFORE any tool runs.
+        // This gives an interrupt window before side effects happen.
         yield* Effect.all(
-          result.calls.map((c) =>
+          result.toolCalls.map((tc) =>
             emit({
               _tag: "ToolCalling",
               agent: blueprint.name,
               iteration: iterations,
-              tool: c.name,
-              args: c.args,
+              tool: tc.name,
+              args: tryParseArgs(tc),
             }),
           ),
           { concurrency: "unbounded" },
         );
 
+        // Execute all tools in parallel
+        const calls = yield* runToolCalls(blueprint.tools, result.toolCalls);
+
+        // Emit ToolResult for each completed tool
         yield* Effect.all(
-          result.calls.map((c) =>
+          calls.map((c) =>
             emit({
               _tag: "ToolResult",
               agent: blueprint.name,
@@ -144,7 +160,22 @@ export const dispatch = (
           { concurrency: "unbounded" },
         );
 
-        return yield* loop(result.messages, result.usage, iterations + 1);
+        // Build messages for next iteration
+        const toolMessages: ReadonlyArray<LLMMessage> = calls.map((r) => ({
+          role: "tool" as const,
+          toolCallId: r.callId,
+          content: r.content,
+        }));
+
+        return yield* loop(
+          [
+            ...next,
+            { role: "assistant" as const, content: "", toolCalls: result.toolCalls },
+            ...toolMessages,
+          ],
+          totalUsage,
+          iterations + 1,
+        );
       });
 
     const initialMessages: ReadonlyArray<LLMMessage> = [

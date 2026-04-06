@@ -3,8 +3,9 @@
  */
 
 import type { Effect, Stream } from "effect";
+import type { AgentError } from "../agent/index.ts";
 import type { AgentResult } from "../agent/index.ts";
-import type { LLMMessage, LLMUsage } from "../llm/provider.ts";
+import type { LLMMessage, LLMToolCall, LLMUsage } from "../llm/provider.ts";
 
 // ---------------------------------------------------------------------------
 // ToolCallResult — parsed result of a single tool call execution
@@ -18,7 +19,7 @@ export interface ToolCallResult {
 }
 
 // ---------------------------------------------------------------------------
-// StepResult — outcome of a single LLM round
+// StepResult — outcome of a single LLM call (no tool execution)
 // ---------------------------------------------------------------------------
 
 export type StepResult = StepText | StepToolCalls;
@@ -31,9 +32,8 @@ export interface StepText {
 
 export interface StepToolCalls {
   readonly _tag: "tool_calls";
-  readonly messages: ReadonlyArray<LLMMessage>;
+  readonly toolCalls: ReadonlyArray<LLMToolCall>;
   readonly usage: LLMUsage;
-  readonly calls: ReadonlyArray<ToolCallResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +77,3 @@ export interface DispatchHandle {
   /** Await the final result. Fails with AgentError on loop failure or interrupt. */
   readonly result: Effect.Effect<AgentResult, AgentError>
 }
-
-// Avoid circular — import AgentError type for the interface
-import type { AgentError } from "../agent/index.ts";

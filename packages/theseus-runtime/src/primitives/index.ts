@@ -59,9 +59,10 @@ export {
   dispatch,
   dispatchAwait,
   step,
+  extractToolDefs,
+  tryParseArgs,
   runToolCall,
   runToolCalls,
-  extractToolDefs,
   DEFAULT_LLM_RETRY_SCHEDULE,
 } from "./dispatch/index.ts";
 export type {
