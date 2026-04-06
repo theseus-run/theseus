@@ -221,9 +221,9 @@ const parseResponsesResponse = (data: ResponsesWire, _model: string): LLMRespons
   for (const item of output) {
     if (item.type === "function_call") {
       toolCalls.push({
-        id: (item["call_id"] as string) || (item["id"] as string) || "",
-        name: item["name"] as string,
-        arguments: item["arguments"] as string,
+        id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
+        name: (item["name"] as string) ?? "",
+        arguments: (item["arguments"] as string) ?? "",
       });
     } else if (item.type === "reasoning") {
       // OpenAI reasoning output — extract reasoning_text parts
@@ -257,7 +257,7 @@ const parseSSELines = <E>(
   return raw.pipe(
     Stream.map((chunk) => decoder.decode(chunk, { stream: true })),
     // Accumulate partial lines across chunks, emit complete lines
-    Stream.mapAccum(() => "", (buffer, chunk) => {
+    Stream.mapAccum(() => "", (buffer: string, chunk: string) => {
       const combined = buffer + chunk;
       const parts = combined.split("\n");
       // Last element may be incomplete — carry it forward
@@ -296,6 +296,13 @@ interface ResponsesSSEEvent {
   item_id?: string;
   name?: string;
   arguments?: string;
+  /** Nested item for response.output_item.added events */
+  item?: {
+    type?: string;
+    call_id?: string;
+    name?: string;
+    id?: string;
+  };
 }
 
 const parseResponsesChunk = (data: ResponsesSSEEvent): LLMStreamChunk | null => {
@@ -341,6 +348,17 @@ class ToolCallAccumulator {
   thinking = "";
   readonly toolCalls: LLMToolCall[] = [];
   private readonly indexMap = new Map<number, { id: string; name: string; args: string }>();
+  /**
+   * Responses API: ordered list of function calls registered via output_item.added.
+   * Keyed by call_id (the short stable ID like "call_QqcB1rLU5BMee5x7mUdv5fAc").
+   *
+   * Note: Copilot encrypts/randomizes item_id on each delta event, so we CANNOT
+   * match deltas to their parent call by item_id. We match by call_id only,
+   * and rely on the .done event for full arguments (ignoring delta accumulation).
+   */
+  private readonly responsesCallMap = new Map<string, { id: string; name: string; args: string; done: boolean }>();
+  /** Ordered call_ids for positional fallback when .done has no matching call_id */
+  private readonly responsesCallOrder: string[] = [];
 
   /** Accumulate a parsed text/thinking delta. */
   addDelta(chunk: LLMStreamChunk | null): void {
@@ -366,15 +384,55 @@ class ToolCallAccumulator {
     }
   }
 
-  /** Accumulate tool call from responses SSE event. */
+  /**
+   * Accumulate tool call from Responses API SSE events.
+   *
+   * Event lifecycle:
+   *   response.output_item.added           → item.call_id, item.name (registers call)
+   *   response.function_call_arguments.delta → ignored (item_id is randomized by Copilot)
+   *   response.function_call_arguments.done  → call_id, arguments (finalize — use full args)
+   */
   addResponsesEvent(data: ResponsesSSEEvent): void {
-    if (data.type === "response.function_call_arguments.done") {
-      this.toolCalls.push({
-        id: data.call_id || data.item_id || "",
-        name: data.name ?? "",
-        arguments: data.arguments ?? "",
-      });
+    if (data.type === "response.output_item.added" && data.item?.type === "function_call") {
+      const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${Date.now()}`);
+      this.responsesCallMap.set(callId, { id: callId, name: data.item.name ?? "", args: "", done: false });
+      this.responsesCallOrder.push(callId);
+    } else if (data.type === "response.function_call_arguments.done") {
+      // Match by call_id first, then fall back to oldest unfinished call
+      const callId = data.call_id ? sanitizeCallId(data.call_id) : undefined;
+      let entry = callId ? this.responsesCallMap.get(callId) : undefined;
+
+      if (!entry) {
+        // Positional fallback: find the first unfinished call
+        for (const key of this.responsesCallOrder) {
+          const candidate = this.responsesCallMap.get(key);
+          if (candidate && !candidate.done) {
+            entry = candidate;
+            break;
+          }
+        }
+      }
+
+      if (entry) {
+        entry.args = data.arguments ?? entry.args;
+        entry.done = true;
+        this.toolCalls.push({
+          id: entry.id,
+          name: entry.name || data.name || "",
+          arguments: entry.args,
+        });
+      } else {
+        // No prior .added — shouldn't happen, but be defensive
+        this.toolCalls.push({
+          id: sanitizeCallId(data.call_id || data.item_id || `call_${Date.now()}`),
+          name: data.name ?? "",
+          arguments: data.arguments ?? "",
+        });
+      }
     }
+    // Deliberately ignore response.function_call_arguments.delta:
+    // Copilot randomizes item_id on each delta, so we can't match them.
+    // The .done event has the complete arguments.
   }
 
   /** Build the final "done" chunk with accumulated state. */
@@ -383,6 +441,16 @@ class ToolCallAccumulator {
     for (const [, tc] of [...this.indexMap.entries()].sort(([a], [b]) => a - b)) {
       this.toolCalls.push({ id: tc.id, name: tc.name, arguments: tc.args });
     }
+
+    // Flush any responses calls that got .added but never .done (edge case)
+    for (const key of this.responsesCallOrder) {
+      const tc = this.responsesCallMap.get(key);
+      if (tc && !tc.done) {
+        this.toolCalls.push({ id: tc.id, name: tc.name, arguments: tc.args });
+      }
+    }
+    this.responsesCallMap.clear();
+    this.responsesCallOrder.length = 0;
 
     const thinking = this.thinking || undefined;
     const usage = { inputTokens: 0, outputTokens: 0 }; // SSE doesn't always include usage
@@ -399,6 +467,10 @@ class ToolCallAccumulator {
     };
   }
 }
+
+/** Ensure call_id stays within OpenAI's 64-char limit. */
+const sanitizeCallId = (id: string): string =>
+  id.length <= 64 ? id : id.slice(0, 64);
 
 // ---------------------------------------------------------------------------
 // processSSEChunk — parse JSON + update accumulator, return stream chunk
