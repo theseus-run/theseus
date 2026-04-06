@@ -5,7 +5,9 @@
       "@theseus.run/runtime": ["./src/index.ts"],
       "@theseus.run/runtime/*": ["./src/*"],
       "@theseus.run/core": ["../theseus-core/src/index.ts"],
-      "@theseus.run/core/*": ["../theseus-core/src/*"]
+      "@theseus.run/core/*": ["../theseus-core/src/*"],
+      "@theseus.run/tools": ["../theseus-tools/src/index.ts"],
+      "@theseus.run/tools/*": ["../theseus-tools/src/*"]
     }
   },
   "include": ["src/**/*", "bin/**/*"]

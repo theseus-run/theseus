@@ -67,6 +67,7 @@
       "dependencies": {
         "@effect/platform-bun": "4.0.0-beta.33",
         "@theseus.run/core": "workspace:*",
+        "@theseus.run/tools": "workspace:*",
         "effect": "4.0.0-beta.33",
         "zod": "4.3.6",
       },
@@ -81,6 +82,7 @@
       "dependencies": {
         "@theseus.run/core": "workspace:*",
         "effect": "4.0.0-beta.33",
+        "tree-sitter-wasms": "^0.1.13",
         "web-tree-sitter": "^0.25.3",
         "zod": "4.3.6",
       },
@@ -252,6 +254,8 @@
     "strip-ansi": ["strip-ansi@7.2.0", "", { "dependencies": { "ansi-regex": "^6.2.2" } }, "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w=="],
 
     "toml": ["toml@3.0.0", "", {}, "sha512-y/mWCZinnvxjTKYhJ+pYxwD0mRLVvOtdS2Awbgxln6iEnt4rk0yBxeSBHkGJcPucRiG0e55mwWp+g/05rsrd6w=="],
+
+    "tree-sitter-wasms": ["tree-sitter-wasms@0.1.13", "", { "dependencies": { "tree-sitter-wasms": "^0.1.11" } }, "sha512-wT+cR6DwaIz80/vho3AvSF0N4txuNx/5bcRKoXouOfClpxh/qqrF4URNLQXbbt8MaAxeksZcZd1j8gcGjc+QxQ=="],
 
     "type-fest": ["type-fest@4.41.0", "", {}, "sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA=="],
 
