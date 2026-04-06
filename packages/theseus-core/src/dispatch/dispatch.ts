@@ -8,30 +8,22 @@
  *   handle.interrupt preemptive Fiber.interrupt — kills mid-LLM-call or mid-tool-call
  *   handle.result    Effect<AgentResult, AgentError> — await the final value
  *
- * Two interruption modes:
- *   cooperative  → inject({ _tag: "Interrupt" }) — finishes current op, stops at boundary
- *   preemptive   → handle.interrupt — kills immediately, even inside an LLM call
- *
- * ToolCalling events are emitted BEFORE tools execute — gives interrupt a window
- * before any side effects happen.
- *
- * dispatchAwait — convenience for callers that only care about the result.
+ * Uses LanguageModel from effect/unstable/ai via stepStream.
  */
 
 import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Stream } from "effect";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
-import type { LLMMessage, LLMUsage } from "../llm/provider.ts";
-import { LLMProvider } from "../llm/provider.ts";
 import { runToolCalls, stepStream, tryParseArgs } from "./step.ts";
-import type { DispatchEvent, DispatchHandle, Injection } from "./types.ts";
+import type { DispatchEvent, DispatchHandle, Injection, Message, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // addUsage — accumulate token counts
 // ---------------------------------------------------------------------------
 
-const addUsage = (a: LLMUsage, b: LLMUsage): LLMUsage => ({
+const addUsage = (a: Usage, b: Usage): Usage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
 });
@@ -43,22 +35,22 @@ const addUsage = (a: LLMUsage, b: LLMUsage): LLMUsage => ({
 
 const drainInjections = (
   injectionQueue: Queue.Queue<Injection>,
-  messages: ReadonlyArray<LLMMessage>,
-): Effect.Effect<ReadonlyArray<LLMMessage> | null> =>
+  messages: ReadonlyArray<Message>,
+): Effect.Effect<ReadonlyArray<Message> | null> =>
   Effect.gen(function* () {
     let current = messages;
     let opt = yield* Queue.poll(injectionQueue);
     while (Option.isSome(opt)) {
       const prev = current;
       const next = Match.value(opt.value).pipe(
-        Match.tag("Interrupt", () => null as ReadonlyArray<LLMMessage> | null),
+        Match.tag("Interrupt", () => null as ReadonlyArray<Message> | null),
         Match.tag("AppendMessages", (i) => [...prev, ...i.messages]),
         Match.tag("ReplaceMessages", (i) => i.messages),
         Match.tag("Redirect", (i) => [
           prev[0] ?? { role: "system" as const, content: "" },
           { role: "user" as const, content: i.task },
         ]),
-        Match.tag("CollapseContext", () => prev), // no-op
+        Match.tag("CollapseContext", () => prev),
         Match.exhaustive,
       );
       if (next === null) return null;
@@ -75,10 +67,10 @@ const drainInjections = (
 export const dispatch = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<DispatchHandle, never, LLMProvider> =>
+): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
-    const zeroUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
+    const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -92,58 +84,46 @@ export const dispatch = (
     // -----------------------------------------------------------------------
 
     const loop = (
-      messages: ReadonlyArray<LLMMessage>,
-      usage: LLMUsage,
+      messages: ReadonlyArray<Message>,
+      usage: Usage,
       iterations: number,
-    ): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
+    ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
       Effect.gen(function* () {
-        // Yield to the scheduler at each iteration boundary.
         yield* Effect.yieldNow;
 
-        // Drain injection queue
         const next = yield* drainInjections(injectionQueue, messages);
         if (next === null)
           return yield* Effect.fail(
-            new AgentError({
-              agent: blueprint.name,
-              message: "Interrupted via injection",
-            }),
+            new AgentError({ agent: blueprint.name, message: "Interrupted via injection" }),
           );
 
         if (iterations >= maxIter)
           return yield* Effect.fail(
-            new AgentError({
-              agent: blueprint.name,
-              message: `Cycle cap exceeded (${maxIter} iterations)`,
-            }),
+            new AgentError({ agent: blueprint.name, message: `Cycle cap exceeded (${maxIter} iterations)` }),
           );
 
         yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
-        // stepStream() emits text/thinking deltas as they arrive, falls back to non-streaming
         const result = yield* stepStream(next, blueprint.tools, blueprint.name, (chunk) =>
-          Match.value(chunk).pipe(
-            Match.when({ type: "text_delta" }, (c) =>
-              emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: c.content }),
+          Match.value(chunk.type).pipe(
+            Match.when("text-delta", () =>
+              emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: chunk.delta }),
             ),
-            Match.when({ type: "thinking_delta" }, (c) =>
-              emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: c.content }),
+            Match.when("reasoning-delta", () =>
+              emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: chunk.delta }),
             ),
-            Match.when({ type: "done" }, () => Effect.void),
-            Match.exhaustive,
+            Match.orElse(() => Effect.void),
           ),
         );
         const totalUsage = addUsage(usage, result.usage);
 
-        // Emit full thinking content (from non-streaming fallback or accumulated)
         if (result.thinking) {
           yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
         }
 
         if (result._tag === "text") return { content: result.content, usage: totalUsage };
 
-        // Emit ALL ToolCalling events BEFORE any tool runs.
-        // This gives an interrupt window before side effects happen.
+        // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
         yield* Effect.all(
           result.toolCalls.map((tc) =>
             emit({
@@ -157,10 +137,8 @@ export const dispatch = (
           { concurrency: "unbounded" },
         );
 
-        // Execute all tools in parallel
         const calls = yield* runToolCalls(blueprint.tools, result.toolCalls);
 
-        // Emit ToolResult for each completed tool
         yield* Effect.all(
           calls.map((c) =>
             emit({
@@ -175,7 +153,7 @@ export const dispatch = (
         );
 
         // Build messages for next iteration
-        const toolMessages: ReadonlyArray<LLMMessage> = calls.map((r) => ({
+        const toolMessages: ReadonlyArray<Message> = calls.map((r) => ({
           role: "tool" as const,
           toolCallId: r.callId,
           content: r.content,
@@ -192,12 +170,11 @@ export const dispatch = (
         );
       });
 
-    const initialMessages: ReadonlyArray<LLMMessage> = [
+    const initialMessages: ReadonlyArray<Message> = [
       { role: "system", content: blueprint.systemPrompt },
       { role: "user", content: task },
     ];
 
-    // Fork the loop. onExit writes the result into resultDeferred.
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
       loop(initialMessages, zeroUsage, 0).pipe(
         Effect.tap((result) =>
@@ -208,10 +185,7 @@ export const dispatch = (
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
             onFailure: (cause) =>
               Cause.hasInterruptsOnly(cause)
-                ? Deferred.fail(
-                    resultDeferred,
-                    new AgentError({ agent: blueprint.name, message: "Interrupted" }),
-                  )
+                ? Deferred.fail(resultDeferred, new AgentError({ agent: blueprint.name, message: "Interrupted" }))
                 : Deferred.failCause(resultDeferred, cause),
           }),
         ),
@@ -222,9 +196,7 @@ export const dispatch = (
     const result: Effect.Effect<AgentResult, AgentError> = Deferred.await(resultDeferred);
 
     return {
-      events: Stream.fromQueue(eventQueue).pipe(
-        Stream.takeUntil((e) => e._tag === "Done"),
-      ),
+      events: Stream.fromQueue(eventQueue).pipe(Stream.takeUntil((e) => e._tag === "Done")),
       inject: (i: Injection) => Queue.offer(injectionQueue, i).pipe(Effect.asVoid),
       interrupt: Fiber.interrupt(loopFiber).pipe(Effect.asVoid),
       result,
@@ -238,5 +210,5 @@ export const dispatch = (
 export const dispatchAwait = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
   dispatch(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));
