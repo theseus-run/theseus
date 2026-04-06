@@ -13,9 +13,8 @@
  * so that our dispatch loop retains full control over tool execution.
  */
 
-import { Effect, Match, Schedule, Stream } from "effect";
+import { Effect, Match, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiError from "effect/unstable/ai/AiError";
 import { AgentError } from "../agent/index.ts";
@@ -71,9 +70,10 @@ const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): 
 // mapAiError — convert AiError to AgentError
 // ---------------------------------------------------------------------------
 
-const mapAiErrors = (agentName: string) => <A>(
-  effect: Effect.Effect<A, AiError.AiError>,
-): Effect.Effect<A, AgentError> =>
+const mapAiErrors = <A, R>(
+  agentName: string,
+  effect: Effect.Effect<A, AiError.AiError, R>,
+): Effect.Effect<A, AgentError, R> =>
   effect.pipe(
     Effect.catchTag("AiError", (e) =>
       Effect.fail(new AgentError({ agent: agentName, message: `${e.module}.${e.method}: ${e.reason._tag}`, cause: e })),
@@ -174,25 +174,27 @@ export const stepStream = (
     // Collect all parts from the stream
     const allParts: Response.StreamPartEncoded[] = [];
 
-    yield* LanguageModel.streamText({
-      prompt,
-      toolkit,
-      disableToolCallResolution: true,
-    }).pipe(
-      Stream.tap((part) => {
-        allParts.push(part as any);
-        return Match.value(part.type).pipe(
-          Match.when("text-delta", () =>
-            onChunk({ type: "text-delta", delta: (part as any).delta }),
-          ),
-          Match.when("reasoning-delta", () =>
-            onChunk({ type: "reasoning-delta", delta: (part as any).delta }),
-          ),
-          Match.orElse(() => Effect.void),
-        );
-      }),
-      Stream.runDrain,
-      mapAiErrors(agentName),
+    yield* mapAiErrors(
+      agentName,
+      LanguageModel.streamText({
+        prompt,
+        toolkit,
+        disableToolCallResolution: true,
+      }).pipe(
+        Stream.tap((part) => {
+          allParts.push(part as any);
+          return Match.value(part.type).pipe(
+            Match.when("text-delta", () =>
+              onChunk({ type: "text-delta", delta: (part as any).delta }),
+            ),
+            Match.when("reasoning-delta", () =>
+              onChunk({ type: "reasoning-delta", delta: (part as any).delta }),
+            ),
+            Match.orElse(() => Effect.void),
+          );
+        }),
+        Stream.runDrain,
+      ),
     );
 
     return responsePartsToStepResult(allParts as any);
@@ -211,18 +213,22 @@ export const step = (
     const prompt = llmMessagesToPrompt(messages);
     const toolkit = theseusToolsToToolkit(tools);
 
-    const response = yield* LanguageModel.generateText({
-      prompt,
-      toolkit,
-      disableToolCallResolution: true,
-    }).pipe(mapAiErrors(agentName));
+    const response = yield* mapAiErrors(
+      agentName,
+      LanguageModel.generateText({
+        prompt,
+        toolkit,
+        disableToolCallResolution: true,
+      }),
+    );
 
-    return responsePartsToStepResult(response.content.map((p) => {
-      // Convert decoded Part to PartEncoded-like shape for our reducer
-      if (p.type === "text") return { type: "text" as const, text: (p as any).text };
-      if (p.type === "reasoning") return { type: "reasoning" as const, text: (p as any).text };
-      if (p.type === "tool-call") return { type: "tool-call" as const, id: (p as any).id, name: (p as any).name, params: (p as any).params };
-      if (p.type === "finish") return p as any;
-      return p as any;
-    }));
+    return responsePartsToStepResult(response.content.map((p: any) =>
+      Match.value(p.type).pipe(
+        Match.when("text", () => ({ type: "text" as const, text: p.text })),
+        Match.when("reasoning", () => ({ type: "reasoning" as const, text: p.text })),
+        Match.when("tool-call", () => ({ type: "tool-call" as const, id: p.id, name: p.name, params: p.params })),
+        Match.when("finish", () => p),
+        Match.orElse(() => p),
+      ),
+    ));
   });

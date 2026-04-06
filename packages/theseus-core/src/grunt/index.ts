@@ -7,21 +7,21 @@
  *
  *   grunt()      → GruntHandle (events stream + result)
  *   gruntAwait() → just the result
+ *
+ * Requires LanguageModel from effect/unstable/ai.
  */
 
 import { Effect, Stream } from "effect";
+import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
 import { dispatch, type DispatchEvent } from "../dispatch/index.ts";
-import type { LLMProvider } from "../llm/provider.ts";
 
 // ---------------------------------------------------------------------------
 // GruntHandle — fire-and-forget: observe events, await result
 // ---------------------------------------------------------------------------
 
 export interface GruntHandle {
-  /** Observable event stream. Completes after Done. */
   readonly events: Stream.Stream<DispatchEvent>;
-  /** Await the final result. Fails with AgentError on loop failure. */
   readonly result: Effect.Effect<AgentResult, AgentError>;
 }
 
@@ -32,7 +32,7 @@ export interface GruntHandle {
 export const grunt = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<GruntHandle, never, LLMProvider> =>
+): Effect.Effect<GruntHandle, never, LanguageModel.LanguageModel> =>
   dispatch(blueprint, task).pipe(
     Effect.map((handle) => ({
       events: handle.events,
@@ -47,5 +47,5 @@ export const grunt = (
 export const gruntAwait = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
   grunt(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));
