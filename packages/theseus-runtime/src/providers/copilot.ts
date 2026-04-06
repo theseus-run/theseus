@@ -212,8 +212,8 @@ const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
 
   const thinking = thinkingParts || undefined;
 
-  if (toolCalls.length > 0) return { type: "tool_calls", toolCalls, thinking, usage };
-  return { type: "text", content, thinking, usage };
+  if (toolCalls.length > 0) return { type: "tool_calls", toolCalls, ...(thinking ? { thinking } : {}), usage };
+  return { type: "text", content, ...(thinking ? { thinking } : {}), usage };
 };
 
 // ---------------------------------------------------------------------------
