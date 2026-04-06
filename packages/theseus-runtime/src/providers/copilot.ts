@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BunHttpClient } from "@effect/platform-bun";
-import { Data, Effect, Layer, Ref, Stream } from "effect";
+import { Data, Effect, Layer, Match, Ref, Stream } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Config } from "../config.ts";
@@ -73,6 +73,41 @@ const shouldUseResponsesApi = (model: string): boolean => {
   if (!match) return false;
   return Number(match[1]) >= 5 && !model.startsWith("gpt-5-mini");
 };
+
+// ---------------------------------------------------------------------------
+// Wire format types — typed boundaries for external JSON (no runtime validation)
+// ---------------------------------------------------------------------------
+
+/** Minimal shape for /chat/completions response */
+interface ChatCompletionsWire {
+  choices?: Array<{
+    finish_reason?: string;
+    message?: {
+      content?: string | null;
+      reasoning_content?: string;
+      tool_calls?: Array<{
+        id: string;
+        function: { name: string; arguments: string };
+      }>;
+    };
+    delta?: {
+      content?: string;
+      reasoning_content?: string;
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+  }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+/** Minimal shape for /responses response */
+interface ResponsesWire {
+  output?: Array<{ type: string; [key: string]: unknown }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
 
 // ---------------------------------------------------------------------------
 // Format converters: LLMMessage → wire format
@@ -147,27 +182,21 @@ const toResponsesTools = (tools: ReadonlyArray<LLMToolDef>): unknown[] =>
 // Response parsers: wire format → LLMResponse
 // ---------------------------------------------------------------------------
 
-// biome-ignore lint/suspicious/noExplicitAny: external JSON
-const parseChatCompletionsResponse = (data: any, _model: string): LLMResponse => {
-  const choice = data?.choices?.[0];
-  const message = choice?.message ?? {};
-  const finishReason: string = choice?.finish_reason ?? "stop";
-  const rawUsage = data?.usage ?? {};
+const parseChatCompletionsResponse = (data: ChatCompletionsWire, _model: string): LLMResponse => {
+  const choice = data.choices?.[0];
+  const message = choice?.message;
+  const finishReason = choice?.finish_reason ?? "stop";
+  const rawUsage = data.usage;
   const usage = {
-    inputTokens: (rawUsage.prompt_tokens as number | undefined) ?? 0,
-    outputTokens: (rawUsage.completion_tokens as number | undefined) ?? 0,
+    inputTokens: rawUsage?.prompt_tokens ?? 0,
+    outputTokens: rawUsage?.completion_tokens ?? 0,
   };
 
-  // Some models expose reasoning via reasoning_content on the message
-  const thinking = (message.reasoning_content as string | undefined) || undefined;
+  const thinking = message?.reasoning_content || undefined;
 
   if (finishReason === "tool_calls") {
     const toolCalls: ReadonlyArray<LLMToolCall> =
-      (
-        message.tool_calls as
-          | Array<{ id: string; function: { name: string; arguments: string } }>
-          | undefined
-      )?.map((tc) => ({
+      message?.tool_calls?.map((tc) => ({
         id: tc.id,
         name: tc.function.name,
         arguments: tc.function.arguments,
@@ -175,16 +204,15 @@ const parseChatCompletionsResponse = (data: any, _model: string): LLMResponse =>
     return { type: "tool_calls", toolCalls, ...(thinking ? { thinking } : {}), usage };
   }
 
-  return { type: "text", content: (message.content as string | null) ?? "", ...(thinking ? { thinking } : {}), usage };
+  return { type: "text", content: message?.content ?? "", ...(thinking ? { thinking } : {}), usage };
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: external JSON
-const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
-  const output: Array<{ type: string; [key: string]: unknown }> = data?.output ?? [];
-  const rawUsage = data?.usage ?? {};
+const parseResponsesResponse = (data: ResponsesWire, _model: string): LLMResponse => {
+  const output = data.output ?? [];
+  const rawUsage = data.usage;
   const usage = {
-    inputTokens: (rawUsage.input_tokens as number | undefined) ?? 0,
-    outputTokens: (rawUsage.output_tokens as number | undefined) ?? 0,
+    inputTokens: rawUsage?.input_tokens ?? 0,
+    outputTokens: rawUsage?.output_tokens ?? 0,
   };
   const toolCalls: LLMToolCall[] = [];
   let content = "";
@@ -244,37 +272,41 @@ const parseSSELines = <E>(
   );
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: external JSON
-const parseChatCompletionsChunk = (data: any): LLMStreamChunk | null => {
-  const choice = data?.choices?.[0];
+const parseChatCompletionsChunk = (data: ChatCompletionsWire): LLMStreamChunk | null => {
+  const choice = data.choices?.[0];
   if (!choice) return null;
-  const delta = choice.delta ?? {};
+  const delta = choice.delta;
 
-  // Reasoning content delta
-  if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+  if (delta?.reasoning_content) {
     return { type: "thinking_delta", content: delta.reasoning_content };
   }
 
-  // Text content delta
-  if (typeof delta.content === "string" && delta.content) {
+  if (delta?.content) {
     return { type: "text_delta", content: delta.content };
   }
 
   return null;
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: external JSON
-const parseResponsesChunk = (data: any): LLMStreamChunk | null => {
-  const eventType: string = data?.type ?? "";
+/** Minimal shape for /responses SSE event */
+interface ResponsesSSEEvent {
+  type?: string;
+  delta?: string;
+  call_id?: string;
+  item_id?: string;
+  name?: string;
+  arguments?: string;
+}
 
-  if (eventType === "response.output_text.delta") {
-    const text = data?.delta as string | undefined;
-    if (text) return { type: "text_delta", content: text };
+const parseResponsesChunk = (data: ResponsesSSEEvent): LLMStreamChunk | null => {
+  const eventType = data.type ?? "";
+
+  if (eventType === "response.output_text.delta" && data.delta) {
+    return { type: "text_delta", content: data.delta };
   }
 
-  if (eventType === "response.reasoning_text.delta") {
-    const text = data?.delta as string | undefined;
-    if (text) return { type: "thinking_delta", content: text };
+  if (eventType === "response.reasoning_text.delta" && data.delta) {
+    return { type: "thinking_delta", content: data.delta };
   }
 
   return null;
@@ -284,21 +316,142 @@ const parseResponsesChunk = (data: any): LLMStreamChunk | null => {
 // Error mapping — internal → LLMError | LLMErrorRetriable
 // ---------------------------------------------------------------------------
 
-const mapError = (e: CopilotError): LLMError | LLMErrorRetriable => {
-  if (e._tag === "CopilotAuthError") {
-    return new LLMError({ message: "Copilot auth failed", cause: e.cause });
+const mapError = (e: CopilotError): LLMError | LLMErrorRetriable =>
+  Match.value(e).pipe(
+    Match.tag("CopilotAuthError", (e) =>
+      new LLMError({ message: "Copilot auth failed", cause: e.cause }),
+    ),
+    Match.tag("CopilotParseError", (e) =>
+      new LLMError({ message: "Failed to parse LLM response", cause: e.cause }),
+    ),
+    Match.tag("CopilotHttpError", (e) =>
+      e.status === 0 || e.status === 429 || e.status >= 500
+        ? new LLMErrorRetriable({ message: `Copilot HTTP ${e.status}`, cause: e.body })
+        : new LLMError({ message: `Copilot HTTP ${e.status}: ${e.body}` }),
+    ),
+    Match.exhaustive,
+  );
+
+// ---------------------------------------------------------------------------
+// ToolCallAccumulator — stateful accumulation for streaming tool calls
+// ---------------------------------------------------------------------------
+
+class ToolCallAccumulator {
+  content = "";
+  thinking = "";
+  readonly toolCalls: LLMToolCall[] = [];
+  private readonly indexMap = new Map<number, { id: string; name: string; args: string }>();
+
+  /** Accumulate a parsed text/thinking delta. */
+  addDelta(chunk: LLMStreamChunk | null): void {
+    if (!chunk) return;
+    if (chunk.type === "text_delta") this.content += chunk.content;
+    if (chunk.type === "thinking_delta") this.thinking += chunk.content;
   }
-  if (e._tag === "CopilotParseError") {
-    return new LLMError({ message: "Failed to parse LLM response", cause: e.cause });
+
+  /** Accumulate tool call deltas from chat/completions SSE. */
+  addChatCompletionsDelta(delta: NonNullable<NonNullable<ChatCompletionsWire["choices"]>[number]["delta"]>): void {
+    if (!delta.tool_calls) return;
+    for (const tc of delta.tool_calls) {
+      const existing = this.indexMap.get(tc.index);
+      if (!existing) {
+        this.indexMap.set(tc.index, {
+          id: tc.id ?? "",
+          name: tc.function?.name ?? "",
+          args: tc.function?.arguments ?? "",
+        });
+      } else {
+        if (tc.function?.arguments) existing.args += tc.function.arguments;
+      }
+    }
   }
-  // CopilotHttpError — rate limit and server errors are retriable
-  if (e.status === 429 || e.status >= 500) {
-    return new LLMErrorRetriable({
-      message: `Copilot HTTP ${e.status}`,
-      cause: e.body,
-    });
+
+  /** Accumulate tool call from responses SSE event. */
+  addResponsesEvent(data: ResponsesSSEEvent): void {
+    if (data.type === "response.function_call_arguments.done") {
+      this.toolCalls.push({
+        id: data.call_id || data.item_id || "",
+        name: data.name as string,
+        arguments: data.arguments as string,
+      });
+    }
   }
-  return new LLMError({ message: `Copilot HTTP ${e.status}: ${e.body}` });
+
+  /** Build the final "done" chunk with accumulated state. */
+  buildDoneChunk(): LLMStreamChunk {
+    // Finalize tool calls from chat/completions index map
+    for (const [, tc] of [...this.indexMap.entries()].sort(([a], [b]) => a - b)) {
+      this.toolCalls.push({ id: tc.id, name: tc.name, arguments: tc.args });
+    }
+
+    const thinking = this.thinking || undefined;
+    const usage = { inputTokens: 0, outputTokens: 0 }; // SSE doesn't always include usage
+
+    if (this.toolCalls.length > 0) {
+      return {
+        type: "done",
+        response: { type: "tool_calls", toolCalls: this.toolCalls, ...(thinking ? { thinking } : {}), usage },
+      };
+    }
+    return {
+      type: "done",
+      response: { type: "text", content: this.content, ...(thinking ? { thinking } : {}), usage },
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// processSSEChunk — parse JSON + update accumulator, return stream chunk
+// ---------------------------------------------------------------------------
+
+const processSSEChunk = (
+  data: string,
+  acc: ToolCallAccumulator,
+  useResponses: boolean,
+): LLMStreamChunk | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch (e) {
+    // Log but don't crash — malformed SSE line
+    console.warn("[copilot] Failed to parse SSE chunk:", (e as Error).message);
+    return null;
+  }
+
+  let chunk: LLMStreamChunk | null;
+  if (useResponses) {
+    const event = parsed as ResponsesSSEEvent;
+    acc.addResponsesEvent(event);
+    chunk = parseResponsesChunk(event);
+  } else {
+    const wire = parsed as ChatCompletionsWire;
+    const choice = wire.choices?.[0];
+    if (choice?.delta) acc.addChatCompletionsDelta(choice.delta);
+    chunk = parseChatCompletionsChunk(wire);
+  }
+
+  acc.addDelta(chunk);
+  return chunk;
+};
+
+// ---------------------------------------------------------------------------
+// buildStreamPipeline — compose SSE lines into LLMStreamChunk stream
+// ---------------------------------------------------------------------------
+
+const buildStreamPipeline = (
+  sseLines: Stream.Stream<string, CopilotError>,
+  useResponses: boolean,
+): Stream.Stream<LLMStreamChunk, LLMError | LLMErrorRetriable> => {
+  const acc = new ToolCallAccumulator();
+
+  return sseLines.pipe(
+    Stream.mapError(mapError),
+    Stream.map((data) => processSSEChunk(data, acc, useResponses)),
+    Stream.filter((c): c is LLMStreamChunk => c !== null),
+    Stream.concat(
+      Stream.fromEffect(Effect.sync(() => acc.buildDoneChunk())),
+    ),
+  );
 };
 
 // ---------------------------------------------------------------------------
@@ -342,10 +495,9 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
         const res = yield* http
           .execute(req)
           .pipe(Effect.mapError((cause) => new CopilotAuthError({ cause })));
-        // biome-ignore lint/suspicious/noExplicitAny: external JSON
         const body = yield* res.json.pipe(
           Effect.mapError((cause) => new CopilotParseError({ cause })),
-        ) as Effect.Effect<any, CopilotParseError>;
+        ) as Effect.Effect<{ token?: string; expires_at?: number }, CopilotParseError>;
         if (!body?.token) {
           return yield* Effect.fail(
             new CopilotAuthError({
@@ -353,7 +505,7 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
             }),
           );
         }
-        return { bearer: body.token as string, expiresAt: body.expires_at as number };
+        return { bearer: body.token, expiresAt: body.expires_at ?? 0 };
       });
 
     const getBearer = (): Effect.Effect<string, CopilotAuthError | CopilotParseError> =>
@@ -449,14 +601,13 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
             );
           }
 
-          // biome-ignore lint/suspicious/noExplicitAny: external JSON
           const data = yield* res.json.pipe(
             Effect.mapError((cause) => new CopilotParseError({ cause })),
-          ) as Effect.Effect<any, CopilotParseError>;
+          ) as Effect.Effect<ChatCompletionsWire | ResponsesWire, CopilotParseError>;
 
           return useResponses
-            ? parseResponsesResponse(data, model)
-            : parseChatCompletionsResponse(data, model);
+            ? parseResponsesResponse(data as ResponsesWire, model)
+            : parseChatCompletionsResponse(data as ChatCompletionsWire, model);
         }).pipe(Effect.mapError(mapError)),
 
       callStream: (
@@ -485,111 +636,10 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
               );
             }
 
-            const parseChunk = useResponses ? parseResponsesChunk : parseChatCompletionsChunk;
-
-            // Accumulate full text/thinking/toolCalls for the final Done chunk
-            let contentAcc = "";
-            let thinkingAcc = "";
-            const toolCallsAcc: LLMToolCall[] = [];
-
-            // For chat/completions streaming, tool calls arrive in pieces
-            const toolCallIndex = new Map<number, { id: string; name: string; args: string }>();
-
             const sseLines = parseSSELines(
               Stream.mapError(res.stream, () => new CopilotHttpError({ status: 0, body: "Stream read error" })),
             );
-            return sseLines.pipe(
-              Stream.mapError(mapError),
-              Stream.map((data) => {
-                try {
-                  // biome-ignore lint/suspicious/noExplicitAny: external SSE JSON
-                  const parsed = JSON.parse(data) as any;
-
-                  // Accumulate tool calls from chat/completions deltas
-                  if (!useResponses) {
-                    const choice = parsed?.choices?.[0];
-                    const delta = choice?.delta;
-                    if (delta?.tool_calls) {
-                      for (const tc of delta.tool_calls as Array<{
-                        index: number;
-                        id?: string;
-                        function?: { name?: string; arguments?: string };
-                      }>) {
-                        const existing = toolCallIndex.get(tc.index);
-                        if (!existing) {
-                          toolCallIndex.set(tc.index, {
-                            id: tc.id ?? "",
-                            name: tc.function?.name ?? "",
-                            args: tc.function?.arguments ?? "",
-                          });
-                        } else {
-                          if (tc.function?.arguments) existing.args += tc.function.arguments;
-                        }
-                      }
-                    }
-                  }
-
-                  // Accumulate tool calls from responses API
-                  if (useResponses) {
-                    const eventType: string = parsed?.type ?? "";
-                    if (eventType === "response.function_call_arguments.done") {
-                      toolCallsAcc.push({
-                        id: (parsed.call_id as string) || (parsed.item_id as string) || "",
-                        name: parsed.name as string,
-                        arguments: parsed.arguments as string,
-                      });
-                    }
-                  }
-
-                  const chunk = parseChunk(parsed);
-                  if (chunk) {
-                    if (chunk.type === "text_delta") contentAcc += chunk.content;
-                    if (chunk.type === "thinking_delta") thinkingAcc += chunk.content;
-                  }
-                  return chunk;
-                } catch {
-                  return null;
-                }
-              }),
-              Stream.filter((c): c is LLMStreamChunk => c !== null),
-              // Append the done chunk with the accumulated response
-              Stream.concat(
-                Stream.fromEffect(
-                  Effect.sync((): LLMStreamChunk => {
-                    // Finalize tool calls from chat/completions index
-                    if (!useResponses) {
-                      for (const [, tc] of [...toolCallIndex.entries()].sort(([a], [b]) => a - b)) {
-                        toolCallsAcc.push({ id: tc.id, name: tc.name, arguments: tc.args });
-                      }
-                    }
-
-                    const thinking = thinkingAcc || undefined;
-                    const usage = { inputTokens: 0, outputTokens: 0 }; // SSE doesn't always include usage
-
-                    if (toolCallsAcc.length > 0) {
-                      return {
-                        type: "done",
-                        response: {
-                          type: "tool_calls",
-                          toolCalls: toolCallsAcc,
-                          ...(thinking ? { thinking } : {}),
-                          usage,
-                        },
-                      };
-                    }
-                    return {
-                      type: "done",
-                      response: {
-                        type: "text",
-                        content: contentAcc,
-                        ...(thinking ? { thinking } : {}),
-                        usage,
-                      },
-                    };
-                  }),
-                ),
-              ),
-            );
+            return buildStreamPipeline(sseLines, useResponses);
           }).pipe(Effect.mapError(mapError)),
         ),
     });

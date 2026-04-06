@@ -18,7 +18,7 @@
  * dispatchAwait — convenience for callers that only care about the result.
  */
 
-import { Cause, Deferred, Effect, Exit, Fiber, Option, Queue, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Stream } from "effect";
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
@@ -46,23 +46,21 @@ const drainInjections = (
   messages: ReadonlyArray<LLMMessage>,
 ): Effect.Effect<ReadonlyArray<LLMMessage> | null> =>
   Effect.gen(function* () {
-    let current = messages;
+    let current: ReadonlyArray<LLMMessage> | null = messages;
     let opt = yield* Queue.poll(injectionQueue);
     while (Option.isSome(opt)) {
-      const inj = opt.value;
-      if (inj._tag === "Interrupt") return null;
-      if (inj._tag === "AppendMessages") {
-        current = [...current, ...inj.messages];
-      } else if (inj._tag === "ReplaceMessages") {
-        current = inj.messages;
-      } else if (inj._tag === "Redirect") {
-        // Keep system message, replace task
-        current = [
-          current[0]!,
-          { role: "user" as const, content: inj.task },
-        ];
-      }
-      // CollapseContext — no-op for now
+      current = Match.value(opt.value).pipe(
+        Match.tag("Interrupt", () => null),
+        Match.tag("AppendMessages", (i) => [...current!, ...i.messages]),
+        Match.tag("ReplaceMessages", (i) => i.messages),
+        Match.tag("Redirect", (i) => [
+          current![0] ?? { role: "system" as const, content: "" },
+          { role: "user" as const, content: i.task },
+        ]),
+        Match.tag("CollapseContext", () => current), // no-op
+        Match.exhaustive,
+      );
+      if (current === null) return null;
       opt = yield* Queue.poll(injectionQueue);
     }
     return current;
@@ -121,15 +119,18 @@ export const dispatch = (
         yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
         // stepStream() emits text/thinking deltas as they arrive, falls back to non-streaming
-        const result = yield* stepStream(next, blueprint.tools, blueprint.name, (chunk) => {
-          if (chunk.type === "text_delta") {
-            return emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: chunk.content });
-          }
-          if (chunk.type === "thinking_delta") {
-            return emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: chunk.content });
-          }
-          return Effect.void;
-        });
+        const result = yield* stepStream(next, blueprint.tools, blueprint.name, (chunk) =>
+          Match.value(chunk).pipe(
+            Match.when({ type: "text_delta" }, (c) =>
+              emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: c.content }),
+            ),
+            Match.when({ type: "thinking_delta" }, (c) =>
+              emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: c.content }),
+            ),
+            Match.when({ type: "done" }, () => Effect.void),
+            Match.exhaustive,
+          ),
+        );
         const totalUsage = addUsage(usage, result.usage);
 
         // Emit full thinking content (from non-streaming fallback or accumulated)
@@ -137,9 +138,7 @@ export const dispatch = (
           yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
         }
 
-        if (result._tag === "text") {
-          return { content: result.content, usage: totalUsage };
-        }
+        if (result._tag === "text") return { content: result.content, usage: totalUsage };
 
         // Emit ALL ToolCalling events BEFORE any tool runs.
         // This gives an interrupt window before side effects happen.

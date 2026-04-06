@@ -5,7 +5,7 @@
  */
 
 import { readdirSync, readFileSync } from "node:fs";
-import { Effect, Stream } from "effect";
+import { Effect, Match, Stream } from "effect";
 import { type Blueprint, defineTool, dispatch, type DispatchEvent, manualSchema } from "@theseus.run/core";
 import { CopilotProviderLive } from "../providers/copilot.ts";
 
@@ -67,32 +67,32 @@ const renderEvent = (e: DispatchEvent): void => {
     streamingLine = false;
   }
 
-  switch (e._tag) {
-    case "Calling":
+  Match.value(e).pipe(
+    Match.tag("Calling", (e) => {
       console.log(`  [${e.iteration}] calling LLM...`);
-      break;
-    case "TextDelta":
+    }),
+    Match.tag("TextDelta", (e) => {
       process.stdout.write(e.content);
       streamingLine = true;
-      break;
-    case "ThinkingDelta":
+    }),
+    Match.tag("ThinkingDelta", (e) => {
       process.stdout.write(e.content);
       streamingLine = true;
-      break;
-    case "Thinking":
+    }),
+    Match.tag("Thinking", (e) => {
       if (!streamingLine) {
         console.log(`  [${e.iteration}] thinking: ${e.content.slice(0, 120)}${e.content.length > 120 ? "…" : ""}`);
       }
-      break;
-    case "ToolCalling":
+    }),
+    Match.tag("ToolCalling", (e) => {
       console.log(`  [${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`);
-      break;
-    case "ToolResult":
+    }),
+    Match.tag("ToolResult", (e) => {
       console.log(`  [${e.iteration}] ← ${e.tool}: ${e.content.slice(0, 80)}${e.content.length > 80 ? "…" : ""}`);
-      break;
-    case "Done":
-      break;
-  }
+    }),
+    Match.tag("Done", () => {}),
+    Match.exhaustive,
+  );
 };
 
 // ---------------------------------------------------------------------------

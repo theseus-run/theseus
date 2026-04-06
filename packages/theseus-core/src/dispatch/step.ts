@@ -15,14 +15,34 @@
  *   runToolCalls    — execute all tool calls in parallel
  */
 
-import { Effect, Option, Schedule, Stream } from "effect";
+import { Effect, Match, Option, Schedule, Stream } from "effect";
 import { AgentError } from "../agent/index.ts";
-import type { LLMStreamChunk, LLMToolCall, LLMToolDef } from "../llm/provider.ts";
+import type { LLMMessage, LLMResponse, LLMStreamChunk, LLMToolCall, LLMToolDef } from "../llm/provider.ts";
 import { LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
-import type { LLMMessage } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import type { StepResult, ToolCallResult } from "./types.ts";
+
+// ---------------------------------------------------------------------------
+// responseToStepResult — map LLMResponse → StepResult (shared by step/stepStream)
+// ---------------------------------------------------------------------------
+
+const responseToStepResult = (r: LLMResponse): StepResult =>
+  Match.value(r).pipe(
+    Match.when({ type: "text" }, (r) => ({
+      _tag: "text" as const,
+      content: r.content,
+      ...(r.thinking ? { thinking: r.thinking } : {}),
+      usage: r.usage,
+    })),
+    Match.when({ type: "tool_calls" }, (r) => ({
+      _tag: "tool_calls" as const,
+      toolCalls: r.toolCalls,
+      ...(r.thinking ? { thinking: r.thinking } : {}),
+      usage: r.usage,
+    })),
+    Match.exhaustive,
+  );
 
 // ---------------------------------------------------------------------------
 // Default LLM retry schedule — 3 retries, 500ms exponential jittered
@@ -157,21 +177,7 @@ export const step = (
       ),
     );
 
-    if (response.type === "text") {
-      return {
-        _tag: "text" as const,
-        content: response.content,
-        ...(response.thinking ? { thinking: response.thinking } : {}),
-        usage: response.usage,
-      };
-    }
-
-    return {
-      _tag: "tool_calls" as const,
-      toolCalls: response.toolCalls,
-      ...(response.thinking ? { thinking: response.thinking } : {}),
-      usage: response.usage,
-    };
+    return responseToStepResult(response);
   });
 
 // ---------------------------------------------------------------------------
@@ -218,20 +224,5 @@ export const stepStream = (
       );
     }
 
-    const r = lastChunk.value.response;
-    if (r.type === "text") {
-      return {
-        _tag: "text" as const,
-        content: r.content,
-        ...(r.thinking ? { thinking: r.thinking } : {}),
-        usage: r.usage,
-      };
-    }
-
-    return {
-      _tag: "tool_calls" as const,
-      toolCalls: r.toolCalls,
-      ...(r.thinking ? { thinking: r.thinking } : {}),
-      usage: r.usage,
-    };
+    return responseToStepResult(lastChunk.value.response);
   });

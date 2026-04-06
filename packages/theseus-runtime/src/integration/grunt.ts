@@ -5,7 +5,7 @@
  */
 
 import { readdirSync, readFileSync } from "node:fs";
-import { Effect, Stream } from "effect";
+import { Effect, Match, Stream } from "effect";
 import { type Blueprint, defineTool, type DispatchEvent, grunt, manualSchema } from "@theseus.run/core";
 import { CopilotProviderLive } from "../providers/copilot.ts";
 
@@ -73,39 +73,36 @@ const renderEvent = (e: DispatchEvent): void => {
     streamingLine = false;
   }
 
-  switch (e._tag) {
-    case "Calling":
+  Match.value(e).pipe(
+    Match.tag("Calling", (e) => {
       console.log(dim(`  [iter ${e.iteration}] calling LLM...`));
-      break;
-    case "TextDelta":
+    }),
+    Match.tag("TextDelta", (e) => {
       process.stdout.write(e.content);
       streamingLine = true;
-      break;
-    case "ThinkingDelta":
+    }),
+    Match.tag("ThinkingDelta", (e) => {
       process.stdout.write(dim(e.content));
       streamingLine = true;
-      break;
-    case "Thinking": {
-      // Full thinking from non-streaming fallback — only show if no deltas were emitted
+    }),
+    Match.tag("Thinking", (e) => {
       if (!streamingLine) {
         const preview = e.content.slice(0, 200);
         const truncated = e.content.length > 200 ? "…" : "";
         console.log(yellow(`  [iter ${e.iteration}] thinking: ${preview}${truncated}`));
       }
-      break;
-    }
-    case "ToolCalling":
+    }),
+    Match.tag("ToolCalling", (e) => {
       console.log(cyan(`  [iter ${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`));
-      break;
-    case "ToolResult": {
+    }),
+    Match.tag("ToolResult", (e) => {
       const preview = e.content.slice(0, 120);
       const truncated = e.content.length > 120 ? "…" : "";
       console.log(green(`  [iter ${e.iteration}] ← ${e.tool}: ${preview}${truncated}`));
-      break;
-    }
-    case "Done":
-      break;
-  }
+    }),
+    Match.tag("Done", () => {}),
+    Match.exhaustive,
+  );
 };
 
 // ---------------------------------------------------------------------------

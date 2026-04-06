@@ -447,9 +447,10 @@ describe("DispatchHandle — events stream", () => {
 
   test("Done event carries AgentResult", async () => {
     const events = await collectEvents(blueprint, "task", [textResp("result text", 5, 3)]);
-    const done = events.find((e) => e._tag === "Done") as Extract<DispatchEvent, { _tag: "Done" }>;
-    expect(done.result.content).toBe("result text");
-    expect(done.result.usage).toEqual({ inputTokens: 5, outputTokens: 3 });
+    const done = events.find((e): e is Extract<DispatchEvent, { _tag: "Done" }> => e._tag === "Done");
+    expect(done).toBeDefined();
+    expect(done!.result.content).toBe("result text");
+    expect(done!.result.usage).toEqual({ inputTokens: 5, outputTokens: 3 });
   });
 
   test("emits Thinking event when LLM response includes thinking content", async () => {
