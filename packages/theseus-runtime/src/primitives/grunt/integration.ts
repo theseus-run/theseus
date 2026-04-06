@@ -100,15 +100,13 @@ const program = Effect.gen(function* () {
     `List the contents of "${primitivesDir}" and give me a one-paragraph summary of what primitives are implemented there.`,
   );
 
-  // Stream events to console while waiting for result
-  const eventsP = Effect.runPromise(
-    Stream.tap(handle.events, (e) => Effect.sync(() => renderEvent(e))).pipe(
-      Stream.runDrain,
-    ),
+  // Drain events to console in the background
+  yield* Stream.tap(handle.events, (e) => Effect.sync(() => renderEvent(e))).pipe(
+    Stream.runDrain,
+    Effect.forkDetach,
   );
 
   const result = yield* handle.result;
-  await eventsP;
 
   console.log("\n" + "─".repeat(60));
   console.log(result.content);

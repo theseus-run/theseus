@@ -18,7 +18,7 @@
  * dispatchAwait — convenience for callers that only care about the result.
  */
 
-import { Cause, Deferred, Effect, Exit, Fiber, Queue, Schedule, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Queue, Schedule, Stream } from "effect";
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
@@ -112,7 +112,7 @@ export const dispatch = (
       inputSchema: t.inputSchema,
     }));
 
-    const eventQueue = yield* Queue.unbounded<GruntEvent>();
+    const eventQueue = yield* Queue.unbounded<GruntEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
     const resultDeferred = yield* Deferred.make<AgentResult, AgentError>();
 
@@ -127,27 +127,28 @@ export const dispatch = (
     const drainInjections = (
       messages: ReadonlyArray<LLMMessage>,
     ): Effect.Effect<ReadonlyArray<LLMMessage> | null> =>
-      Queue.takeAll(injectionQueue).pipe(
-        Effect.map((chunk) => {
-          let current = messages;
-          for (const inj of chunk) {
-            if (inj._tag === "Interrupt") return null;
-            if (inj._tag === "AppendMessages") {
-              current = [...current, ...inj.messages];
-            } else if (inj._tag === "ReplaceMessages") {
-              current = inj.messages;
-            } else if (inj._tag === "Redirect") {
-              // Keep system message, replace task
-              current = [
-                current[0],
-                { role: "user" as const, content: inj.task },
-              ];
-            }
-            // CollapseContext — no-op for now
+      Effect.gen(function* () {
+        let current = messages;
+        let opt = yield* Queue.poll(injectionQueue);
+        while (Option.isSome(opt)) {
+          const inj = opt.value;
+          if (inj._tag === "Interrupt") return null;
+          if (inj._tag === "AppendMessages") {
+            current = [...current, ...inj.messages];
+          } else if (inj._tag === "ReplaceMessages") {
+            current = inj.messages;
+          } else if (inj._tag === "Redirect") {
+            // Keep system message, replace task
+            current = [
+              current[0]!,
+              { role: "user" as const, content: inj.task },
+            ];
           }
-          return current;
-        }),
-      );
+          // CollapseContext — no-op for now
+          opt = yield* Queue.poll(injectionQueue);
+        }
+        return current;
+      });
 
     // -----------------------------------------------------------------------
     // runToolCall — execute a single tool call.
@@ -198,6 +199,10 @@ export const dispatch = (
       iterations: number,
     ): Effect.Effect<AgentResult, AgentError, LLMProvider> =>
       Effect.gen(function* () {
+        // Yield to the scheduler at each iteration boundary.
+        // Lets injections and interrupts arrive between iterations.
+        yield* Effect.yieldNow;
+
         // Drain injection queue — may modify messages or signal interrupt
         const next = yield* drainInjections(messages);
         if (next === null)
@@ -296,13 +301,9 @@ export const dispatch = (
       { role: "user", content: task },
     ];
 
-    // Capture the provider before forking — forkDetach does not inherit
-    // the parent fiber's environment in Effect v4.
-    const provider = yield* LLMProvider;
-
-    // Fork the loop. onExit writes the result into resultDeferred — decoupled
-    // from Fiber.await so forkDetach's supervision model doesn't matter.
-    const loopFiber = yield* Effect.forkDetach(
+    // Fork the loop. onExit writes the result into resultDeferred.
+    // Child fiber inherits parent.services (including LLMProvider) automatically.
+    const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
       loop(initialMessages, zeroUsage, 0).pipe(
         Effect.tap((result) =>
           emit({ _tag: "Done", agent: blueprint.name, result }),
@@ -319,8 +320,7 @@ export const dispatch = (
                 : Deferred.failCause(resultDeferred, cause),
           }),
         ),
-        Effect.ensuring(Queue.shutdown(eventQueue)),
-        Effect.provideService(LLMProvider, provider),
+        Effect.ensuring(Queue.end(eventQueue)),
       ),
     );
 
