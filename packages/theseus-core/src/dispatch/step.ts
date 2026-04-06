@@ -1,7 +1,7 @@
 /**
- * Step — one LLM call. Pure — no tool execution, no fiber, no events, no loop.
+ * Step — one LLM call via LanguageModel. Pure — no tool execution, no loop.
  *
- *   step(messages, tools, agentName)
+ *   stepStream(messages, tools, agentName, onChunk)
  *     → StepText      { _tag: "text", content, usage }
  *     → StepToolCalls  { _tag: "tool_calls", toolCalls, usage }
  *
@@ -9,98 +9,84 @@
  * and gives callers control over intermediate steps (event emission,
  * interrupt checks) between receiving tool_calls and executing them.
  *
- * Exported helpers:
- *   extractToolDefs — Tool[] → LLMToolDef[]
- *   runToolCall     — execute a single tool call (errors become strings)
- *   runToolCalls    — execute all tool calls in parallel
+ * Uses LanguageModel from effect/unstable/ai with disableToolCallResolution: true
+ * so that our dispatch loop retains full control over tool execution.
  */
 
-import { Effect, Match, Option, Schedule, Stream } from "effect";
+import { Effect, Match, Schedule, Stream } from "effect";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as Prompt from "effect/unstable/ai/Prompt";
+import type * as Response from "effect/unstable/ai/Response";
+import * as AiError from "effect/unstable/ai/AiError";
 import { AgentError } from "../agent/index.ts";
-import type { LLMMessage, LLMResponse, LLMStreamChunk, LLMToolCall, LLMToolDef } from "../llm/provider.ts";
-import { LLMError, LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
-import type { StepResult, ToolCallResult } from "./types.ts";
+import { llmMessagesToPrompt } from "../bridge/to-prompt.ts";
+import { theseusToolsToToolkit } from "../bridge/to-ai-tools.ts";
+import type { Message, StepResult, ToolCall, ToolCallResult, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
-// responseToStepResult — map LLMResponse → StepResult (shared by step/stepStream)
+// responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
 // ---------------------------------------------------------------------------
 
-const responseToStepResult = (r: LLMResponse): StepResult =>
-  Match.value(r).pipe(
-    Match.when({ type: "text" }, (r) => ({
-      _tag: "text" as const,
-      content: r.content,
-      ...(r.thinking ? { thinking: r.thinking } : {}),
-      usage: r.usage,
-    })),
-    Match.when({ type: "tool_calls" }, (r) => ({
-      _tag: "tool_calls" as const,
-      toolCalls: r.toolCalls,
-      ...(r.thinking ? { thinking: r.thinking } : {}),
-      usage: r.usage,
-    })),
-    Match.exhaustive,
+const extractUsage = (parts: ReadonlyArray<Response.PartEncoded>): Usage =>
+  parts.reduce<Usage>(
+    (acc, part) =>
+      part.type === "finish"
+        ? {
+            inputTokens: (part as any).usage?.inputTokens?.total ?? acc.inputTokens,
+            outputTokens: (part as any).usage?.outputTokens?.total ?? acc.outputTokens,
+          }
+        : acc,
+    { inputTokens: 0, outputTokens: 0 },
   );
 
+const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): StepResult => {
+  const text = parts
+    .filter((p): p is Response.TextPartEncoded => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+
+  const thinking = parts
+    .filter((p) => p.type === "reasoning")
+    .map((p) => (p as { text: string }).text)
+    .join("");
+
+  const toolCalls: ToolCall[] = parts
+    .filter((p): p is Response.ToolCallPartEncoded => p.type === "tool-call")
+    .map((tc) => ({
+      id: tc.id,
+      name: tc.name,
+      arguments: JSON.stringify(tc.params),
+    }));
+
+  const usage = extractUsage(parts);
+
+  return toolCalls.length > 0
+    ? { _tag: "tool_calls", toolCalls, ...(thinking ? { thinking } : {}), usage }
+    : { _tag: "text", content: text, ...(thinking ? { thinking } : {}), usage };
+};
+
 // ---------------------------------------------------------------------------
-// mapLLMError — convert LLM errors to AgentError (shared by step/stepStream)
+// mapAiError — convert AiError to AgentError
 // ---------------------------------------------------------------------------
 
-const mapLLMErrors = (agentName: string) => <A>(
-  effect: Effect.Effect<A, LLMError | LLMErrorRetriable>,
+const mapAiErrors = (agentName: string) => <A>(
+  effect: Effect.Effect<A, AiError.AiError>,
 ): Effect.Effect<A, AgentError> =>
   effect.pipe(
-    Effect.catchTag("LLMErrorRetriable", (e) =>
-      Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
-    ),
-    Effect.catchTag("LLMError", (e) =>
-      Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
+    Effect.catchTag("AiError", (e) =>
+      Effect.fail(new AgentError({ agent: agentName, message: `${e.module}.${e.method}: ${e.reason._tag}`, cause: e })),
     ),
   );
-
-// ---------------------------------------------------------------------------
-// Default LLM retry schedule — 3 retries, 500ms exponential jittered
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_LLM_RETRY_SCHEDULE = Schedule.both(
-  Schedule.exponential("500 millis").pipe(Schedule.jittered),
-  Schedule.recurs(3),
-);
-
-// ---------------------------------------------------------------------------
-// extractToolDefs — Tool[] → LLMToolDef[]
-// ---------------------------------------------------------------------------
-
-export const extractToolDefs = (
-  tools: ReadonlyArray<ToolAny>,
-): ReadonlyArray<LLMToolDef> =>
-  tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-  }));
-
-// ---------------------------------------------------------------------------
-// tryParseJson — best-effort JSON parse, returns raw string on failure
-// ---------------------------------------------------------------------------
-
-const tryParseJson = (str: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
-  try {
-    return { ok: true, value: JSON.parse(str) };
-  } catch {
-    return { ok: false };
-  }
-};
 
 // ---------------------------------------------------------------------------
 // tryParseArgs — best-effort JSON parse for event emission
 // ---------------------------------------------------------------------------
 
-export const tryParseArgs = (tc: LLMToolCall): unknown => {
-  const result = tryParseJson(tc.arguments);
-  return result.ok ? result.value : tc.arguments;
+export const tryParseArgs = (tc: ToolCall): unknown => {
+  try { return JSON.parse(tc.arguments); }
+  catch { return tc.arguments; }
 };
 
 // ---------------------------------------------------------------------------
@@ -110,7 +96,7 @@ export const tryParseArgs = (tc: LLMToolCall): unknown => {
 
 export const runToolCall = (
   tools: ReadonlyArray<ToolAny>,
-  tc: LLMToolCall,
+  tc: ToolCall,
 ): Effect.Effect<ToolCallResult, never> => {
   const tool = tools.find((t) => t.name === tc.name);
   if (!tool)
@@ -121,8 +107,9 @@ export const runToolCall = (
       content: `Error: unknown tool "${tc.name}"`,
     });
 
-  const parsed = tryParseJson(tc.arguments);
-  if (!parsed.ok)
+  const parsed = tryParseArgs(tc);
+  const raw = typeof parsed === "string" ? undefined : parsed;
+  if (raw === undefined)
     return Effect.succeed({
       callId: tc.id,
       name: tc.name,
@@ -130,7 +117,6 @@ export const runToolCall = (
       content: "Error: invalid JSON in tool arguments",
     });
 
-  const raw = parsed.value;
   return callTool(tool, raw).pipe(
     Effect.map((r) => r.llmContent),
     Effect.catchTags({
@@ -153,7 +139,7 @@ export const runToolCall = (
 
 export const runToolCalls = (
   tools: ReadonlyArray<ToolAny>,
-  toolCalls: ReadonlyArray<LLMToolCall>,
+  toolCalls: ReadonlyArray<ToolCall>,
 ): Effect.Effect<ReadonlyArray<ToolCallResult>, never> =>
   Effect.all(
     toolCalls.map((tc) => runToolCall(tools, tc)),
@@ -161,77 +147,82 @@ export const runToolCalls = (
   );
 
 // ---------------------------------------------------------------------------
-// step — one LLM call (pure, no tool execution)
+// stepStream — streaming LLM call via LanguageModel
 // ---------------------------------------------------------------------------
 
+/** Chunk types we forward to the dispatch loop. */
+export type StreamDelta =
+  | { readonly type: "text-delta"; readonly delta: string }
+  | { readonly type: "reasoning-delta"; readonly delta: string };
+
 /**
- * One LLM call: send messages + tool defs, retry retriable errors, return result.
- * Does NOT execute tools — returns raw toolCalls for the caller to handle.
+ * Streaming LLM call via LanguageModel.streamText with disableToolCallResolution.
  *
- * @param messages - conversation so far
- * @param tools - available tools (extracted to LLMToolDef for the call)
- * @param agentName - for error attribution
- * @param retrySchedule - override default retry for LLMErrorRetriable
+ * Emits text/thinking deltas via onChunk callback. Returns StepResult when done.
+ * Falls back to non-streaming generateText if streaming yields no result.
  */
-export const step = (
-  messages: ReadonlyArray<LLMMessage>,
+export const stepStream = (
+  messages: ReadonlyArray<Message>,
   tools: ReadonlyArray<ToolAny>,
   agentName: string,
-  retrySchedule: Schedule.Schedule<unknown, unknown> = DEFAULT_LLM_RETRY_SCHEDULE,
-): Effect.Effect<StepResult, AgentError, LLMProvider> =>
+  onChunk: (chunk: StreamDelta) => Effect.Effect<void>,
+): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
-    const toolDefs = extractToolDefs(tools);
-    const llm = yield* LLMProvider;
+    const prompt = llmMessagesToPrompt(messages);
+    const toolkit = theseusToolsToToolkit(tools);
 
-    const response = yield* llm.call(messages, toolDefs).pipe(
-      Effect.retry({
-        while: (e): e is LLMErrorRetriable => e._tag === "LLMErrorRetriable",
-        schedule: retrySchedule,
+    // Collect all parts from the stream
+    const allParts: Response.StreamPartEncoded[] = [];
+
+    yield* LanguageModel.streamText({
+      prompt,
+      toolkit,
+      disableToolCallResolution: true,
+    }).pipe(
+      Stream.tap((part) => {
+        allParts.push(part as any);
+        return Match.value(part.type).pipe(
+          Match.when("text-delta", () =>
+            onChunk({ type: "text-delta", delta: (part as any).delta }),
+          ),
+          Match.when("reasoning-delta", () =>
+            onChunk({ type: "reasoning-delta", delta: (part as any).delta }),
+          ),
+          Match.orElse(() => Effect.void),
+        );
       }),
-      mapLLMErrors(agentName),
+      Stream.runDrain,
+      mapAiErrors(agentName),
     );
 
-    return responseToStepResult(response);
+    return responsePartsToStepResult(allParts as any);
   });
 
 // ---------------------------------------------------------------------------
-// stepStream — streaming LLM call, emits deltas via callback
+// step — non-streaming LLM call via LanguageModel.generateText
 // ---------------------------------------------------------------------------
 
-/**
- * Streaming LLM call. Uses callStream if the provider supports it,
- * falls back to non-streaming step() otherwise.
- *
- * The onChunk callback is called for each text/thinking delta as it arrives.
- * Returns the same StepResult as step() once the stream completes.
- */
-export const stepStream = (
-  messages: ReadonlyArray<LLMMessage>,
+export const step = (
+  messages: ReadonlyArray<Message>,
   tools: ReadonlyArray<ToolAny>,
   agentName: string,
-  onChunk: (chunk: LLMStreamChunk) => Effect.Effect<void>,
-): Effect.Effect<StepResult, AgentError, LLMProvider> =>
+): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
-    const toolDefs = extractToolDefs(tools);
-    const llm = yield* LLMProvider;
+    const prompt = llmMessagesToPrompt(messages);
+    const toolkit = theseusToolsToToolkit(tools);
 
-    // Fall back to non-streaming if provider doesn't support it
-    if (!llm.callStream) {
-      return yield* step(messages, tools, agentName);
-    }
+    const response = yield* LanguageModel.generateText({
+      prompt,
+      toolkit,
+      disableToolCallResolution: true,
+    }).pipe(mapAiErrors(agentName));
 
-    const lastChunk = yield* llm.callStream(messages, toolDefs).pipe(
-      Stream.tap((chunk) => onChunk(chunk)),
-      Stream.runLast,
-      mapLLMErrors(agentName),
-    );
-
-    // The last chunk must be a "done" with the full response
-    if (Option.isNone(lastChunk) || lastChunk.value.type !== "done") {
-      return yield* Effect.fail(
-        new AgentError({ agent: agentName, message: "Stream ended without done chunk" }),
-      );
-    }
-
-    return responseToStepResult(lastChunk.value.response);
+    return responsePartsToStepResult(response.content.map((p) => {
+      // Convert decoded Part to PartEncoded-like shape for our reducer
+      if (p.type === "text") return { type: "text" as const, text: (p as any).text };
+      if (p.type === "reasoning") return { type: "reasoning" as const, text: (p as any).text };
+      if (p.type === "tool-call") return { type: "tool-call" as const, id: (p as any).id, name: (p as any).name, params: (p as any).params };
+      if (p.type === "finish") return p as any;
+      return p as any;
+    }));
   });

@@ -7,7 +7,7 @@
 import { Effect, Match, Stream } from "effect";
 import { type Blueprint, dispatch, type DispatchEvent } from "@theseus.run/core";
 import { CopilotProviderLive } from "../providers/copilot.ts";
-import { listDir, readFile } from "./tools.ts";
+import { allTools } from "@theseus.run/tools";
 
 // ---------------------------------------------------------------------------
 // Render event to console
@@ -60,7 +60,7 @@ const blueprint: Blueprint = {
   name: "explorer",
   systemPrompt:
     "You are a code explorer. Use tools to inspect directories and files, then give a concise summary of what you find.",
-  tools: [listDir, readFile],
+  tools: allTools,
   maxIterations: 10,
 };
 

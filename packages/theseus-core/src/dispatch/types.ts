@@ -5,7 +5,25 @@
 import type { Effect, Stream } from "effect";
 import type { AgentError } from "../agent/index.ts";
 import type { AgentResult } from "../agent/index.ts";
-import type { LLMMessage, LLMToolCall, LLMUsage } from "../llm/provider.ts";
+
+// ---------------------------------------------------------------------------
+// Usage — simple token counts for accumulation across iterations
+// ---------------------------------------------------------------------------
+
+export interface Usage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
+// ---------------------------------------------------------------------------
+// ToolCall — what the model emitted (decoded from Response.ToolCallPartEncoded)
+// ---------------------------------------------------------------------------
+
+export interface ToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: string;
+}
 
 // ---------------------------------------------------------------------------
 // ToolCallResult — parsed result of a single tool call execution
@@ -28,14 +46,14 @@ export interface StepText {
   readonly _tag: "text";
   readonly content: string;
   readonly thinking?: string;
-  readonly usage: LLMUsage;
+  readonly usage: Usage;
 }
 
 export interface StepToolCalls {
   readonly _tag: "tool_calls";
-  readonly toolCalls: ReadonlyArray<LLMToolCall>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
   readonly thinking?: string;
-  readonly usage: LLMUsage;
+  readonly usage: Usage;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,12 +70,22 @@ export type DispatchEvent =
   | { readonly _tag: "Done";          readonly agent: string; readonly result: AgentResult }
 
 // ---------------------------------------------------------------------------
+// Message — minimal message type for injection (system/user/assistant/tool)
+// ---------------------------------------------------------------------------
+
+export type Message =
+  | { readonly role: "system"; readonly content: string }
+  | { readonly role: "user"; readonly content: string }
+  | { readonly role: "assistant"; readonly content: string; readonly toolCalls?: ReadonlyArray<ToolCall> }
+  | { readonly role: "tool"; readonly toolCallId: string; readonly content: string }
+
+// ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside
 // ---------------------------------------------------------------------------
 
 export type Injection =
-  | { readonly _tag: "AppendMessages";  readonly messages: ReadonlyArray<LLMMessage> }
-  | { readonly _tag: "ReplaceMessages"; readonly messages: ReadonlyArray<LLMMessage> }
+  | { readonly _tag: "AppendMessages";  readonly messages: ReadonlyArray<Message> }
+  | { readonly _tag: "ReplaceMessages"; readonly messages: ReadonlyArray<Message> }
   | { readonly _tag: "CollapseContext" }
   | { readonly _tag: "Interrupt";       readonly reason?: string }
   | { readonly _tag: "Redirect";        readonly task: string }
@@ -67,18 +95,8 @@ export type Injection =
 // ---------------------------------------------------------------------------
 
 export interface DispatchHandle {
-  /**
-   * Observable event stream. Completes after Done. Never fails —
-   * loop errors surface via result only.
-   */
   readonly events: Stream.Stream<DispatchEvent>
-  /** Push an injection — processed at the start of the next iteration. */
   readonly inject: (i: Injection) => Effect.Effect<void>
-  /**
-   * Preemptive cancellation — kills the loop immediately, mid-call if needed.
-   * result will fail with AgentError("Interrupted").
-   */
   readonly interrupt: Effect.Effect<void>
-  /** Await the final result. Fails with AgentError on loop failure or interrupt. */
   readonly result: Effect.Effect<AgentResult, AgentError>
 }
