@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@theseus.run/tools": ["./src/index.ts"],
+      "@theseus.run/tools/*": ["./src/*"],
+      "@theseus.run/core": ["../theseus-core/src/index.ts"],
+      "@theseus.run/core/*": ["../theseus-core/src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
