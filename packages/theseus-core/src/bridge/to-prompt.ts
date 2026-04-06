@@ -1,8 +1,8 @@
 /**
  * Bridge: LLMMessage[] → Prompt.Prompt
  *
- * Converts our internal message format to @effect/ai Prompt types.
- * Used when calling LanguageModel.generateText / streamText.
+ * Converts our internal message format to effect/unstable/ai Prompt.
+ * Uses MessageEncoded (wire format) which Prompt.make() accepts directly.
  */
 
 import * as Prompt from "effect/unstable/ai/Prompt";
@@ -12,28 +12,28 @@ import type { LLMMessage } from "../llm/provider.ts";
  * Convert an array of LLMMessage to a Prompt.Prompt.
  *
  * Mapping:
- *   system    → Prompt.SystemMessage
- *   user      → Prompt.UserMessage with TextPart
- *   assistant → Prompt.AssistantMessage with TextPart + ToolCallParts
- *   tool      → Prompt.ToolMessage with ToolResultPart
+ *   system    → { role: "system", content: string }
+ *   user      → { role: "user", content: string }
+ *   assistant → { role: "assistant", content: [TextPart?, ...ToolCallParts?] }
+ *   tool      → { role: "tool", content: [ToolResultPart] }
  */
 export const llmMessagesToPrompt = (messages: ReadonlyArray<LLMMessage>): Prompt.Prompt => {
-  const promptMessages: Array<Prompt.Message> = [];
+  const encoded: Prompt.MessageEncoded[] = [];
 
   for (const msg of messages) {
     switch (msg.role) {
       case "system":
-        promptMessages.push(Prompt.systemMessage(msg.content));
+        encoded.push({ role: "system", content: msg.content });
         break;
 
       case "user":
-        promptMessages.push(Prompt.userMessage(msg.content));
+        encoded.push({ role: "user", content: msg.content });
         break;
 
       case "assistant": {
-        const parts: Array<Prompt.Part> = [];
+        const parts: Prompt.AssistantMessagePartEncoded[] = [];
         if (msg.content) {
-          parts.push(Prompt.makePart("text", { text: msg.content }));
+          parts.push({ type: "text", text: msg.content });
         }
         if (msg.toolCalls) {
           for (const tc of msg.toolCalls) {
@@ -43,29 +43,34 @@ export const llmMessagesToPrompt = (messages: ReadonlyArray<LLMMessage>): Prompt
             } catch {
               params = {};
             }
-            parts.push(
-              Prompt.makePart("tool-call", {
-                id: tc.id,
-                name: tc.name,
-                params,
-              }),
-            );
+            parts.push({
+              type: "tool-call",
+              id: tc.id,
+              name: tc.name,
+              params,
+            });
           }
         }
-        promptMessages.push(Prompt.assistantMessage(parts));
+        encoded.push({ role: "assistant", content: parts });
         break;
       }
 
       case "tool":
-        promptMessages.push(
-          Prompt.toolMessage({
-            toolCallId: msg.toolCallId,
-            result: msg.content,
-          }),
-        );
+        encoded.push({
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              id: msg.toolCallId,
+              name: "",  // we don't track tool name in LLMMessage.tool
+              isFailure: false,
+              result: msg.content,
+            },
+          ],
+        });
         break;
     }
   }
 
-  return Prompt.make(promptMessages);
+  return Prompt.make(encoded);
 };
