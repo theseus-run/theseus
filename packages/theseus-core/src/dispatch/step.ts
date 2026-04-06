@@ -18,7 +18,7 @@
 import { Effect, Match, Option, Schedule, Stream } from "effect";
 import { AgentError } from "../agent/index.ts";
 import type { LLMMessage, LLMResponse, LLMStreamChunk, LLMToolCall, LLMToolDef } from "../llm/provider.ts";
-import { LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
+import { LLMError, LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import type { StepResult, ToolCallResult } from "./types.ts";
@@ -45,6 +45,22 @@ const responseToStepResult = (r: LLMResponse): StepResult =>
   );
 
 // ---------------------------------------------------------------------------
+// mapLLMError — convert LLM errors to AgentError (shared by step/stepStream)
+// ---------------------------------------------------------------------------
+
+const mapLLMErrors = (agentName: string) => <A>(
+  effect: Effect.Effect<A, LLMError | LLMErrorRetriable>,
+): Effect.Effect<A, AgentError> =>
+  effect.pipe(
+    Effect.catchTag("LLMErrorRetriable", (e) =>
+      Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
+    ),
+    Effect.catchTag("LLMError", (e) =>
+      Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
+    ),
+  );
+
+// ---------------------------------------------------------------------------
 // Default LLM retry schedule — 3 retries, 500ms exponential jittered
 // ---------------------------------------------------------------------------
 
@@ -67,15 +83,24 @@ export const extractToolDefs = (
   }));
 
 // ---------------------------------------------------------------------------
+// tryParseJson — best-effort JSON parse, returns raw string on failure
+// ---------------------------------------------------------------------------
+
+const tryParseJson = (str: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
+  try {
+    return { ok: true, value: JSON.parse(str) };
+  } catch {
+    return { ok: false };
+  }
+};
+
+// ---------------------------------------------------------------------------
 // tryParseArgs — best-effort JSON parse for event emission
 // ---------------------------------------------------------------------------
 
 export const tryParseArgs = (tc: LLMToolCall): unknown => {
-  try {
-    return JSON.parse(tc.arguments);
-  } catch {
-    return tc.arguments;
-  }
+  const result = tryParseJson(tc.arguments);
+  return result.ok ? result.value : tc.arguments;
 };
 
 // ---------------------------------------------------------------------------
@@ -96,18 +121,16 @@ export const runToolCall = (
       content: `Error: unknown tool "${tc.name}"`,
     });
 
-  let raw: unknown;
-  try {
-    raw = JSON.parse(tc.arguments);
-  } catch {
+  const parsed = tryParseJson(tc.arguments);
+  if (!parsed.ok)
     return Effect.succeed({
       callId: tc.id,
       name: tc.name,
       args: tc.arguments,
       content: "Error: invalid JSON in tool arguments",
     });
-  }
 
+  const raw = parsed.value;
   return callTool(tool, raw).pipe(
     Effect.map((r) => r.llmContent),
     Effect.catchTags({
@@ -165,16 +188,7 @@ export const step = (
         while: (e): e is LLMErrorRetriable => e._tag === "LLMErrorRetriable",
         schedule: retrySchedule,
       }),
-      Effect.catchTag("LLMErrorRetriable", (e) =>
-        Effect.fail(
-          new AgentError({ agent: agentName, message: e.message, cause: e }),
-        ),
-      ),
-      Effect.catchTag("LLMError", (e) =>
-        Effect.fail(
-          new AgentError({ agent: agentName, message: e.message, cause: e }),
-        ),
-      ),
+      mapLLMErrors(agentName),
     );
 
     return responseToStepResult(response);
@@ -209,12 +223,7 @@ export const stepStream = (
     const lastChunk = yield* llm.callStream(messages, toolDefs).pipe(
       Stream.tap((chunk) => onChunk(chunk)),
       Stream.runLast,
-      Effect.catchTag("LLMErrorRetriable", (e) =>
-        Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
-      ),
-      Effect.catchTag("LLMError", (e) =>
-        Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
-      ),
+      mapLLMErrors(agentName),
     );
 
     // The last chunk must be a "done" with the full response

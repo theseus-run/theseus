@@ -261,7 +261,7 @@ const parseSSELines = <E>(
       const combined = buffer + chunk;
       const parts = combined.split("\n");
       // Last element may be incomplete — carry it forward
-      const carry = parts.pop()!;
+      const carry = parts.pop() ?? "";
       return [carry, parts] as const;
     }),
     // Extract "data: " payloads, skip empty lines and comments
@@ -371,8 +371,8 @@ class ToolCallAccumulator {
     if (data.type === "response.function_call_arguments.done") {
       this.toolCalls.push({
         id: data.call_id || data.item_id || "",
-        name: data.name as string,
-        arguments: data.arguments as string,
+        name: data.name ?? "",
+        arguments: data.arguments ?? "",
       });
     }
   }
@@ -575,6 +575,31 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
         return { req, useResponses, model };
       });
 
+    // Shared: execute HTTP request, check status, return response
+    const executeRequest = (
+      req: HttpClientRequest.HttpClientRequest,
+    ) =>
+      Effect.gen(function* () {
+        const res = yield* http
+          .execute(req)
+          .pipe(
+            Effect.mapError(
+              (cause) => new CopilotHttpError({ status: 0, body: String(cause) }),
+            ),
+          );
+
+        if (res.status !== 200) {
+          const text = yield* res.text.pipe(
+            Effect.mapError((cause) => new CopilotParseError({ cause })),
+          );
+          return yield* Effect.fail(
+            new CopilotHttpError({ status: res.status, body: text }),
+          );
+        }
+
+        return res;
+      });
+
     return LLMProvider.of({
       call: (
         messages: ReadonlyArray<LLMMessage>,
@@ -583,23 +608,7 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
       ) =>
         Effect.gen(function* () {
           const { req, useResponses, model } = yield* buildRequest(messages, tools, options, false);
-
-          const res = yield* http
-            .execute(req)
-            .pipe(
-              Effect.mapError(
-                (cause) => new CopilotHttpError({ status: 0, body: String(cause) }),
-              ),
-            );
-
-          if (res.status !== 200) {
-            const text = yield* res.text.pipe(
-              Effect.mapError((cause) => new CopilotParseError({ cause })),
-            );
-            return yield* Effect.fail(
-              new CopilotHttpError({ status: res.status, body: text }),
-            );
-          }
+          const res = yield* executeRequest(req);
 
           const data = yield* res.json.pipe(
             Effect.mapError((cause) => new CopilotParseError({ cause })),
@@ -618,23 +627,7 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
         Stream.unwrap(
           Effect.gen(function* () {
             const { req, useResponses } = yield* buildRequest(messages, tools, options, true);
-
-            const res = yield* http
-              .execute(req)
-              .pipe(
-                Effect.mapError(
-                  (cause) => new CopilotHttpError({ status: 0, body: String(cause) }),
-                ),
-              );
-
-            if (res.status !== 200) {
-              const text = yield* res.text.pipe(
-                Effect.mapError((cause) => new CopilotParseError({ cause })),
-              );
-              return yield* Effect.fail(
-                new CopilotHttpError({ status: res.status, body: text }),
-              );
-            }
+            const res = yield* executeRequest(req);
 
             const sseLines = parseSSELines(
               Stream.mapError(res.stream, () => new CopilotHttpError({ status: 0, body: "Stream read error" })),

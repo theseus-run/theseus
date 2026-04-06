@@ -46,21 +46,23 @@ const drainInjections = (
   messages: ReadonlyArray<LLMMessage>,
 ): Effect.Effect<ReadonlyArray<LLMMessage> | null> =>
   Effect.gen(function* () {
-    let current: ReadonlyArray<LLMMessage> | null = messages;
+    let current = messages;
     let opt = yield* Queue.poll(injectionQueue);
     while (Option.isSome(opt)) {
-      current = Match.value(opt.value).pipe(
-        Match.tag("Interrupt", () => null),
-        Match.tag("AppendMessages", (i) => [...current!, ...i.messages]),
+      const prev = current;
+      const next = Match.value(opt.value).pipe(
+        Match.tag("Interrupt", () => null as ReadonlyArray<LLMMessage> | null),
+        Match.tag("AppendMessages", (i) => [...prev, ...i.messages]),
         Match.tag("ReplaceMessages", (i) => i.messages),
         Match.tag("Redirect", (i) => [
-          current![0] ?? { role: "system" as const, content: "" },
+          prev[0] ?? { role: "system" as const, content: "" },
           { role: "user" as const, content: i.task },
         ]),
-        Match.tag("CollapseContext", () => current), // no-op
+        Match.tag("CollapseContext", () => prev), // no-op
         Match.exhaustive,
       );
-      if (current === null) return null;
+      if (next === null) return null;
+      current = next;
       opt = yield* Queue.poll(injectionQueue);
     }
     return current;
