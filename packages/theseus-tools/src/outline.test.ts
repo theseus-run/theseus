@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
 import { callTool } from "@theseus.run/core";
-import { outline } from "./outline.ts";
+import { outline } from "./outline/index.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

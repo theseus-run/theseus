@@ -12,7 +12,7 @@ export { grep } from "./grep.ts";
 export { searchReplace } from "./search_replace.ts";
 export { writeFile } from "./write_file.ts";
 export { shell } from "./shell.ts";
-export { outline } from "./outline.ts";
+export { outline } from "./outline/index.ts";
 
 // Re-export as collections for toolset assembly
 import { readFile } from "./read_file.ts";
@@ -22,7 +22,7 @@ import { grep } from "./grep.ts";
 import { searchReplace } from "./search_replace.ts";
 import { writeFile } from "./write_file.ts";
 import { shell } from "./shell.ts";
-import { outline } from "./outline.ts";
+import { outline } from "./outline/index.ts";
 
 import type { ToolAny } from "@theseus.run/core";
 
