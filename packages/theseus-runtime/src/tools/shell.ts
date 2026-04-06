@@ -55,6 +55,7 @@ export const shell = defineTool<Input, string>({
       Effect.timeout(Duration.millis(timeout)),
       Effect.catchTag("TimeoutError", () =>
         Effect.fail(retriable(`Command timed out after ${timeout}ms: ${command}`)),
+      ),
       Effect.flatMap((result) => {
         const stdout = truncateOutput(result.stdout.toString(), MAX_OUTPUT_BYTES);
         const stderr = result.stderr.toString().trim();
