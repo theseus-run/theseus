@@ -59,13 +59,30 @@ const readFile = defineTool<{ path: string }, string>({
 // Render event to console
 // ---------------------------------------------------------------------------
 
+let streamingLine = false;
+
 const renderEvent = (e: DispatchEvent): void => {
+  if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
+    process.stdout.write("\n");
+    streamingLine = false;
+  }
+
   switch (e._tag) {
     case "Calling":
       console.log(`  [${e.iteration}] calling LLM...`);
       break;
+    case "TextDelta":
+      process.stdout.write(e.content);
+      streamingLine = true;
+      break;
+    case "ThinkingDelta":
+      process.stdout.write(e.content);
+      streamingLine = true;
+      break;
     case "Thinking":
-      console.log(`  [${e.iteration}] thinking: ${e.content.slice(0, 120)}${e.content.length > 120 ? "…" : ""}`);
+      if (!streamingLine) {
+        console.log(`  [${e.iteration}] thinking: ${e.content.slice(0, 120)}${e.content.length > 120 ? "…" : ""}`);
+      }
       break;
     case "ToolCalling":
       console.log(`  [${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`);

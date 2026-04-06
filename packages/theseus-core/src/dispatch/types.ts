@@ -43,11 +43,13 @@ export interface StepToolCalls {
 // ---------------------------------------------------------------------------
 
 export type DispatchEvent =
-  | { readonly _tag: "Calling";     readonly agent: string; readonly iteration: number }
-  | { readonly _tag: "Thinking";    readonly agent: string; readonly iteration: number; readonly content: string }
-  | { readonly _tag: "ToolCalling"; readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
-  | { readonly _tag: "ToolResult";  readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
-  | { readonly _tag: "Done";        readonly agent: string; readonly result: AgentResult }
+  | { readonly _tag: "Calling";        readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "TextDelta";      readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "ThinkingDelta";  readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "Thinking";       readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "ToolCalling";    readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
+  | { readonly _tag: "ToolResult";     readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
+  | { readonly _tag: "Done";          readonly agent: string; readonly result: AgentResult }
 
 // ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside

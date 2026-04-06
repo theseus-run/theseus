@@ -64,15 +64,34 @@ const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
+let streamingLine = false;
+
 const renderEvent = (e: DispatchEvent): void => {
+  // Close streaming line if switching to a non-delta event
+  if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
+    process.stdout.write("\n");
+    streamingLine = false;
+  }
+
   switch (e._tag) {
     case "Calling":
       console.log(dim(`  [iter ${e.iteration}] calling LLM...`));
       break;
+    case "TextDelta":
+      process.stdout.write(e.content);
+      streamingLine = true;
+      break;
+    case "ThinkingDelta":
+      process.stdout.write(dim(e.content));
+      streamingLine = true;
+      break;
     case "Thinking": {
-      const preview = e.content.slice(0, 200);
-      const truncated = e.content.length > 200 ? "…" : "";
-      console.log(yellow(`  [iter ${e.iteration}] thinking: ${preview}${truncated}`));
+      // Full thinking from non-streaming fallback — only show if no deltas were emitted
+      if (!streamingLine) {
+        const preview = e.content.slice(0, 200);
+        const truncated = e.content.length > 200 ? "…" : "";
+        console.log(yellow(`  [iter ${e.iteration}] thinking: ${preview}${truncated}`));
+      }
       break;
     }
     case "ToolCalling":

@@ -15,9 +15,9 @@
  *   runToolCalls    — execute all tool calls in parallel
  */
 
-import { Effect, Schedule } from "effect";
+import { Effect, Option, Schedule, Stream } from "effect";
 import { AgentError } from "../agent/index.ts";
-import type { LLMToolCall, LLMToolDef } from "../llm/provider.ts";
+import type { LLMStreamChunk, LLMToolCall, LLMToolDef } from "../llm/provider.ts";
 import { LLMErrorRetriable, LLMProvider } from "../llm/provider.ts";
 import type { LLMMessage } from "../llm/provider.ts";
 import type { ToolAny } from "../tool/index.ts";
@@ -171,5 +171,67 @@ export const step = (
       toolCalls: response.toolCalls,
       ...(response.thinking ? { thinking: response.thinking } : {}),
       usage: response.usage,
+    };
+  });
+
+// ---------------------------------------------------------------------------
+// stepStream — streaming LLM call, emits deltas via callback
+// ---------------------------------------------------------------------------
+
+/**
+ * Streaming LLM call. Uses callStream if the provider supports it,
+ * falls back to non-streaming step() otherwise.
+ *
+ * The onChunk callback is called for each text/thinking delta as it arrives.
+ * Returns the same StepResult as step() once the stream completes.
+ */
+export const stepStream = (
+  messages: ReadonlyArray<LLMMessage>,
+  tools: ReadonlyArray<ToolAny>,
+  agentName: string,
+  onChunk: (chunk: LLMStreamChunk) => Effect.Effect<void>,
+): Effect.Effect<StepResult, AgentError, LLMProvider> =>
+  Effect.gen(function* () {
+    const toolDefs = extractToolDefs(tools);
+    const llm = yield* LLMProvider;
+
+    // Fall back to non-streaming if provider doesn't support it
+    if (!llm.callStream) {
+      return yield* step(messages, tools, agentName);
+    }
+
+    const lastChunk = yield* llm.callStream(messages, toolDefs).pipe(
+      Stream.tap((chunk) => onChunk(chunk)),
+      Stream.runLast,
+      Effect.catchTag("LLMErrorRetriable", (e) =>
+        Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
+      ),
+      Effect.catchTag("LLMError", (e) =>
+        Effect.fail(new AgentError({ agent: agentName, message: e.message, cause: e })),
+      ),
+    );
+
+    // The last chunk must be a "done" with the full response
+    if (Option.isNone(lastChunk) || lastChunk.value.type !== "done") {
+      return yield* Effect.fail(
+        new AgentError({ agent: agentName, message: "Stream ended without done chunk" }),
+      );
+    }
+
+    const r = lastChunk.value.response;
+    if (r.type === "text") {
+      return {
+        _tag: "text" as const,
+        content: r.content,
+        ...(r.thinking ? { thinking: r.thinking } : {}),
+        usage: r.usage,
+      };
+    }
+
+    return {
+      _tag: "tool_calls" as const,
+      toolCalls: r.toolCalls,
+      ...(r.thinking ? { thinking: r.thinking } : {}),
+      usage: r.usage,
     };
   });

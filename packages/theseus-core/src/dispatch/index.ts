@@ -20,6 +20,7 @@ export type {
 // Step — pure, reusable independently
 export {
   step,
+  stepStream,
   extractToolDefs,
   tryParseArgs,
   runToolCall,

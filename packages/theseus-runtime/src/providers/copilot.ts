@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BunHttpClient } from "@effect/platform-bun";
-import { Data, Effect, Layer, Ref } from "effect";
+import { Data, Effect, Layer, Ref, Stream } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Config } from "../config.ts";
@@ -28,6 +28,7 @@ import {
   type LLMMessage,
   LLMProvider,
   type LLMResponse,
+  type LLMStreamChunk,
   type LLMToolCall,
   type LLMToolDef,
 } from "@theseus.run/core";
@@ -217,6 +218,69 @@ const parseResponsesResponse = (data: any, _model: string): LLMResponse => {
 };
 
 // ---------------------------------------------------------------------------
+// SSE parsing — shared by both streaming endpoints
+// ---------------------------------------------------------------------------
+
+/** Parse raw SSE bytes into data-line strings. Handles chunked boundaries. */
+const parseSSELines = <E>(
+  raw: Stream.Stream<Uint8Array, E>,
+): Stream.Stream<string, E> => {
+  const decoder = new TextDecoder();
+  return raw.pipe(
+    Stream.map((chunk) => decoder.decode(chunk, { stream: true })),
+    // Accumulate partial lines across chunks, emit complete lines
+    Stream.mapAccum(() => "", (buffer, chunk) => {
+      const combined = buffer + chunk;
+      const parts = combined.split("\n");
+      // Last element may be incomplete — carry it forward
+      const carry = parts.pop()!;
+      return [carry, parts] as const;
+    }),
+    // Extract "data: " payloads, skip empty lines and comments
+    Stream.filter((line): line is string => typeof line === "string" && line.startsWith("data: ")),
+    Stream.map((line) => line.slice(6)),
+    // Stop at [DONE] sentinel
+    Stream.takeWhile((data) => data !== "[DONE]"),
+  );
+};
+
+// biome-ignore lint/suspicious/noExplicitAny: external JSON
+const parseChatCompletionsChunk = (data: any): LLMStreamChunk | null => {
+  const choice = data?.choices?.[0];
+  if (!choice) return null;
+  const delta = choice.delta ?? {};
+
+  // Reasoning content delta
+  if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+    return { type: "thinking_delta", content: delta.reasoning_content };
+  }
+
+  // Text content delta
+  if (typeof delta.content === "string" && delta.content) {
+    return { type: "text_delta", content: delta.content };
+  }
+
+  return null;
+};
+
+// biome-ignore lint/suspicious/noExplicitAny: external JSON
+const parseResponsesChunk = (data: any): LLMStreamChunk | null => {
+  const eventType: string = data?.type ?? "";
+
+  if (eventType === "response.output_text.delta") {
+    const text = data?.delta as string | undefined;
+    if (text) return { type: "text_delta", content: text };
+  }
+
+  if (eventType === "response.reasoning_text.delta") {
+    const text = data?.delta as string | undefined;
+    if (text) return { type: "thinking_delta", content: text };
+  }
+
+  return null;
+};
+
+// ---------------------------------------------------------------------------
 // Error mapping — internal → LLMError | LLMErrorRetriable
 // ---------------------------------------------------------------------------
 
@@ -303,6 +367,62 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
         return fresh.bearer;
       });
 
+    // Shared: build request for a given model, messages, tools, streaming flag
+    const buildRequest = (
+      messages: ReadonlyArray<LLMMessage>,
+      tools: ReadonlyArray<LLMToolDef>,
+      options: LLMCallOptions,
+      streaming: boolean,
+    ): Effect.Effect<
+      { req: HttpClientRequest.HttpClientRequest; useResponses: boolean; model: string },
+      CopilotAuthError | CopilotParseError
+    > =>
+      Effect.gen(function* () {
+        const model = options.model ?? Config.model;
+        const maxTokens = options.maxTokens ?? Config.maxTokens;
+        const bearer = yield* getBearer();
+        const useResponses = shouldUseResponsesApi(model);
+
+        const headers = {
+          Authorization: `Bearer ${bearer}`,
+          "Content-Type": "application/json",
+          "Editor-Version": "theseus-runtime/0.0.1",
+          "Editor-Plugin-Version": "theseus-runtime/0.0.1",
+          "Copilot-Integration-Id": "vscode-chat",
+          Accept: "application/json",
+        };
+
+        let endpoint: string;
+        let body: Record<string, unknown>;
+
+        if (useResponses) {
+          endpoint = "https://api.githubcopilot.com/responses";
+          body = {
+            model,
+            input: toResponsesInput(messages),
+            max_output_tokens: maxTokens,
+            stream: streaming,
+          };
+          if (tools.length > 0) body["tools"] = toResponsesTools(tools);
+        } else {
+          endpoint = "https://api.githubcopilot.com/chat/completions";
+          body = {
+            model,
+            messages: toChatCompletionsMessages(messages),
+            max_tokens: maxTokens,
+            stream: streaming,
+          };
+          if (tools.length > 0) body["tools"] = toChatCompletionsTools(tools);
+        }
+
+        const req = HttpClientRequest.post(endpoint).pipe(
+          HttpClientRequest.setHeaders(headers),
+          HttpClientRequest.bodyJsonUnsafe(body),
+        );
+
+        return { req, useResponses, model };
+      });
+
     return LLMProvider.of({
       call: (
         messages: ReadonlyArray<LLMMessage>,
@@ -310,47 +430,7 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
         options: LLMCallOptions = {},
       ) =>
         Effect.gen(function* () {
-          const model = options.model ?? Config.model;
-          const maxTokens = options.maxTokens ?? Config.maxTokens;
-          const bearer = yield* getBearer();
-          const useResponses = shouldUseResponsesApi(model);
-
-          const headers = {
-            Authorization: `Bearer ${bearer}`,
-            "Content-Type": "application/json",
-            "Editor-Version": "theseus-runtime/0.0.1",
-            "Editor-Plugin-Version": "theseus-runtime/0.0.1",
-            "Copilot-Integration-Id": "vscode-chat",
-            Accept: "application/json",
-          };
-
-          let endpoint: string;
-          let body: Record<string, unknown>;
-
-          if (useResponses) {
-            endpoint = "https://api.githubcopilot.com/responses";
-            body = {
-              model,
-              input: toResponsesInput(messages),
-              max_output_tokens: maxTokens,
-              stream: false,
-            };
-            if (tools.length > 0) body["tools"] = toResponsesTools(tools);
-          } else {
-            endpoint = "https://api.githubcopilot.com/chat/completions";
-            body = {
-              model,
-              messages: toChatCompletionsMessages(messages),
-              max_tokens: maxTokens,
-              stream: false,
-            };
-            if (tools.length > 0) body["tools"] = toChatCompletionsTools(tools);
-          }
-
-          const req = HttpClientRequest.post(endpoint).pipe(
-            HttpClientRequest.setHeaders(headers),
-            HttpClientRequest.bodyJsonUnsafe(body),
-          );
+          const { req, useResponses, model } = yield* buildRequest(messages, tools, options, false);
 
           const res = yield* http
             .execute(req)
@@ -378,6 +458,140 @@ export const CopilotProviderLive = Layer.effect(LLMProvider)(
             ? parseResponsesResponse(data, model)
             : parseChatCompletionsResponse(data, model);
         }).pipe(Effect.mapError(mapError)),
+
+      callStream: (
+        messages: ReadonlyArray<LLMMessage>,
+        tools: ReadonlyArray<LLMToolDef>,
+        options: LLMCallOptions = {},
+      ): Stream.Stream<LLMStreamChunk, LLMError | LLMErrorRetriable> =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const { req, useResponses } = yield* buildRequest(messages, tools, options, true);
+
+            const res = yield* http
+              .execute(req)
+              .pipe(
+                Effect.mapError(
+                  (cause) => new CopilotHttpError({ status: 0, body: String(cause) }),
+                ),
+              );
+
+            if (res.status !== 200) {
+              const text = yield* res.text.pipe(
+                Effect.mapError((cause) => new CopilotParseError({ cause })),
+              );
+              return yield* Effect.fail(
+                new CopilotHttpError({ status: res.status, body: text }),
+              );
+            }
+
+            const parseChunk = useResponses ? parseResponsesChunk : parseChatCompletionsChunk;
+
+            // Accumulate full text/thinking/toolCalls for the final Done chunk
+            let contentAcc = "";
+            let thinkingAcc = "";
+            const toolCallsAcc: LLMToolCall[] = [];
+
+            // For chat/completions streaming, tool calls arrive in pieces
+            const toolCallIndex = new Map<number, { id: string; name: string; args: string }>();
+
+            const sseLines = parseSSELines(
+              Stream.mapError(res.stream, () => new CopilotHttpError({ status: 0, body: "Stream read error" })),
+            );
+            return sseLines.pipe(
+              Stream.mapError(mapError),
+              Stream.map((data) => {
+                try {
+                  // biome-ignore lint/suspicious/noExplicitAny: external SSE JSON
+                  const parsed = JSON.parse(data) as any;
+
+                  // Accumulate tool calls from chat/completions deltas
+                  if (!useResponses) {
+                    const choice = parsed?.choices?.[0];
+                    const delta = choice?.delta;
+                    if (delta?.tool_calls) {
+                      for (const tc of delta.tool_calls as Array<{
+                        index: number;
+                        id?: string;
+                        function?: { name?: string; arguments?: string };
+                      }>) {
+                        const existing = toolCallIndex.get(tc.index);
+                        if (!existing) {
+                          toolCallIndex.set(tc.index, {
+                            id: tc.id ?? "",
+                            name: tc.function?.name ?? "",
+                            args: tc.function?.arguments ?? "",
+                          });
+                        } else {
+                          if (tc.function?.arguments) existing.args += tc.function.arguments;
+                        }
+                      }
+                    }
+                  }
+
+                  // Accumulate tool calls from responses API
+                  if (useResponses) {
+                    const eventType: string = parsed?.type ?? "";
+                    if (eventType === "response.function_call_arguments.done") {
+                      toolCallsAcc.push({
+                        id: (parsed.call_id as string) || (parsed.item_id as string) || "",
+                        name: parsed.name as string,
+                        arguments: parsed.arguments as string,
+                      });
+                    }
+                  }
+
+                  const chunk = parseChunk(parsed);
+                  if (chunk) {
+                    if (chunk.type === "text_delta") contentAcc += chunk.content;
+                    if (chunk.type === "thinking_delta") thinkingAcc += chunk.content;
+                  }
+                  return chunk;
+                } catch {
+                  return null;
+                }
+              }),
+              Stream.filter((c): c is LLMStreamChunk => c !== null),
+              // Append the done chunk with the accumulated response
+              Stream.concat(
+                Stream.fromEffect(
+                  Effect.sync((): LLMStreamChunk => {
+                    // Finalize tool calls from chat/completions index
+                    if (!useResponses) {
+                      for (const [, tc] of [...toolCallIndex.entries()].sort(([a], [b]) => a - b)) {
+                        toolCallsAcc.push({ id: tc.id, name: tc.name, arguments: tc.args });
+                      }
+                    }
+
+                    const thinking = thinkingAcc || undefined;
+                    const usage = { inputTokens: 0, outputTokens: 0 }; // SSE doesn't always include usage
+
+                    if (toolCallsAcc.length > 0) {
+                      return {
+                        type: "done",
+                        response: {
+                          type: "tool_calls",
+                          toolCalls: toolCallsAcc,
+                          ...(thinking ? { thinking } : {}),
+                          usage,
+                        },
+                      };
+                    }
+                    return {
+                      type: "done",
+                      response: {
+                        type: "text",
+                        content: contentAcc,
+                        ...(thinking ? { thinking } : {}),
+                        usage,
+                      },
+                    };
+                  }),
+                ),
+              ),
+            );
+          }).pipe(Effect.mapError(mapError)),
+        ),
     });
   }),
 ).pipe(Layer.provide(BunHttpClient.layer));

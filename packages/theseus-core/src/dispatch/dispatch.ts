@@ -24,7 +24,7 @@ import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import type { LLMMessage, LLMUsage } from "../llm/provider.ts";
 import { LLMProvider } from "../llm/provider.ts";
-import { runToolCalls, step, tryParseArgs } from "./step.ts";
+import { runToolCalls, stepStream, tryParseArgs } from "./step.ts";
 import type { DispatchEvent, DispatchHandle, Injection } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -120,11 +120,19 @@ export const dispatch = (
 
         yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
-        // step() is pure — one LLM call, no tool execution
-        const result = yield* step(next, blueprint.tools, blueprint.name);
+        // stepStream() emits text/thinking deltas as they arrive, falls back to non-streaming
+        const result = yield* stepStream(next, blueprint.tools, blueprint.name, (chunk) => {
+          if (chunk.type === "text_delta") {
+            return emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: chunk.content });
+          }
+          if (chunk.type === "thinking_delta") {
+            return emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: chunk.content });
+          }
+          return Effect.void;
+        });
         const totalUsage = addUsage(usage, result.usage);
 
-        // Emit thinking content when the model provides reasoning
+        // Emit full thinking content (from non-streaming fallback or accumulated)
         if (result.thinking) {
           yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
         }

@@ -3,6 +3,7 @@ export type {
   LLMCallOptions,
   LLMMessage,
   LLMResponse,
+  LLMStreamChunk,
   LLMToolCall,
   LLMToolDef,
   LLMUsage,

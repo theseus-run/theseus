@@ -11,7 +11,7 @@
  *   tool      → result of a tool call, keyed by toolCallId
  */
 
-import { Data, Effect, ServiceMap } from "effect";
+import { Data, Effect, ServiceMap, Stream } from "effect";
 
 // ---------------------------------------------------------------------------
 // Tool call — what the model emits when it wants to invoke a tool
@@ -82,6 +82,15 @@ export interface LLMCallOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Stream chunks — incremental pieces of a streaming response
+// ---------------------------------------------------------------------------
+
+export type LLMStreamChunk =
+  | { readonly type: "text_delta"; readonly content: string }
+  | { readonly type: "thinking_delta"; readonly content: string }
+  | { readonly type: "done"; readonly response: LLMResponse };
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -113,5 +122,16 @@ export class LLMProvider extends ServiceMap.Service<
       tools: ReadonlyArray<LLMToolDef>,
       options?: LLMCallOptions,
     ) => Effect.Effect<LLMResponse, LLMError | LLMErrorRetriable>;
+
+    /**
+     * Streaming variant of call. Returns a stream of incremental chunks,
+     * ending with a `done` chunk that carries the complete LLMResponse.
+     * Optional — providers that don't support streaming can omit this.
+     */
+    readonly callStream?: (
+      messages: ReadonlyArray<LLMMessage>,
+      tools: ReadonlyArray<LLMToolDef>,
+      options?: LLMCallOptions,
+    ) => Stream.Stream<LLMStreamChunk, LLMError | LLMErrorRetriable>;
   }
 >()("LLMProvider") {}
