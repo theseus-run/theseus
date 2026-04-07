@@ -74,3 +74,18 @@ export type { GruntHandle } from "./grunt/index.ts";
 
 // Bridge — tools adapter for effect/unstable/ai interop
 export { theseusToolToAiTool, theseusToolsToToolkit, extractToolDefs } from "./bridge/to-ai-tools.ts";
+
+// Mission — unit of work
+export { MissionError, MissionErrorInvalidTransition, MissionId } from "./mission/index.ts";
+export type { Mission } from "./mission/index.ts";
+export type { MissionId as MissionIdType } from "./mission/id.ts";
+export { isValidTransition, deriveStatus } from "./mission/status.ts";
+export type { MissionStatus } from "./mission/status.ts";
+export { MissionContext } from "./mission/context.ts";
+export { MissionLive } from "./mission/layer.ts";
+export type { MissionConfig } from "./mission/layer.ts";
+
+// Capsule — append-only mission log
+export { Capsule, CapsuleError, CapsuleId } from "./capsule/index.ts";
+export type { CapsuleEvent, CapsuleEventInput, CapsuleId as CapsuleIdType } from "./capsule/index.ts";
+export { InMemoryCapsuleLive } from "./capsule/memory.ts";
