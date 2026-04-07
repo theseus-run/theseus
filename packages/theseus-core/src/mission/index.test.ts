@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { Capsule } from "../capsule/index.ts";
+import { CapsuleLive } from "../capsule/memory.ts";
 import { MissionId } from "./id.ts";
 import { isValidTransition, deriveStatus } from "./status.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
@@ -119,8 +120,12 @@ const missionConfig = {
   criteria: ["All tests pass", "Types are clean"],
 };
 
+const capsuleLayer = CapsuleLive("test-mission");
+const missionLayer = Layer.provide(MissionLive(missionConfig), capsuleLayer);
+const fullLayer = Layer.merge(capsuleLayer, missionLayer);
+
 const runMission = <A>(effect: Effect.Effect<A, any, MissionContext | Capsule>) =>
-  Effect.runPromise(Effect.provide(effect, MissionLive(missionConfig)));
+  Effect.runPromise(Effect.provide(effect, fullLayer));
 
 describe("MissionLive — creation", () => {
   test("mission starts in pending status", async () => {
@@ -187,7 +192,7 @@ describe("MissionLive — transitions", () => {
             yield* ctx.transition("done"); // pending → done is invalid
           }),
         ),
-        MissionLive(missionConfig),
+        fullLayer,
       ),
     );
     expect(error).toBeInstanceOf(MissionErrorInvalidTransition);

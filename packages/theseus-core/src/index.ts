@@ -43,7 +43,15 @@ export { callTool, DEFAULT_RETRY_SCHEDULE } from "./tool/run.ts";
 
 // Agent primitives — shared types for all agent strategies
 export { AgentError } from "./agent/index.ts";
-export type { AgentResult, Blueprint } from "./agent/index.ts";
+export type { AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
+
+// AgentComm — cross-agent communication protocol
+// Note: Briefing/WorkerPrompt jsx-md components are imported directly from
+// "@theseus.run/core/agent-comm/briefing.tsx" to avoid jsx-runtime resolution
+// issues in non-tsx consuming packages.
+export { report, makeDelegate, makeLogTool, makeReadCapsuleTool } from "./agent-comm/index.ts";
+export type { DelegateInput, ReportInput } from "./agent-comm/index.ts";
+// jsx-md components: import from "@theseus.run/core/agent-comm/briefing.tsx"
 
 // Dispatch — LLM dispatch primitive (step, loop, events, injection)
 export {
@@ -88,4 +96,4 @@ export type { MissionConfig } from "./mission/layer.ts";
 // Capsule — append-only mission log
 export { Capsule, CapsuleError, CapsuleId } from "./capsule/index.ts";
 export type { CapsuleEvent, CapsuleEventInput, CapsuleId as CapsuleIdType } from "./capsule/index.ts";
-export { InMemoryCapsuleLive } from "./capsule/memory.ts";
+export { CapsuleLive, InMemoryCapsuleLive } from "./capsule/memory.ts";

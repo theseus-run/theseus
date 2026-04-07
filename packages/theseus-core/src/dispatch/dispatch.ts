@@ -122,7 +122,35 @@ export const dispatch = (
           yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
         }
 
-        if (result._tag === "text") return { content: result.content, usage: totalUsage };
+        if (result._tag === "text") return {
+          result: "unstructured" as const,
+          summary: "",
+          content: result.content,
+          usage: totalUsage,
+        };
+
+        // Check for theseus.report — terminates the loop with structured data
+        const reportCall = result.toolCalls.find((tc) => tc.name === "theseus_report");
+        if (reportCall) {
+          const args = tryParseArgs(reportCall) as {
+            result?: string;
+            summary?: string;
+            content?: string;
+          };
+          yield* emit({
+            _tag: "ToolCalling",
+            agent: blueprint.name,
+            iteration: iterations,
+            tool: "theseus_report",
+            args,
+          });
+          return {
+            result: (args.result ?? "unstructured") as AgentResult["result"],
+            summary: args.summary ?? "",
+            content: args.content ?? "",
+            usage: totalUsage,
+          };
+        }
 
         // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
         yield* Effect.all(

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Capsule, CapsuleError, CapsuleId } from "./index.ts";
-import { InMemoryCapsuleLive } from "./memory.ts";
+import { CapsuleLive } from "./memory.ts";
 
 const run = <A>(effect: Effect.Effect<A, any, Capsule>) =>
-  Effect.runPromise(Effect.provide(effect, InMemoryCapsuleLive("test")));
+  Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
 
 describe("CapsuleId", () => {
   test("includes slug and date components", () => {
@@ -77,7 +77,7 @@ describe("Capsule.artifact + readArtifact", () => {
             return yield* capsule.readArtifact("nonexistent.md");
           }),
         ),
-        InMemoryCapsuleLive("test"),
+        CapsuleLive("test"),
       ),
     );
     expect(error).toBeInstanceOf(CapsuleError);

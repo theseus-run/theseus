@@ -1,17 +1,16 @@
 /**
- * MissionLive — scoped Layer that provisions MissionContext + Capsule.
+ * MissionLive — Layer that provisions MissionContext.
  *
- * Creates a Mission in "pending" status, provisions an in-memory Capsule,
- * and auto-logs a "mission.create" event. Dispatch/Grunt run inside
- * via Effect.provide — they don't know they're in a Mission.
+ * Requires Capsule in the environment (capsule-first architecture).
+ * Creates MissionContext with Ref-backed status, auto-logs lifecycle events.
  *
- * Transitions auto-log "mission.transition" events to the Capsule,
- * making status derivable from the event log (resumability).
+ * Usage:
+ *   const layers = Layer.merge(CapsuleLive("slug"), MissionLive(config))
+ *   Effect.provide(program, layers)
  */
 
 import { Effect, Layer, Ref } from "effect";
 import { Capsule } from "../capsule/index.ts";
-import { InMemoryCapsuleLive } from "../capsule/memory.ts";
 import type { MissionId } from "./id.ts";
 import type { Mission } from "./index.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
@@ -30,19 +29,18 @@ export interface MissionConfig {
 }
 
 // ---------------------------------------------------------------------------
-// MissionLive — Layer<MissionContext | Capsule>
+// MissionLive — Layer<MissionContext> (requires Capsule)
 // ---------------------------------------------------------------------------
 
 /**
- * Create a Mission Layer that provides MissionContext + Capsule.
+ * Create a Mission Layer that provides MissionContext.
+ * Requires Capsule already in scope (capsule-first architecture).
  *
- * The Mission starts in "pending" status. The approval gate (pending → running)
- * is the checkpoint where the human reviews the plan.
+ * The Mission starts in "pending" status. Transition to "running"
+ * is the approval gate where the human reviews the plan.
  */
-export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext | Capsule> => {
-  const capsuleLayer = InMemoryCapsuleLive(config.id);
-
-  const contextLayer = Layer.effect(MissionContext)(
+export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext, never, Capsule> =>
+  Layer.effect(MissionContext)(
     Effect.gen(function* () {
       const capsule = yield* Capsule;
       const createdAt = new Date().toISOString();
@@ -76,7 +74,6 @@ export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext |
               );
             }
             yield* Ref.set(statusRef, to);
-            // Auto-log transition for derivability
             yield* capsule.log({
               type: "mission.transition",
               by: "runtime",
@@ -86,7 +83,3 @@ export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext |
       });
     }),
   );
-
-  // Capsule must be provided first (contextLayer depends on it)
-  return Layer.merge(capsuleLayer, Layer.provide(contextLayer, capsuleLayer));
-};

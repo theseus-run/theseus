@@ -4,9 +4,14 @@
   "description": "Typed primitives for LLM agent systems — Tool, Dispatch, LLM provider interface",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./agent-comm/delegate": "./src/agent-comm/delegate.ts",
+    "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
+  },
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": {
+    "@theseus.run/jsx-md": "workspace:*",
     "effect": "4.0.0-beta.33",
     "zod": "4.3.6"
   },

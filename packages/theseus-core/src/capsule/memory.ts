@@ -1,21 +1,23 @@
 /**
- * InMemoryCapsuleLive — Ref-backed Capsule for testing and prototyping.
+ * CapsuleLive — Ref-backed in-memory Capsule.
  *
  * Events stored in Ref<CapsuleEvent[]>. Artifacts in Ref<Map<string, string>>.
- * No disk I/O. JSONL persistence is a Layer swap for later.
+ * No disk I/O. Replaceable via Effect DI with JSONL, SQLite, etc.
+ *
+ * Capsule is always-on — it exists from runtime start, not gated by Mission.
  */
 
 import { Effect, Layer, Ref } from "effect";
 import { Capsule, CapsuleError, CapsuleId, type CapsuleEvent, type CapsuleEventInput } from "./index.ts";
 
 /**
- * Create an in-memory Capsule Layer for a given slug.
+ * Create an in-memory Capsule Layer.
  *
  * Usage:
- *   const capsuleLayer = InMemoryCapsuleLive("my-mission");
+ *   const capsuleLayer = CapsuleLive("my-session");
  *   Effect.provide(program, capsuleLayer);
  */
-export const InMemoryCapsuleLive = (slug: string): Layer.Layer<Capsule> =>
+export const CapsuleLive = (slug: string): Layer.Layer<Capsule> =>
   Layer.effect(Capsule)(
     Effect.gen(function* () {
       const id = CapsuleId(slug);
@@ -50,3 +52,6 @@ export const InMemoryCapsuleLive = (slug: string): Layer.Layer<Capsule> =>
       });
     }),
   );
+
+/** @deprecated Use CapsuleLive instead */
+export const InMemoryCapsuleLive = CapsuleLive;

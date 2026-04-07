@@ -2,10 +2,15 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "types": ["bun-types"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@theseus.run/jsx-md",
     "paths": {
       "@theseus.run/core": ["./src/index.ts"],
-      "@theseus.run/core/*": ["./src/*"]
+      "@theseus.run/core/*": ["./src/*"],
+      "@theseus.run/jsx-md": ["../jsx-md/src/index.ts"],
+      "@theseus.run/jsx-md/jsx-runtime": ["../jsx-md/src/jsx-runtime.ts"],
+      "@theseus.run/jsx-md/jsx-dev-runtime": ["../jsx-md/src/jsx-dev-runtime.ts"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
