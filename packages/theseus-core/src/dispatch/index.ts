@@ -14,7 +14,6 @@ export type {
   DispatchEvent,
   DispatchHandle,
   Injection,
-  Message,
   StepResult,
   StepText,
   StepToolCalls,

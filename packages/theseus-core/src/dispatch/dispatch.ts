@@ -13,11 +13,12 @@
 
 import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentResult } from "../agent/index.ts";
 import { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { runToolCalls, stepStream, tryParseArgs } from "./step.ts";
-import type { DispatchEvent, DispatchHandle, Injection, Message, Usage } from "./types.ts";
+import type { DispatchEvent, DispatchHandle, Injection, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // addUsage — accumulate token counts
@@ -35,15 +36,15 @@ const addUsage = (a: Usage, b: Usage): Usage => ({
 
 const drainInjections = (
   injectionQueue: Queue.Queue<Injection>,
-  messages: ReadonlyArray<Message>,
-): Effect.Effect<ReadonlyArray<Message> | null> =>
+  messages: ReadonlyArray<Prompt.MessageEncoded>,
+): Effect.Effect<ReadonlyArray<Prompt.MessageEncoded> | null> =>
   Effect.gen(function* () {
     let current = messages;
     let opt = yield* Queue.poll(injectionQueue);
     while (Option.isSome(opt)) {
       const prev = current;
       const next = Match.value(opt.value).pipe(
-        Match.tag("Interrupt", () => null as ReadonlyArray<Message> | null),
+        Match.tag("Interrupt", () => null as ReadonlyArray<Prompt.MessageEncoded> | null),
         Match.tag("AppendMessages", (i) => [...prev, ...i.messages]),
         Match.tag("ReplaceMessages", (i) => i.messages),
         Match.tag("Redirect", (i) => [
@@ -84,7 +85,7 @@ export const dispatch = (
     // -----------------------------------------------------------------------
 
     const loop = (
-      messages: ReadonlyArray<Message>,
+      messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
       iterations: number,
     ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
@@ -152,25 +153,35 @@ export const dispatch = (
           { concurrency: "unbounded" },
         );
 
-        // Build messages for next iteration
-        const toolMessages: ReadonlyArray<Message> = calls.map((r) => ({
+        // Build messages for next iteration (native Prompt.MessageEncoded format)
+        const toolMessages: ReadonlyArray<Prompt.MessageEncoded> = calls.map((r) => ({
           role: "tool" as const,
-          toolCallId: r.callId,
-          content: r.content,
+          content: [{
+            type: "tool-result" as const,
+            id: r.callId,
+            name: r.name,
+            isFailure: false,
+            result: r.content,
+          }],
         }));
 
+        const assistantMsg: Prompt.MessageEncoded = {
+          role: "assistant" as const,
+          content: result.toolCalls.map((tc) => {
+            let params: unknown;
+            try { params = JSON.parse(tc.arguments); } catch { params = {}; }
+            return { type: "tool-call" as const, id: tc.id, name: tc.name, params };
+          }),
+        };
+
         return yield* loop(
-          [
-            ...next,
-            { role: "assistant" as const, content: "", toolCalls: result.toolCalls },
-            ...toolMessages,
-          ],
+          [...next, assistantMsg, ...toolMessages],
           totalUsage,
           iterations + 1,
         );
       });
 
-    const initialMessages: ReadonlyArray<Message> = [
+    const initialMessages: ReadonlyArray<Prompt.MessageEncoded> = [
       { role: "system", content: blueprint.systemPrompt },
       { role: "user", content: task },
     ];

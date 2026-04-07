@@ -1,10 +1,7 @@
 /**
- * Bridge — adapters between Theseus internal types and effect/unstable/ai.
+ * Bridge — adapter for Theseus tools → effect/unstable/ai tools.
  *
- * These bridges allow our dispatch loop and tools to interoperate with the
- * @effect/ai LanguageModel service without rewriting tool definitions.
+ * Only tools need bridging. Messages use Prompt.MessageEncoded natively.
  */
 
-export { llmMessagesToPrompt } from "./to-prompt.ts";
-export { responsePartsToStepResult } from "./from-response.ts";
 export { theseusToolToAiTool, theseusToolsToToolkit, extractToolDefs } from "./to-ai-tools.ts";

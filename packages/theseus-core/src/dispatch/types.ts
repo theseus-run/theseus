@@ -1,8 +1,11 @@
 /**
  * Dispatch types — observable events, injection, handle, and step results.
+ *
+ * Messages use Prompt.MessageEncoded from effect/unstable/ai directly.
  */
 
 import type { Effect, Stream } from "effect";
+import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentError } from "../agent/index.ts";
 import type { AgentResult } from "../agent/index.ts";
 
@@ -70,22 +73,12 @@ export type DispatchEvent =
   | { readonly _tag: "Done";          readonly agent: string; readonly result: AgentResult }
 
 // ---------------------------------------------------------------------------
-// Message — minimal message type for injection (system/user/assistant/tool)
-// ---------------------------------------------------------------------------
-
-export type Message =
-  | { readonly role: "system"; readonly content: string }
-  | { readonly role: "user"; readonly content: string }
-  | { readonly role: "assistant"; readonly content: string; readonly toolCalls?: ReadonlyArray<ToolCall> }
-  | { readonly role: "tool"; readonly toolCallId: string; readonly content: string }
-
-// ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside
 // ---------------------------------------------------------------------------
 
 export type Injection =
-  | { readonly _tag: "AppendMessages";  readonly messages: ReadonlyArray<Message> }
-  | { readonly _tag: "ReplaceMessages"; readonly messages: ReadonlyArray<Message> }
+  | { readonly _tag: "AppendMessages";  readonly messages: ReadonlyArray<Prompt.MessageEncoded> }
+  | { readonly _tag: "ReplaceMessages"; readonly messages: ReadonlyArray<Prompt.MessageEncoded> }
   | { readonly _tag: "CollapseContext" }
   | { readonly _tag: "Interrupt";       readonly reason?: string }
   | { readonly _tag: "Redirect";        readonly task: string }

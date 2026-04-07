@@ -15,14 +15,14 @@
 
 import { Effect, Match, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiError from "effect/unstable/ai/AiError";
 import { AgentError } from "../agent/index.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
-import { llmMessagesToPrompt } from "../bridge/to-prompt.ts";
 import { theseusToolsToToolkit } from "../bridge/to-ai-tools.ts";
-import type { Message, StepResult, ToolCall, ToolCallResult, Usage } from "./types.ts";
+import type { StepResult, ToolCall, ToolCallResult, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
@@ -189,13 +189,13 @@ export type StreamDelta =
  * Falls back to non-streaming generateText if streaming yields no result.
  */
 export const stepStream = (
-  messages: ReadonlyArray<Message>,
+  messages: ReadonlyArray<Prompt.MessageEncoded>,
   tools: ReadonlyArray<ToolAny>,
   agentName: string,
   onChunk: (chunk: StreamDelta) => Effect.Effect<void>,
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
-    const prompt = llmMessagesToPrompt(messages);
+    const prompt = Prompt.make(messages);
     const toolkit = theseusToolsToToolkit(tools);
 
     // Collect all parts from the stream
@@ -232,12 +232,12 @@ export const stepStream = (
 // ---------------------------------------------------------------------------
 
 export const step = (
-  messages: ReadonlyArray<Message>,
+  messages: ReadonlyArray<Prompt.MessageEncoded>,
   tools: ReadonlyArray<ToolAny>,
   agentName: string,
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
-    const prompt = llmMessagesToPrompt(messages);
+    const prompt = Prompt.make(messages);
     const toolkit = theseusToolsToToolkit(tools);
 
     const response = yield* mapAiErrors(

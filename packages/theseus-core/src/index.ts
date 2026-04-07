@@ -59,7 +59,6 @@ export type {
   DispatchEvent,
   DispatchHandle,
   Injection,
-  Message,
   StepResult,
   StepText,
   StepToolCalls,
@@ -73,7 +72,5 @@ export type {
 export { grunt, gruntAwait } from "./grunt/index.ts";
 export type { GruntHandle } from "./grunt/index.ts";
 
-// Bridge — adapters for effect/unstable/ai interop
-export { llmMessagesToPrompt } from "./bridge/to-prompt.ts";
-export { responsePartsToStepResult } from "./bridge/from-response.ts";
+// Bridge — tools adapter for effect/unstable/ai interop
 export { theseusToolToAiTool, theseusToolsToToolkit, extractToolDefs } from "./bridge/to-ai-tools.ts";
