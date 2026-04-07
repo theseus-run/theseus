@@ -202,6 +202,10 @@ const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
     ),
   );
 
+/** Get the JSON schema for a tool — reads inputSchema (set by bridge) or falls back to getJsonSchema. */
+const getToolSchema = (t: AiTool.Any): Record<string, unknown> =>
+  (t as any).inputSchema ?? AiTool.getJsonSchema(t) ?? { type: "object", properties: {} };
+
 /** Convert AI Tool definitions to /chat/completions tools format. */
 const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
   tools.map((t) => ({
@@ -209,9 +213,7 @@ const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknow
     function: {
       name: t.name,
       description: (t as any).description ?? "",
-      parameters: (t as any)._tag === "UserDefined"
-        ? AiTool.getJsonSchema(t)
-        : { type: "object", properties: {} },
+      parameters: getToolSchema(t),
     },
   }));
 
@@ -221,9 +223,7 @@ const aiToolsToResponsesTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
     type: "function",
     name: t.name,
     description: (t as any).description ?? "",
-    parameters: (t as any)._tag === "UserDefined"
-      ? AiTool.getJsonSchema(t)
-      : { type: "object", properties: {} },
+    parameters: getToolSchema(t),
   }));
 
 // ---------------------------------------------------------------------------

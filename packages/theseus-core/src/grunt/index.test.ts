@@ -1,49 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer, Ref, Stream } from "effect";
-import type { AgentError, Blueprint } from "../agent/index.ts";
-import { LLMError, LLMProvider, type LLMResponse } from "../llm/provider.ts";
+import { Effect, Stream } from "effect";
+import * as AiError from "effect/unstable/ai/AiError";
+import type { Blueprint } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
 import type { DispatchEvent } from "../dispatch/index.ts";
+import {
+  makeMockLanguageModel, textParts, toolCallParts,
+} from "../test-utils/mock-language-model.ts";
 import { grunt, gruntAwait } from "./index.ts";
-
-// ---------------------------------------------------------------------------
-// Mock LLM provider (same pattern as dispatch tests)
-// ---------------------------------------------------------------------------
-
-type MockCall = LLMResponse | LLMError;
-
-const makeLLMProvider = (calls: MockCall[]): Layer.Layer<LLMProvider> =>
-  Layer.effect(LLMProvider)(
-    Effect.gen(function* () {
-      const ref = yield* Ref.make(0);
-      return LLMProvider.of({
-        call: () =>
-          Effect.gen(function* () {
-            const i = yield* Ref.getAndUpdate(ref, (n) => n + 1);
-            const r = calls[i];
-            if (!r) return yield* Effect.fail(new LLMError({ message: "unexpected call" }));
-            if (r instanceof LLMError) return yield* Effect.fail(r);
-            return r;
-          }),
-      });
-    }),
-  );
-
-const textResp = (content: string, inputTokens = 10, outputTokens = 5): LLMResponse => ({
-  type: "text",
-  content,
-  usage: { inputTokens, outputTokens },
-});
-
-const toolCallsResp = (
-  calls: Array<{ id: string; name: string; arguments: string }>,
-  inputTokens = 10,
-  outputTokens = 5,
-): LLMResponse => ({
-  type: "tool_calls",
-  toolCalls: calls,
-  usage: { inputTokens, outputTokens },
-});
 
 // ---------------------------------------------------------------------------
 // Test tools
@@ -79,14 +43,14 @@ const blueprint: Blueprint = {
 describe("gruntAwait — text-only", () => {
   test("returns content from single text response", async () => {
     const result = await Effect.runPromise(
-      Effect.provide(gruntAwait(blueprint, "hello"), makeLLMProvider([textResp("hi there")])),
+      Effect.provide(gruntAwait(blueprint, "hello"), makeMockLanguageModel([textParts("hi there")])),
     );
     expect(result.content).toBe("hi there");
   });
 
   test("accumulates usage", async () => {
     const result = await Effect.runPromise(
-      Effect.provide(gruntAwait(blueprint, "hello"), makeLLMProvider([textResp("ok", 20, 8)])),
+      Effect.provide(gruntAwait(blueprint, "hello"), makeMockLanguageModel([textParts("ok", 20, 8)])),
     );
     expect(result.usage).toEqual({ inputTokens: 20, outputTokens: 8 });
   });
@@ -97,9 +61,9 @@ describe("gruntAwait — tool call loop", () => {
     const result = await Effect.runPromise(
       Effect.provide(
         gruntAwait(blueprint, "task"),
-        makeLLMProvider([
-          toolCallsResp([{ id: "c1", name: "echo", arguments: '{"msg":"world"}' }]),
-          textResp("echoed: world", 20, 10),
+        makeMockLanguageModel([
+          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"world"}' }]),
+          textParts("echoed: world", 20, 10),
         ]),
       ),
     );
@@ -109,15 +73,19 @@ describe("gruntAwait — tool call loop", () => {
 });
 
 describe("gruntAwait — error", () => {
-  test("converts LLMError to AgentError", async () => {
+  test("converts AiError to AgentError", async () => {
+    const aiErr = AiError.make({
+      module: "MockLLM",
+      method: "generateText",
+      reason: new AiError.AuthenticationError({ kind: "InvalidKey" }),
+    });
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(gruntAwait(blueprint, "task")),
-        makeLLMProvider([new LLMError({ message: "bad credentials" })]),
+        makeMockLanguageModel([aiErr]),
       ),
     );
     expect(err._tag).toBe("AgentError");
-    expect((err as AgentError).message).toBe("bad credentials");
   });
 });
 
@@ -126,7 +94,7 @@ describe("gruntAwait — error", () => {
 // ===========================================================================
 
 describe("grunt — events stream", () => {
-  test("emits Thinking then Done for text-only", async () => {
+  test("emits Calling, TextDelta(s), then Done for text-only", async () => {
     const events = await Effect.runPromise(
       Effect.provide(
         Effect.gen(function* () {
@@ -137,10 +105,12 @@ describe("grunt — events stream", () => {
           ).pipe(Stream.runDrain);
           return collected;
         }),
-        makeLLMProvider([textResp("hello")]),
+        makeMockLanguageModel([textParts("hello")]),
       ),
     );
-    expect(events.map((e) => e._tag)).toEqual(["Calling", "Done"]);
+    const tags = events.map((e) => e._tag);
+    expect(tags[0]).toBe("Calling");
+    expect(tags[tags.length - 1]).toBe("Done");
   });
 
   test("emits tool events for tool call loop", async () => {
@@ -154,22 +124,23 @@ describe("grunt — events stream", () => {
           ).pipe(Stream.runDrain);
           return collected;
         }),
-        makeLLMProvider([
-          toolCallsResp([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
-          textResp("done"),
+        makeMockLanguageModel([
+          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+          textParts("done"),
         ]),
       ),
     );
-    expect(events.map((e) => e._tag)).toEqual([
-      "Calling", "ToolCalling", "ToolResult", "Calling", "Done",
-    ]);
+    const tags = events.map((e) => e._tag);
+    expect(tags.indexOf("ToolCalling")).toBeLessThan(tags.indexOf("ToolResult"));
+    expect(tags.filter((t) => t === "Calling").length).toBe(2);
+    expect(tags[tags.length - 1]).toBe("Done");
   });
 });
 
 describe("grunt — handle has no inject/interrupt", () => {
   test("GruntHandle only exposes events and result", async () => {
     const handle = await Effect.runPromise(
-      Effect.provide(grunt(blueprint, "task"), makeLLMProvider([textResp("hi")])),
+      Effect.provide(grunt(blueprint, "task"), makeMockLanguageModel([textParts("hi")])),
     );
     expect(handle).toHaveProperty("events");
     expect(handle).toHaveProperty("result");

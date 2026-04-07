@@ -9,7 +9,7 @@
  */
 
 import { Data } from "effect";
-import type { LLMUsage } from "../llm/provider.ts";
+import type { Usage } from "../dispatch/types.ts";
 import type { ToolAny } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ export interface AgentResult {
   /** Final text content from the agent. */
   readonly content: string;
   /** Token usage accumulated across all LLM calls in the loop. */
-  readonly usage: LLMUsage;
+  readonly usage: Usage;
 }
 
 // ---------------------------------------------------------------------------

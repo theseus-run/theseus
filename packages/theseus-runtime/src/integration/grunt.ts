@@ -6,7 +6,7 @@
 
 import { Effect, Match, Stream } from "effect";
 import { type Blueprint, type DispatchEvent, grunt } from "@theseus.run/core";
-import { CopilotProviderLive } from "../providers/copilot.ts";
+import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
 
 // ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, CopilotProviderLive)).catch((e) => {
+Effect.runPromise(Effect.provide(program, CopilotLanguageModelLive)).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

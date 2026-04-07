@@ -147,6 +147,33 @@ export const runToolCalls = (
   );
 
 // ---------------------------------------------------------------------------
+// foldStreamParts — fold StreamPartEncoded[] into PartEncoded[]
+// ---------------------------------------------------------------------------
+
+/** Fold streaming deltas (text-start/text-delta/text-end) back into complete parts. */
+const foldStreamParts = (streamParts: ReadonlyArray<Response.StreamPartEncoded>): Response.PartEncoded[] => {
+  let text = "";
+  let reasoning = "";
+  const parts: Response.PartEncoded[] = [];
+
+  streamParts.forEach((part) =>
+    Match.value(part.type).pipe(
+      Match.when("text-delta", () => { text += (part as any).delta; }),
+      Match.when("reasoning-delta", () => { reasoning += (part as any).delta; }),
+      Match.when("tool-call", () => { parts.push(part as any); }),
+      Match.when("finish", () => { parts.push(part as any); }),
+      Match.when("error", () => { parts.push(part as any); }),
+      Match.orElse(() => {}), // text-start, text-end, etc. — no-op
+    ),
+  );
+
+  if (text) parts.unshift({ type: "text", text } as Response.TextPartEncoded);
+  if (reasoning) parts.unshift({ type: "reasoning", text: reasoning } as any);
+
+  return parts;
+};
+
+// ---------------------------------------------------------------------------
 // stepStream — streaming LLM call via LanguageModel
 // ---------------------------------------------------------------------------
 
@@ -197,7 +224,7 @@ export const stepStream = (
       ),
     );
 
-    return responsePartsToStepResult(allParts as any);
+    return responsePartsToStepResult(foldStreamParts(allParts));
   });
 
 // ---------------------------------------------------------------------------

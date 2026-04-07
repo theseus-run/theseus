@@ -7,14 +7,7 @@
 
 import { Match } from "effect";
 import type * as Response from "effect/unstable/ai/Response";
-import type { LLMToolCall, LLMUsage } from "../llm/provider.ts";
-import type { StepResult } from "../dispatch/types.ts";
-
-/** Extract usage from a FinishPartEncoded. */
-const extractUsage = (fin: { usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } } }): LLMUsage => ({
-  inputTokens: fin.usage?.inputTokens?.total ?? 0,
-  outputTokens: fin.usage?.outputTokens?.total ?? 0,
-});
+import type { StepResult, ToolCall, Usage } from "../dispatch/types.ts";
 
 /**
  * Fold response parts into accumulated text, thinking, tool calls, and usage.
@@ -32,10 +25,16 @@ const foldParts = (parts: ReadonlyArray<Response.PartEncoded>) =>
             toolCalls: [...acc.toolCalls, { id: tc.id, name: tc.name, arguments: JSON.stringify(tc.params) }],
           };
         }),
-        Match.when("finish", () => ({ ...acc, usage: extractUsage(part as any) })),
+        Match.when("finish", () => ({
+          ...acc,
+          usage: {
+            inputTokens: (part as any).usage?.inputTokens?.total ?? acc.usage.inputTokens,
+            outputTokens: (part as any).usage?.outputTokens?.total ?? acc.usage.outputTokens,
+          },
+        })),
         Match.orElse(() => acc),
       ),
-    { text: "", thinking: "", toolCalls: [] as LLMToolCall[], usage: { inputTokens: 0, outputTokens: 0 } as LLMUsage },
+    { text: "", thinking: "", toolCalls: [] as ToolCall[], usage: { inputTokens: 0, outputTokens: 0 } as Usage },
   );
 
 /**

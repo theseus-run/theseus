@@ -1,33 +1,27 @@
 /**
- * Bridge: Tool<I,O>[] → effect/unstable/ai Tool.Any[]
+ * Bridge: Tool<I,O>[] → effect/unstable/ai Tool.Any[] and Toolkit
  *
- * Wraps our Theseus tools for consumption by LanguageModel providers.
- * The bridge creates @effect/ai Tool definitions with matching name,
- * description, and JSON schema.
- *
- * Since we use disableToolCallResolution: true in our dispatch loop,
- * handlers are never called by the framework — we handle tool execution
- * ourselves via callTool.
+ * Wraps our Theseus tools for consumption by LanguageModel.
+ * Uses AiTool.dynamic which accepts any params — our dispatch loop
+ * handles decoding/execution via callTool, not the ai framework.
  */
 
-import { Schema } from "effect";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import type { ToolAny } from "../tool/index.ts";
 
 /**
- * Convert a single Theseus Tool<I,O> to an @effect/ai Tool.Any.
+ * Convert a single Theseus Tool<I,O> to an @effect/ai dynamic Tool.
  *
- * The resulting AI tool carries the same name, description, and JSON schema.
- * Parameters use Schema.Unknown since we handle decoding ourselves.
+ * Dynamic tools accept any parameters without schema validation,
+ * which is what we need since we handle validation ourselves via callTool.
  */
-export const theseusToolToAiTool = (tool: ToolAny): AiTool.Any =>
-  AiTool.make(tool.name, {
-    description: tool.description,
-    success: Schema.String,
-    failure: Schema.String,
-    failureMode: "return" as const,
-  });
+export const theseusToolToAiTool = (tool: ToolAny): AiTool.Any => {
+  const aiTool = AiTool.dynamic(tool.name, { description: tool.description });
+  // Attach inputSchema so providers can read it directly (getJsonSchema doesn't work for dynamic tools)
+  (aiTool as any).inputSchema = tool.inputSchema;
+  return aiTool;
+};
 
 /**
  * Build an @effect/ai Toolkit from an array of Theseus tools.
@@ -46,8 +40,7 @@ export const theseusToolsToToolkit = (
 
 /**
  * Extract plain tool definitions (name + description + JSON schema)
- * from Theseus tools. Used by providers that need raw tool defs
- * rather than @effect/ai Tool objects.
+ * from Theseus tools.
  */
 export const extractToolDefs = (
   tools: ReadonlyArray<ToolAny>,

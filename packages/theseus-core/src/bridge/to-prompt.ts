@@ -1,5 +1,5 @@
 /**
- * Bridge: LLMMessage[] → Prompt.Prompt
+ * Bridge: Message[] → Prompt.Prompt
  *
  * Converts our internal message format to effect/unstable/ai Prompt.
  * Uses MessageEncoded (wire format) which Prompt.make() accepts directly.
@@ -7,7 +7,7 @@
 
 import { Match } from "effect";
 import * as Prompt from "effect/unstable/ai/Prompt";
-import type { LLMMessage, LLMToolCall } from "../llm/provider.ts";
+import type { Message, ToolCall } from "../dispatch/types.ts";
 
 /** Safely parse JSON args, falling back to empty object. */
 const parseParams = (args: string): unknown => {
@@ -16,15 +16,15 @@ const parseParams = (args: string): unknown => {
 };
 
 /** Convert a tool call to the Prompt encoded wire format. */
-const toolCallToPart = (tc: LLMToolCall): Prompt.ToolCallPartEncoded => ({
+const toolCallToPart = (tc: ToolCall): Prompt.ToolCallPartEncoded => ({
   type: "tool-call",
   id: tc.id,
   name: tc.name,
   params: parseParams(tc.arguments),
 });
 
-/** Convert a single LLMMessage to the Prompt MessageEncoded wire format. */
-const messageToEncoded = (msg: LLMMessage): Prompt.MessageEncoded =>
+/** Convert a single Message to the Prompt MessageEncoded wire format. */
+const messageToEncoded = (msg: Message): Prompt.MessageEncoded =>
   Match.value(msg).pipe(
     Match.when({ role: "system" }, (m) => ({
       role: "system" as const,
@@ -55,7 +55,7 @@ const messageToEncoded = (msg: LLMMessage): Prompt.MessageEncoded =>
   );
 
 /**
- * Convert an array of LLMMessage to a Prompt.Prompt.
+ * Convert an array of Message to a Prompt.Prompt.
  */
-export const llmMessagesToPrompt = (messages: ReadonlyArray<LLMMessage>): Prompt.Prompt =>
+export const llmMessagesToPrompt = (messages: ReadonlyArray<Message>): Prompt.Prompt =>
   Prompt.make(messages.map(messageToEncoded));
