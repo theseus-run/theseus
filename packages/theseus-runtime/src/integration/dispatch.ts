@@ -4,50 +4,11 @@
  * Run:  bun run src/integration/dispatch.ts
  */
 
-import { Effect, Match, Stream } from "effect";
-import { type Blueprint, dispatch, type DispatchEvent } from "@theseus.run/core";
+import { Effect, Stream } from "effect";
+import { type Blueprint, dispatch } from "@theseus.run/core";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
-
-// ---------------------------------------------------------------------------
-// Render event to console
-// ---------------------------------------------------------------------------
-
-let streamingLine = false;
-
-const renderEvent = (e: DispatchEvent): void => {
-  if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
-    process.stdout.write("\n");
-    streamingLine = false;
-  }
-
-  Match.value(e).pipe(
-    Match.tag("Calling", (e) => {
-      console.log(`  [${e.iteration}] calling LLM...`);
-    }),
-    Match.tag("TextDelta", (e) => {
-      process.stdout.write(e.content);
-      streamingLine = true;
-    }),
-    Match.tag("ThinkingDelta", (e) => {
-      process.stdout.write(e.content);
-      streamingLine = true;
-    }),
-    Match.tag("Thinking", (e) => {
-      if (!streamingLine) {
-        console.log(`  [${e.iteration}] thinking: ${e.content.slice(0, 120)}${e.content.length > 120 ? "…" : ""}`);
-      }
-    }),
-    Match.tag("ToolCalling", (e) => {
-      console.log(`  [${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`);
-    }),
-    Match.tag("ToolResult", (e) => {
-      console.log(`  [${e.iteration}] ← ${e.tool}: ${e.content.slice(0, 80)}${e.content.length > 80 ? "…" : ""}`);
-    }),
-    Match.tag("Done", () => {}),
-    Match.exhaustive,
-  );
-};
+import { renderEvent } from "./render.ts";
 
 // ---------------------------------------------------------------------------
 // Main

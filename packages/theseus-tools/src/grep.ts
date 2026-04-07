@@ -23,9 +23,9 @@ const inputSchema = z.object({
 type Input = z.infer<typeof inputSchema>;
 
 interface GrepMatch {
-  file: string;
-  line: number;
-  content: string;
+  readonly file: string;
+  readonly line: number;
+  readonly content: string;
 }
 
 const parseRgJson = (raw: string): GrepMatch[] => {

@@ -95,7 +95,11 @@ export const makeDelegate = (
 
           const agentResult = yield* gruntAwait(briefedBlueprint, input.task).pipe(
             Effect.provide(Layer.succeed(LanguageModel.LanguageModel, lm)),
-            Effect.catchTag("AgentError", (e) => Effect.fail(fail(`Worker failed: ${e.message}`))),
+            Effect.catchTags({
+              AgentInterrupted: (e) => Effect.fail(fail(`Worker interrupted: ${e.reason ?? "unknown"}`)),
+              AgentCycleExceeded: (e) => Effect.fail(fail(`Worker exceeded cycle cap (${e.max} iterations)`)),
+              AgentLLMError: (e) => Effect.fail(fail(`Worker LLM failed: ${e.message}`)),
+            }),
           );
 
           yield* capsule.log({

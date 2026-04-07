@@ -4,60 +4,11 @@
  * Run:  bun run packages/theseus-runtime/src/integration/grunt.ts
  */
 
-import { Effect, Match, Stream } from "effect";
-import { type Blueprint, type DispatchEvent, grunt } from "@theseus.run/core";
+import { Effect, Stream } from "effect";
+import { type Blueprint, grunt } from "@theseus.run/core";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
-
-// ---------------------------------------------------------------------------
-// Render event to console
-// ---------------------------------------------------------------------------
-
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
-const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
-const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
-
-let streamingLine = false;
-
-const renderEvent = (e: DispatchEvent): void => {
-  // Close streaming line if switching to a non-delta event
-  if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
-    process.stdout.write("\n");
-    streamingLine = false;
-  }
-
-  Match.value(e).pipe(
-    Match.tag("Calling", (e) => {
-      console.log(dim(`  [iter ${e.iteration}] calling LLM...`));
-    }),
-    Match.tag("TextDelta", (e) => {
-      process.stdout.write(e.content);
-      streamingLine = true;
-    }),
-    Match.tag("ThinkingDelta", (e) => {
-      process.stdout.write(dim(e.content));
-      streamingLine = true;
-    }),
-    Match.tag("Thinking", (e) => {
-      if (!streamingLine) {
-        const preview = e.content.slice(0, 200);
-        const truncated = e.content.length > 200 ? "…" : "";
-        console.log(yellow(`  [iter ${e.iteration}] thinking: ${preview}${truncated}`));
-      }
-    }),
-    Match.tag("ToolCalling", (e) => {
-      console.log(cyan(`  [iter ${e.iteration}] → ${e.tool}(${JSON.stringify(e.args)})`));
-    }),
-    Match.tag("ToolResult", (e) => {
-      const preview = e.content.slice(0, 120);
-      const truncated = e.content.length > 120 ? "…" : "";
-      console.log(green(`  [iter ${e.iteration}] ← ${e.tool}: ${preview}${truncated}`));
-    }),
-    Match.tag("Done", () => {}),
-    Match.exhaustive,
-  );
-};
+import { renderEvent, dim, yellow } from "./render.ts";
 
 // ---------------------------------------------------------------------------
 // Main

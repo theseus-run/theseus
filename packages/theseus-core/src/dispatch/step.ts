@@ -18,11 +18,15 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiError from "effect/unstable/ai/AiError";
-import { AgentError } from "../agent/index.ts";
+import { AgentLLMError } from "../agent/index.ts";
+import type { AgentError } from "../agent/index.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import { theseusToolsToToolkit } from "../bridge/to-ai-tools.ts";
 import type { StepResult, ToolCall, ToolCallResult, Usage } from "./types.ts";
+
+/** Format any tool error into a string result (never propagates failure). */
+const formatToolError = (e: { readonly message: string }) => Effect.succeed(`Error: ${e.message}`);
 
 // ---------------------------------------------------------------------------
 // responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
@@ -76,7 +80,7 @@ const mapAiErrors = <A, R>(
 ): Effect.Effect<A, AgentError, R> =>
   effect.pipe(
     Effect.catchTag("AiError", (e) =>
-      Effect.fail(new AgentError({ agent: agentName, message: `${e.module}.${e.method}: ${e.reason._tag}`, cause: e })),
+      Effect.fail(new AgentLLMError({ agent: agentName, message: `${e.module}.${e.method}: ${e.reason._tag}`, cause: e })),
     ),
   );
 
@@ -120,9 +124,9 @@ export const runToolCall = (
   return callTool(tool, raw).pipe(
     Effect.map((r) => r.llmContent),
     Effect.catchTags({
-      ToolError: (e) => Effect.succeed(`Error: ${e.message}`),
-      ToolErrorInput: (e) => Effect.succeed(`Error: ${e.message}`),
-      ToolErrorOutput: (e) => Effect.succeed(`Error: ${e.message}`),
+      ToolError: formatToolError,
+      ToolErrorInput: formatToolError,
+      ToolErrorOutput: formatToolError,
     }),
     Effect.map((content) => ({
       callId: tc.id,
@@ -152,25 +156,24 @@ export const runToolCalls = (
 
 /** Fold streaming deltas (text-start/text-delta/text-end) back into complete parts. */
 const foldStreamParts = (streamParts: ReadonlyArray<Response.StreamPartEncoded>): Response.PartEncoded[] => {
-  let text = "";
-  let reasoning = "";
-  const parts: Response.PartEncoded[] = [];
-
-  streamParts.forEach((part) =>
-    Match.value(part.type).pipe(
-      Match.when("text-delta", () => { text += (part as any).delta; }),
-      Match.when("reasoning-delta", () => { reasoning += (part as any).delta; }),
-      Match.when("tool-call", () => { parts.push(part as any); }),
-      Match.when("finish", () => { parts.push(part as any); }),
-      Match.when("error", () => { parts.push(part as any); }),
-      Match.orElse(() => {}), // text-start, text-end, etc. — no-op
-    ),
+  const acc = streamParts.reduce(
+    (state, part) =>
+      Match.value(part.type).pipe(
+        Match.when("text-delta", () => ({ ...state, text: state.text + (part as any).delta })),
+        Match.when("reasoning-delta", () => ({ ...state, reasoning: state.reasoning + (part as any).delta })),
+        Match.when("tool-call", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
+        Match.when("finish", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
+        Match.when("error", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
+        Match.orElse(() => state),
+      ),
+    { text: "", reasoning: "", parts: [] as Response.PartEncoded[] },
   );
 
-  if (text) parts.unshift({ type: "text", text } as Response.TextPartEncoded);
-  if (reasoning) parts.unshift({ type: "reasoning", text: reasoning } as any);
-
-  return parts;
+  return [
+    ...(acc.reasoning ? [{ type: "reasoning", text: acc.reasoning } as any] : []),
+    ...(acc.text ? [{ type: "text", text: acc.text } as Response.TextPartEncoded] : []),
+    ...acc.parts,
+  ];
 };
 
 // ---------------------------------------------------------------------------

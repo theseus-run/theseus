@@ -44,16 +44,12 @@ export const fromEffectSchema = <I>(schema: Schema.Schema<I>): SchemaAdapter<I> 
 const inlineRefs = (
   properties: Record<string, unknown>,
   definitions: Record<string, unknown>,
-): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(properties)) {
-    if (value && typeof value === "object" && "$ref" in value) {
-      const ref = (value as { $ref: string }).$ref;
-      const defName = ref.replace("#/$defs/", "");
-      result[key] = definitions[defName] ?? value;
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-};
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => [
+      key,
+      value && typeof value === "object" && "$ref" in value
+        ? definitions[(value as { $ref: string }).$ref.replace("#/$defs/", "")] ?? value
+        : value,
+    ]),
+  );

@@ -6,7 +6,7 @@ import { Match } from "effect";
 import type { TreeSitterNode } from "./tree-sitter.ts";
 import type { Symbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
-import { children } from "./ast.ts";
+import { children, truncate } from "./ast.ts";
 
 /** Extract symbols from a Go AST root. */
 export const extractSymbolsGo = (root: TreeSitterNode): Symbol[] =>
@@ -27,7 +27,7 @@ export const extractSymbolsGo = (root: TreeSitterNode): Symbol[] =>
       }),
       Match.when("import_declaration", () => {
         const text = node.text;
-        return [sym(node, "import", text.length > 60 ? `${text.slice(0, 57)}...` : text, "")];
+        return [sym(node, "import", truncate(text), "")];
       }),
       Match.orElse(() => []),
     ),

@@ -48,6 +48,11 @@ class CopilotParseError extends Data.TaggedError("CopilotParseError")<{
 
 type CopilotError = CopilotAuthError | CopilotHttpError | CopilotParseError;
 
+/** Best-effort JSON parse with fallback. */
+const safeParseJson = (raw: string, fallback: unknown = {}): unknown => {
+  try { return JSON.parse(raw); } catch { return fallback; }
+};
+
 // ---------------------------------------------------------------------------
 // Token cache
 // ---------------------------------------------------------------------------
@@ -178,13 +183,13 @@ const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
         const items: unknown[] = [];
         const text = textParts.map((p: any) => p.text).join("");
         if (text) items.push({ role: "assistant", content: text });
-        toolCallParts.forEach((tc: any) =>
-          items.push({
+        items.push(
+          ...toolCallParts.map((tc: any) => ({
             type: "function_call",
             call_id: tc.id,
             name: tc.name,
             arguments: JSON.stringify(tc.params ?? {}),
-          }),
+          })),
         );
         return items;
       }),
@@ -256,16 +261,14 @@ const parseChatCompletionsToResponseParts = (data: ChatCompletionsWire): Respons
   }
 
   if (finishReason === "tool_calls" && message?.tool_calls) {
-    message.tool_calls.forEach((tc) => {
-      let params: unknown;
-      try { params = JSON.parse(tc.function.arguments); } catch { params = {}; }
-      parts.push({
-        type: "tool-call",
+    parts.push(
+      ...message.tool_calls.map((tc) => ({
+        type: "tool-call" as const,
         id: tc.id,
         name: tc.function.name,
-        params,
-      } as Response.ToolCallPartEncoded);
-    });
+        params: safeParseJson(tc.function.arguments),
+      } as Response.ToolCallPartEncoded)),
+    );
   } else {
     parts.push({ type: "text", text: message?.content ?? "" });
   }
@@ -285,38 +288,38 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
   const parts: Response.PartEncoded[] = [];
   let hasToolCalls = false;
 
-  output.forEach((item) => {
+  const items = output.flatMap((item): Response.PartEncoded[] =>
     Match.value(item.type).pipe(
-      Match.when("function_call", () => {
+      Match.when("function_call", (): Response.PartEncoded[] => {
         hasToolCalls = true;
-        let params: unknown;
-        try { params = JSON.parse((item["arguments"] as string) ?? "{}"); } catch { params = {}; }
-        parts.push({
-          type: "tool-call",
+        const params = safeParseJson((item["arguments"] as string) ?? "{}");
+        return [{
+          type: "tool-call" as const,
           id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
           name: (item["name"] as string) ?? "",
           params,
-        } as Response.ToolCallPartEncoded);
+        } as Response.ToolCallPartEncoded];
       }),
-      Match.when("reasoning", () => {
+      Match.when("reasoning", (): Response.PartEncoded[] => {
         const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
         const text = content
           .filter((p) => p.type === "reasoning_text" && p.text)
           .map((p) => p.text!)
           .join("");
-        if (text) parts.push({ type: "reasoning", text });
+        return text ? [{ type: "reasoning" as const, text }] : [];
       }),
-      Match.when("message", () => {
+      Match.when("message", (): Response.PartEncoded[] => {
         const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
         const text = content
           .filter((p) => p.type === "output_text" && p.text)
           .map((p) => p.text!)
           .join("");
-        if (text) parts.push({ type: "text", text });
+        return text ? [{ type: "text" as const, text }] : [];
       }),
-      Match.orElse(() => {}),
-    );
-  });
+      Match.orElse((): Response.PartEncoded[] => []),
+    ),
+  );
+  parts.push(...items);
 
   parts.push(makeFinishPart(
     hasToolCalls ? "tool-calls" : "stop",
@@ -373,64 +376,69 @@ class StreamAccumulator {
       });
       return null;
     }
-    if (delta.reasoning_content) {
-      if (!this.reasoningId) {
-        this.reasoningId = `reasoning_${Date.now()}`;
-        return { type: "reasoning-start", id: this.reasoningId } as any;
-      }
-      return { type: "reasoning-delta", id: this.reasoningId, delta: delta.reasoning_content } as any;
-    }
-    if (delta.content) {
-      if (!this.textId) {
-        this.textId = `text_${Date.now()}`;
-        return { type: "text-start", id: this.textId } as any;
-      }
-      return { type: "text-delta", id: this.textId, delta: delta.content } as any;
-    }
-    return null;
+    return Match.value(true).pipe(
+      Match.when(() => !!delta.reasoning_content, () => {
+        if (!this.reasoningId) {
+          this.reasoningId = `reasoning_${Date.now()}`;
+          return { type: "reasoning-start", id: this.reasoningId } as any;
+        }
+        return { type: "reasoning-delta", id: this.reasoningId, delta: delta.reasoning_content } as any;
+      }),
+      Match.when(() => !!delta.content, () => {
+        if (!this.textId) {
+          this.textId = `text_${Date.now()}`;
+          return { type: "text-start", id: this.textId } as any;
+        }
+        return { type: "text-delta", id: this.textId, delta: delta.content } as any;
+      }),
+      Match.orElse(() => null),
+    );
   }
 
   addResponsesEvent(data: ResponsesSSEEvent): Response.StreamPartEncoded | null {
     const eventType = data.type ?? "";
-    if (eventType === "response.output_item.added" && data.item?.type === "function_call") {
-      const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${Date.now()}`);
-      this.responsesCallMap.set(callId, { id: callId, name: data.item.name ?? "", args: "", done: false });
-      this.responsesCallOrder.push(callId);
-      return null;
-    }
-    if (eventType === "response.function_call_arguments.done") {
-      const callId = data.call_id ? sanitizeCallId(data.call_id) : undefined;
-      let entry = callId ? this.responsesCallMap.get(callId) : undefined;
-      if (!entry) {
-        for (const key of this.responsesCallOrder) {
-          const candidate = this.responsesCallMap.get(key);
-          if (candidate && !candidate.done) { entry = candidate; break; }
+    return Match.value(eventType).pipe(
+      Match.when("response.output_item.added", () => {
+        if (data.item?.type !== "function_call") return null;
+        const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${Date.now()}`);
+        this.responsesCallMap.set(callId, { id: callId, name: data.item.name ?? "", args: "", done: false });
+        this.responsesCallOrder.push(callId);
+        return null;
+      }),
+      Match.when("response.function_call_arguments.done", () => {
+        const callId = data.call_id ? sanitizeCallId(data.call_id) : undefined;
+        let entry = callId ? this.responsesCallMap.get(callId) : undefined;
+        if (!entry) {
+          entry = this.responsesCallOrder
+            .map((key) => this.responsesCallMap.get(key))
+            .find((candidate) => candidate && !candidate.done);
         }
-      }
-      if (entry) {
-        entry.args = data.arguments ?? entry.args;
-        entry.done = true;
-        let params: unknown;
-        try { params = JSON.parse(entry.args); } catch { params = {}; }
-        return { type: "tool-call", id: entry.id, name: entry.name || data.name || "", params } as any;
-      }
-      return null;
-    }
-    if (eventType === "response.output_text.delta" && data.delta) {
-      if (!this.textId) {
-        this.textId = `text_${Date.now()}`;
-        return { type: "text-start", id: this.textId } as any;
-      }
-      return { type: "text-delta", id: this.textId, delta: data.delta } as any;
-    }
-    if (eventType === "response.reasoning_text.delta" && data.delta) {
-      if (!this.reasoningId) {
-        this.reasoningId = `reasoning_${Date.now()}`;
-        return { type: "reasoning-start", id: this.reasoningId } as any;
-      }
-      return { type: "reasoning-delta", id: this.reasoningId, delta: data.delta } as any;
-    }
-    return null;
+        if (entry) {
+          entry.args = data.arguments ?? entry.args;
+          entry.done = true;
+          const params = safeParseJson(entry.args);
+          return { type: "tool-call", id: entry.id, name: entry.name || data.name || "", params } as any;
+        }
+        return null;
+      }),
+      Match.when("response.output_text.delta", () => {
+        if (!data.delta) return null;
+        if (!this.textId) {
+          this.textId = `text_${Date.now()}`;
+          return { type: "text-start", id: this.textId } as any;
+        }
+        return { type: "text-delta", id: this.textId, delta: data.delta } as any;
+      }),
+      Match.when("response.reasoning_text.delta", () => {
+        if (!data.delta) return null;
+        if (!this.reasoningId) {
+          this.reasoningId = `reasoning_${Date.now()}`;
+          return { type: "reasoning-start", id: this.reasoningId } as any;
+        }
+        return { type: "reasoning-delta", id: this.reasoningId, delta: data.delta } as any;
+      }),
+      Match.orElse(() => null),
+    );
   }
 
   buildFinalParts(): Response.StreamPartEncoded[] {
@@ -441,23 +449,29 @@ class StreamAccumulator {
     if (this.reasoningId) final.push({ type: "reasoning-end", id: this.reasoningId } as any);
 
     // Finalize chat/completions tool calls from index map
-    [...this.indexMap.entries()]
-      .sort(([a], [b]) => a - b)
-      .forEach(([, tc]) => {
-        let params: unknown;
-        try { params = JSON.parse(tc.args); } catch { params = {}; }
-        final.push({ type: "tool-call", id: tc.id, name: tc.name, params } as any);
-      });
+    final.push(
+      ...[...this.indexMap.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, tc]) => ({
+          type: "tool-call" as const,
+          id: tc.id,
+          name: tc.name,
+          params: safeParseJson(tc.args),
+        } as any)),
+    );
 
     // Flush unfinished responses tool calls
-    this.responsesCallOrder.forEach((key) => {
-      const tc = this.responsesCallMap.get(key);
-      if (tc && !tc.done) {
-        let params: unknown;
-        try { params = JSON.parse(tc.args); } catch { params = {}; }
-        final.push({ type: "tool-call", id: tc.id, name: tc.name, params } as any);
-      }
-    });
+    final.push(
+      ...this.responsesCallOrder
+        .map((key) => this.responsesCallMap.get(key))
+        .filter((tc): tc is NonNullable<typeof tc> => !!tc && !tc.done)
+        .map((tc) => ({
+          type: "tool-call" as const,
+          id: tc.id,
+          name: tc.name,
+          params: safeParseJson(tc.args),
+        } as any)),
+    );
 
     const hasToolCalls = this.indexMap.size > 0 || this.responsesCallOrder.length > 0;
     final.push(makeFinishPart(hasToolCalls ? "tool-calls" : "stop", 0, 0));
@@ -510,30 +524,43 @@ const sanitizeCallId = (id: string): string =>
 // OAuth helpers
 // ---------------------------------------------------------------------------
 
-const readOauthToken: Effect.Effect<string, CopilotAuthError> = Effect.try({
-  try: () => {
+const readOauthToken: Effect.Effect<string, CopilotAuthError> =
+  Effect.gen(function* () {
     const path = join(homedir(), ".config", "github-copilot", "apps.json");
-    const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw) as Record<string, { oauth_token?: string }>;
+
+    const raw = yield* Effect.try({
+      try: () => readFileSync(path, "utf-8"),
+      catch: (cause) => new CopilotAuthError({ cause: `Cannot read ${path}: ${cause}` }),
+    });
+
+    const parsed = yield* Effect.try({
+      try: () => JSON.parse(raw) as Record<string, { oauth_token?: string }>,
+      catch: (cause) => new CopilotAuthError({ cause: `Cannot parse ${path}: ${cause}` }),
+    });
+
     const entry = parsed["github.com"] ?? Object.values(parsed)[0];
-    if (!entry?.oauth_token) throw new Error("oauth_token not found in apps.json");
+    if (!entry?.oauth_token) {
+      return yield* Effect.fail(
+        new CopilotAuthError({ cause: `oauth_token not found in ${path} (keys: ${Object.keys(parsed).join(", ")})` }),
+      );
+    }
+
     return entry.oauth_token;
-  },
-  catch: (cause) => new CopilotAuthError({ cause }),
-});
+  });
 
 // ---------------------------------------------------------------------------
 // CopilotLanguageModel — implements LanguageModel via LanguageModel.make()
 // ---------------------------------------------------------------------------
 
-export const CopilotLanguageModelLive = Layer.effect(LanguageModel.LanguageModel)(
+/** Core layer — requires HttpClient from environment. */
+export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageModel)(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
     const exchangeToken = (oauthToken: string): Effect.Effect<TokenCache, CopilotAuthError | CopilotParseError> =>
       Effect.gen(function* () {
-        const req = HttpClientRequest.get("https://api.github.com/copilot_internal/v2/token").pipe(
+        const req = HttpClientRequest.get(Config.copilotAuthUrl).pipe(
           HttpClientRequest.setHeaders({
             Authorization: `Token ${oauthToken}`,
             "User-Agent": "theseus-runtime/0.0.1",
@@ -601,8 +628,8 @@ export const CopilotLanguageModelLive = Layer.effect(LanguageModel.LanguageModel
             };
 
         const endpoint = useResponses
-          ? "https://api.githubcopilot.com/responses"
-          : "https://api.githubcopilot.com/chat/completions";
+          ? `${Config.copilotApiUrl}/responses`
+          : `${Config.copilotApiUrl}/chat/completions`;
 
         const req = HttpClientRequest.post(endpoint).pipe(
           HttpClientRequest.setHeaders(headers),
@@ -661,4 +688,7 @@ export const CopilotLanguageModelLive = Layer.effect(LanguageModel.LanguageModel
         ),
     });
   }),
-).pipe(Layer.provide(BunHttpClient.layer));
+);
+
+/** Convenience live layer with BunHttpClient. */
+export const CopilotLanguageModelLive = CopilotLanguageModelLayer.pipe(Layer.provide(BunHttpClient.layer));

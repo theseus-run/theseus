@@ -12,6 +12,9 @@ export type {
   UIEvent,
 } from "./runtime-bus.ts";
 
+// Configuration service
+export { RuntimeConfig, RuntimeConfigLive } from "./config.ts";
+
 // Core primitives (re-export for convenience)
 export * from "@theseus.run/core";
 

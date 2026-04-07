@@ -8,7 +8,7 @@
  */
 
 import { Effect, Layer, Ref } from "effect";
-import { Capsule, CapsuleError, CapsuleId, type CapsuleEvent, type CapsuleEventInput } from "./index.ts";
+import { Capsule, CapsuleError, makeCapsuleId, type CapsuleEvent, type CapsuleEventInput } from "./index.ts";
 
 /**
  * Create an in-memory Capsule Layer.
@@ -20,7 +20,7 @@ import { Capsule, CapsuleError, CapsuleId, type CapsuleEvent, type CapsuleEventI
 export const CapsuleLive = (slug: string): Layer.Layer<Capsule> =>
   Layer.effect(Capsule)(
     Effect.gen(function* () {
-      const id = CapsuleId(slug);
+      const id = yield* makeCapsuleId(slug);
       const eventsRef = yield* Ref.make<ReadonlyArray<CapsuleEvent>>([]);
       const artifactsRef = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
 

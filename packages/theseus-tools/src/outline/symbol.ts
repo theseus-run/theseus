@@ -5,11 +5,11 @@
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
 export interface Symbol {
-  line: number;
-  col: number;
-  kind: string;
-  name: string;
-  signature: string;
+  readonly line: number;
+  readonly col: number;
+  readonly kind: string;
+  readonly name: string;
+  readonly signature: string;
 }
 
 /** Shorthand: build a Symbol from a tree-sitter node. */

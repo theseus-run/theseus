@@ -42,8 +42,8 @@ export { fromEffectSchema } from "./tool/effect-schema.ts";
 export { callTool, DEFAULT_RETRY_SCHEDULE } from "./tool/run.ts";
 
 // Agent primitives — shared types for all agent strategies
-export { AgentError } from "./agent/index.ts";
-export type { AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
+export { AgentInterrupted, AgentCycleExceeded, AgentLLMError } from "./agent/index.ts";
+export type { AgentError, AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
 
 // AgentComm — cross-agent communication protocol
 // Note: Briefing/WorkerPrompt jsx-md components are imported directly from
@@ -85,6 +85,7 @@ export { theseusToolToAiTool, theseusToolsToToolkit, extractToolDefs } from "./b
 
 // Mission — unit of work
 export { MissionError, MissionErrorInvalidTransition, MissionId } from "./mission/index.ts";
+export { makeMissionId } from "./mission/id.ts";
 export type { Mission } from "./mission/index.ts";
 export type { MissionId as MissionIdType } from "./mission/id.ts";
 export { isValidTransition, deriveStatus } from "./mission/status.ts";
@@ -94,6 +95,6 @@ export { MissionLive } from "./mission/layer.ts";
 export type { MissionConfig } from "./mission/layer.ts";
 
 // Capsule — append-only mission log
-export { Capsule, CapsuleError, CapsuleId } from "./capsule/index.ts";
+export { Capsule, CapsuleError, CapsuleId, makeCapsuleId } from "./capsule/index.ts";
 export type { CapsuleEvent, CapsuleEventInput, CapsuleId as CapsuleIdType } from "./capsule/index.ts";
 export { CapsuleLive, InMemoryCapsuleLive } from "./capsule/memory.ts";

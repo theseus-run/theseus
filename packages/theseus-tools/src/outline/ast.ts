@@ -4,33 +4,23 @@
 
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
+/** Truncate text to max length with ellipsis. */
+export const truncate = (text: string, max = 60): string =>
+  text.length > max ? `${text.slice(0, max - 3)}...` : text;
+
 /** Get all children of a node as an array. */
-export const children = (node: TreeSitterNode): TreeSitterNode[] => {
-  const result: TreeSitterNode[] = [];
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child) result.push(child);
-  }
-  return result;
-};
+export const children = (node: TreeSitterNode): TreeSitterNode[] =>
+  Array.from({ length: node.childCount }, (_, i) => node.child(i)).filter(
+    (c): c is TreeSitterNode => c !== null,
+  );
 
 /** Find first child matching a given node type. */
-export const findChildByType = (node: TreeSitterNode, type: string): TreeSitterNode | null => {
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child?.type === type) return child;
-  }
-  return null;
-};
+export const findChildByType = (node: TreeSitterNode, type: string): TreeSitterNode | null =>
+  children(node).find((c) => c.type === type) ?? null;
 
 /** Check if a node has a specific keyword child (e.g. "async", "static", "get"). */
-export const hasKeyword = (node: TreeSitterNode, keyword: string): boolean => {
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (child && child.childCount === 0 && child.text === keyword) return true;
-  }
-  return false;
-};
+export const hasKeyword = (node: TreeSitterNode, keyword: string): boolean =>
+  children(node).some((c) => c.childCount === 0 && c.text === keyword);
 
 /** Extract a concise signature from a node (params + return type, no body). */
 export const extractSignature = (node: TreeSitterNode): string => {
@@ -50,20 +40,14 @@ export const extractTypeValue = (node: TreeSitterNode): string => {
   const value = node.childForFieldName("value");
   if (value) {
     const text = value.text;
-    return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+    return truncate(text);
   }
   return "";
 };
 
 /** Extract superclass / implements from a class declaration. */
-export const extractClassExtends = (node: TreeSitterNode): string => {
-  const parts: string[] = [];
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (!child) continue;
-    if (child.type === "extends_clause" || child.type === "implements_clause" || child.type === "class_heritage") {
-      parts.push(child.text);
-    }
-  }
-  return parts.join(" ");
-};
+export const extractClassExtends = (node: TreeSitterNode): string =>
+  children(node)
+    .filter((c) => c.type === "extends_clause" || c.type === "implements_clause" || c.type === "class_heritage")
+    .map((c) => c.text)
+    .join(" ");

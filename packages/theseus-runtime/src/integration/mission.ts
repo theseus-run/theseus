@@ -10,55 +10,21 @@
  * @jsxImportSource @theseus.run/jsx-md
  */
 
-import { Effect, Layer, Match, Stream } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import {
   type Blueprint,
   Capsule,
   CapsuleLive,
-  type DispatchEvent,
   grunt,
+  makeMissionId,
   MissionContext,
-  MissionId,
   MissionLive,
   type MissionConfig,
 } from "@theseus.run/core";
 import { readonlyTools } from "@theseus.run/tools";
 import { makeDelegate } from "@theseus.run/core";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
-
-// ---------------------------------------------------------------------------
-// Colors
-// ---------------------------------------------------------------------------
-
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
-const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
-const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
-const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
-
-// ---------------------------------------------------------------------------
-// Event renderer
-// ---------------------------------------------------------------------------
-
-let streamingLine = false;
-
-const renderEvent = (e: DispatchEvent): void => {
-  if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
-    process.stdout.write("\n");
-    streamingLine = false;
-  }
-
-  Match.value(e).pipe(
-    Match.tag("Calling", (e) => console.log(dim(`  [${e.agent} iter ${e.iteration}] calling LLM...`))),
-    Match.tag("TextDelta", (e) => { process.stdout.write(e.content); streamingLine = true; }),
-    Match.tag("ThinkingDelta", (e) => { process.stdout.write(dim(e.content)); streamingLine = true; }),
-    Match.tag("Thinking", () => {}),
-    Match.tag("ToolCalling", (e) => console.log(cyan(`  [${e.agent}] → ${e.tool}(${JSON.stringify(e.args).slice(0, 120)})`))),
-    Match.tag("ToolResult", (e) => console.log(green(`  [${e.agent}] ← ${e.tool}: ${e.content.slice(0, 100)}${e.content.length > 100 ? "…" : ""}`))),
-    Match.tag("Done", () => {}),
-    Match.exhaustive,
-  );
-};
+import { renderEvent, dim, bold, yellow, green } from "./render.ts";
 
 // ---------------------------------------------------------------------------
 // Main
@@ -66,7 +32,7 @@ const renderEvent = (e: DispatchEvent): void => {
 
 const program = Effect.gen(function* () {
   const missionConfig: MissionConfig = {
-    id: MissionId("explore-core"),
+    id: yield* makeMissionId("explore-core"),
     goal: process.argv[2] ?? "Explore the theseus-core package and summarize what primitives are implemented.",
     criteria: [
       "Lists all primitives found",

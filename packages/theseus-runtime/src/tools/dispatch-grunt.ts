@@ -46,7 +46,11 @@ export const makeDispatchGruntTool = (workerBlueprint: Blueprint): Effect.Effect
         gruntAwait(workerBlueprint, task).pipe(
           Effect.provide(Layer.succeed(LanguageModel.LanguageModel, lm)),
           Effect.map((result) => result.content),
-          Effect.catchTag("AgentError", (e) => Effect.fail(fail(`Grunt failed: ${e.message}`))),
+          Effect.catchTags({
+            AgentInterrupted: (e) => Effect.fail(fail(`Grunt interrupted: ${e.reason ?? "unknown"}`)),
+            AgentCycleExceeded: (e) => Effect.fail(fail(`Grunt exceeded cycle cap (${e.max} iterations)`)),
+            AgentLLMError: (e) => Effect.fail(fail(`Grunt LLM failed: ${e.message}`)),
+          }),
         ),
       encode: (s) => s,
     });

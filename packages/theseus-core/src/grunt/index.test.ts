@@ -73,7 +73,7 @@ describe("gruntAwait — tool call loop", () => {
 });
 
 describe("gruntAwait — error", () => {
-  test("converts AiError to AgentError", async () => {
+  test("converts AiError to AgentLLMError", async () => {
     const aiErr = AiError.make({
       module: "MockLLM",
       method: "generateText",
@@ -85,7 +85,7 @@ describe("gruntAwait — error", () => {
         makeMockLanguageModel([aiErr]),
       ),
     );
-    expect(err._tag).toBe("AgentError");
+    expect(err._tag).toBe("AgentLLMError");
   });
 });
 

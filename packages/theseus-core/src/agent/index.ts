@@ -3,7 +3,7 @@
  *
  * Blueprint: agent config as data (name + systemPrompt + tools).
  * AgentResult: typed return from any agent dispatch.
- * AgentError: unified failure type.
+ * AgentError: union of agent-level failure types (AgentInterrupted | AgentCycleExceeded | AgentLLMError).
  */
 
 import { Data } from "effect";
@@ -43,11 +43,28 @@ export interface AgentResult {
 }
 
 // ---------------------------------------------------------------------------
-// AgentError — unified failure type
+// AgentError — union of agent-level failure types
 // ---------------------------------------------------------------------------
 
-export class AgentError extends Data.TaggedError("AgentError")<{
+/** Dispatch was interrupted (via injection or fiber interrupt). */
+export class AgentInterrupted extends Data.TaggedError("AgentInterrupted")<{
+  readonly agent: string;
+  readonly reason?: string;
+}> {}
+
+/** Dispatch exceeded its iteration cap. */
+export class AgentCycleExceeded extends Data.TaggedError("AgentCycleExceeded")<{
+  readonly agent: string;
+  readonly max: number;
+  readonly usage: Usage;
+}> {}
+
+/** LLM call failed (wrapped AiError from provider). */
+export class AgentLLMError extends Data.TaggedError("AgentLLMError")<{
   readonly agent: string;
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/** Union of all agent-level errors. */
+export type AgentError = AgentInterrupted | AgentCycleExceeded | AgentLLMError;

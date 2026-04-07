@@ -15,8 +15,10 @@ import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Stream } fr
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentResult } from "../agent/index.ts";
-import { AgentError } from "../agent/index.ts";
+import { AgentInterrupted, AgentCycleExceeded } from "../agent/index.ts";
+import type { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
+import { report } from "../agent-comm/report.ts";
 import { runToolCalls, stepStream, tryParseArgs } from "./step.ts";
 import type { DispatchEvent, DispatchHandle, Injection, Usage } from "./types.ts";
 
@@ -80,6 +82,9 @@ export const dispatch = (
     const emit = (event: DispatchEvent): Effect.Effect<void> =>
       Queue.offer(eventQueue, event).pipe(Effect.asVoid);
 
+    const emitAll = <T>(items: ReadonlyArray<T>, toEvent: (item: T) => DispatchEvent) =>
+      Effect.all(items.map((i) => emit(toEvent(i))), { concurrency: "unbounded" });
+
     // -----------------------------------------------------------------------
     // loop — the dispatch loop, runs as a forked fiber
     // -----------------------------------------------------------------------
@@ -95,12 +100,12 @@ export const dispatch = (
         const next = yield* drainInjections(injectionQueue, messages);
         if (next === null)
           return yield* Effect.fail(
-            new AgentError({ agent: blueprint.name, message: "Interrupted via injection" }),
+            new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
           );
 
         if (iterations >= maxIter)
           return yield* Effect.fail(
-            new AgentError({ agent: blueprint.name, message: `Cycle cap exceeded (${maxIter} iterations)` }),
+            new AgentCycleExceeded({ agent: blueprint.name, max: maxIter, usage }),
           );
 
         yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
@@ -130,7 +135,7 @@ export const dispatch = (
         };
 
         // Check for theseus.report — terminates the loop with structured data
-        const reportCall = result.toolCalls.find((tc) => tc.name === "theseus_report");
+        const reportCall = result.toolCalls.find((tc) => tc.name === report.name);
         if (reportCall) {
           const args = tryParseArgs(reportCall) as {
             result?: string;
@@ -141,7 +146,7 @@ export const dispatch = (
             _tag: "ToolCalling",
             agent: blueprint.name,
             iteration: iterations,
-            tool: "theseus_report",
+            tool: report.name,
             args,
           });
           return {
@@ -153,33 +158,23 @@ export const dispatch = (
         }
 
         // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
-        yield* Effect.all(
-          result.toolCalls.map((tc) =>
-            emit({
-              _tag: "ToolCalling",
-              agent: blueprint.name,
-              iteration: iterations,
-              tool: tc.name,
-              args: tryParseArgs(tc),
-            }),
-          ),
-          { concurrency: "unbounded" },
-        );
+        yield* emitAll(result.toolCalls, (tc) => ({
+          _tag: "ToolCalling" as const,
+          agent: blueprint.name,
+          iteration: iterations,
+          tool: tc.name,
+          args: tryParseArgs(tc),
+        }));
 
         const calls = yield* runToolCalls(blueprint.tools, result.toolCalls);
 
-        yield* Effect.all(
-          calls.map((c) =>
-            emit({
-              _tag: "ToolResult",
-              agent: blueprint.name,
-              iteration: iterations,
-              tool: c.name,
-              content: c.content,
-            }),
-          ),
-          { concurrency: "unbounded" },
-        );
+        yield* emitAll(calls, (c) => ({
+          _tag: "ToolResult" as const,
+          agent: blueprint.name,
+          iteration: iterations,
+          tool: c.name,
+          content: c.content,
+        }));
 
         // Build messages for next iteration (native Prompt.MessageEncoded format)
         const toolMessages: ReadonlyArray<Prompt.MessageEncoded> = calls.map((r) => ({
@@ -224,7 +219,7 @@ export const dispatch = (
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
             onFailure: (cause) =>
               Cause.hasInterruptsOnly(cause)
-                ? Deferred.fail(resultDeferred, new AgentError({ agent: blueprint.name, message: "Interrupted" }))
+                ? Deferred.fail(resultDeferred, new AgentInterrupted({ agent: blueprint.name, reason: "Fiber interrupted" }))
                 : Deferred.failCause(resultDeferred, cause),
           }),
         ),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as AiError from "effect/unstable/ai/AiError";
-import type { AgentError } from "../agent/index.ts";
+import type { AgentCycleExceeded, AgentInterrupted } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
 import {
@@ -125,7 +125,7 @@ describe("step — tool_calls response", () => {
 });
 
 describe("step — errors", () => {
-  test("converts AiError to AgentError", async () => {
+  test("converts AiError to AgentLLMError", async () => {
     const messages = [{ role: "user" as const, content: "task" }];
     const aiErr = AiError.make({
       module: "MockLLM",
@@ -138,7 +138,7 @@ describe("step — errors", () => {
         makeMockLanguageModel([aiErr]),
       ),
     );
-    expect(err._tag).toBe("AgentError");
+    expect(err._tag).toBe("AgentLLMError");
   });
 });
 
@@ -273,9 +273,9 @@ describe("dispatchAwait — parallel tool calls", () => {
 });
 
 describe("dispatchAwait — tool errors become strings", () => {
-  test("unknown tool — LanguageModel rejects unknown tool names as AiError, dispatch converts to AgentError", async () => {
+  test("unknown tool — LanguageModel rejects unknown tool names as AiError, dispatch converts to AgentLLMError", async () => {
     // With @effect/ai, the framework validates tool names against the toolkit.
-    // A tool name not in the toolkit becomes an InvalidOutputError → AgentError.
+    // A tool name not in the toolkit becomes an InvalidOutputError → AgentLLMError.
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
@@ -284,7 +284,7 @@ describe("dispatchAwait — tool errors become strings", () => {
         ]),
       ),
     );
-    expect(err._tag).toBe("AgentError");
+    expect(err._tag).toBe("AgentLLMError");
   });
 
   test("ToolError — continues", async () => {
@@ -305,7 +305,7 @@ describe("dispatchAwait — tool errors become strings", () => {
 });
 
 describe("dispatchAwait — cycle cap", () => {
-  test("fails with AgentError when maxIterations reached", async () => {
+  test("fails with AgentCycleExceeded when maxIterations reached", async () => {
     const cappedBlueprint: Blueprint = { ...blueprint, maxIterations: 1 };
     const err = await Effect.runPromise(
       Effect.provide(
@@ -315,13 +315,13 @@ describe("dispatchAwait — cycle cap", () => {
         ]),
       ),
     );
-    expect(err._tag).toBe("AgentError");
-    expect((err as AgentError).message).toContain("Cycle cap exceeded");
+    expect(err._tag).toBe("AgentCycleExceeded");
+    expect((err as AgentCycleExceeded).max).toBe(1);
   });
 });
 
 describe("dispatchAwait — AiError", () => {
-  test("converts AiError to AgentError", async () => {
+  test("converts AiError to AgentLLMError", async () => {
     const aiErr = AiError.make({
       module: "MockLLM",
       method: "generateText",
@@ -333,7 +333,7 @@ describe("dispatchAwait — AiError", () => {
         makeMockLanguageModel([aiErr]),
       ),
     );
-    expect(err._tag).toBe("AgentError");
+    expect(err._tag).toBe("AgentLLMError");
   });
 });
 
@@ -400,7 +400,7 @@ describe("DispatchHandle — events stream", () => {
 // ---------------------------------------------------------------------------
 
 describe("DispatchHandle — interrupt", () => {
-  test("cancels mid-flight LLM call, result fails with AgentError", async () => {
+  test("cancels mid-flight LLM call, result fails with AgentInterrupted", async () => {
     const neverProvider = Layer.effect(LanguageModel.LanguageModel)(
       Effect.gen(function* () {
         return yield* LanguageModel.make({
@@ -417,8 +417,8 @@ describe("DispatchHandle — interrupt", () => {
     await Effect.runPromise(handle.interrupt);
 
     const err = await Effect.runPromise(Effect.flip(handle.result));
-    expect(err._tag).toBe("AgentError");
-    expect((err as AgentError).message).toBe("Interrupted");
+    expect(err._tag).toBe("AgentInterrupted");
+    expect((err as AgentInterrupted).reason).toBe("Fiber interrupted");
   });
 });
 
@@ -427,7 +427,7 @@ describe("DispatchHandle — interrupt", () => {
 // ---------------------------------------------------------------------------
 
 describe("DispatchHandle — inject", () => {
-  test("inject Interrupt: result fails with AgentError at next iteration boundary", async () => {
+  test("inject Interrupt: result fails with AgentInterrupted at next iteration boundary", async () => {
     const handle = await Effect.runPromise(
       Effect.provide(
         dispatch(blueprint, "task"),
@@ -440,7 +440,7 @@ describe("DispatchHandle — inject", () => {
     await Effect.runPromise(handle.inject({ _tag: "Interrupt" }));
 
     const err = await Effect.runPromise(Effect.flip(handle.result));
-    expect(err._tag).toBe("AgentError");
-    expect((err as AgentError).message).toContain("Interrupted");
+    expect(err._tag).toBe("AgentInterrupted");
+    expect((err as AgentInterrupted).reason).toContain("Interrupted");
   });
 });

@@ -18,6 +18,17 @@ import { Data, Effect, ServiceMap } from "effect";
 
 export type CapsuleId = string & { readonly _brand: unique symbol };
 
+/** Generate a unique CapsuleId. Uses Effect.sync for testability. */
+export const makeCapsuleId = (slug: string): Effect.Effect<CapsuleId> =>
+  Effect.sync(() => {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const time = now.toISOString().slice(11, 16).replace(":", "");
+    const rand = Math.random().toString(36).slice(2, 9);
+    return `${date}-${time}-${rand}-${slug}` as CapsuleId;
+  });
+
+/** @deprecated Use makeCapsuleId (effectful) */
 export const CapsuleId = (slug: string): CapsuleId => {
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
