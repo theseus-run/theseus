@@ -1,9 +1,6 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`try { $body } catch ($err) { $handler }` where {
-  register_diagnostic(message="Avoid try/catch in Effect code. Use Effect.try, Effect.tryPromise, or typed error channels (Effect.fail + catchTag) to keep errors in the Effect pipeline.", severity="warning")
-}
-
-`try { $body } catch { $handler }` where {
-  register_diagnostic(message="Avoid try/catch in Effect code. Use Effect.try, Effect.tryPromise, or typed error channels (Effect.fail + catchTag) to keep errors in the Effect pipeline.", severity="warning")
+JsCatchClause() as $catch where {
+  register_diagnostic(message="Avoid try/catch. Use Effect.try, Effect.tryPromise, or typed error channels to keep errors in the Effect pipeline.", severity="warning")
 }

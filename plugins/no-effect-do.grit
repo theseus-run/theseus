@@ -1,4 +1,5 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
 `Effect.Do` where {
   register_diagnostic(message="Avoid Effect.Do. Use a single flat pipe-based Effect flow or Effect.gen with direct yields.", severity="warning")

@@ -1,10 +1,10 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`$fn($tag, $impl)` where {
-  $fn <: or {
-    `Layer.succeed`,
-    `Layer.effect`,
-    `Layer.scoped`
-  },
-  register_diagnostic(span=$fn, message="Effect v4: Layer constructors are curried. Use Layer.succeed(Tag)(impl) instead of Layer.succeed(Tag, impl).", severity="error")
+or {
+  `Layer.succeed($tag, $impl)`,
+  `Layer.effect($tag, $impl)`,
+  `Layer.scoped($tag, $impl)`
+} where {
+  register_diagnostic(message="Effect v4: Layer constructors are curried. Use Layer.succeed(Tag)(impl) instead of Layer.succeed(Tag, impl).", severity="error")
 }

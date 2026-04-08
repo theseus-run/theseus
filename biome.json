@@ -71,6 +71,8 @@
   },
   "plugins": [
     "./plugins/no-effect-v3-catchall.grit",
+    "./plugins/no-effect-v3-cause-interrupted.grit",
+    "./plugins/no-effect-v3-fork.grit",
     "./plugins/no-effect-v3-gen-adapter.grit",
     "./plugins/no-effect-v3-layer-constructors.grit",
     "./plugins/no-effect-v3-schema-import.grit",

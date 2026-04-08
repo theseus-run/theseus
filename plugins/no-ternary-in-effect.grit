@@ -1,6 +1,8 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`Effect.gen(function*() { $body })` where {
-  $body <: contains `$cond ? $then : $else`,
-  register_diagnostic(message="Avoid ternary expressions inside Effect.gen. Use Match.value for branching or Effect.if for conditional Effects — makes decision points explicit and extensible.", severity="warning")
+`Effect.gen($fn)` as $outer where {
+  $fn <: contains `$a ? $b : $c` as $ternary where {
+    register_diagnostic(span=$ternary, message="Avoid ternary expressions inside Effect.gen. Use Match.value for branching or Effect.if for conditional Effects.", severity="warning")
+  }
 }

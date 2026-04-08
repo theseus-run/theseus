@@ -1,6 +1,7 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`Effect.gen(function*() { $body })` where {
-  $body <: contains `Effect.gen($_)`,
-  register_diagnostic(span=$body, message="Avoid nested Effect.gen. Flatten into a single generator per function — nested generators hide sequencing and make control flow opaque.", severity="warning")
+`Effect.gen($fn)` as $outer where {
+  $fn <: contains `Effect.gen($inner)`,
+  register_diagnostic(message="Avoid nested Effect.gen. Flatten into a single generator per function — nested generators hide sequencing.", severity="warning")
 }

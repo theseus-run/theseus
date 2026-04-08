@@ -1,6 +1,6 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`$fn($args)` where {
-  $fn <: `Cause.isInterruptedOnly`,
-  register_diagnostic(span=$fn, message="Effect v4: Cause.isInterruptedOnly was renamed to Cause.hasInterruptsOnly.", severity="error")
+`Cause.isInterruptedOnly($args)` where {
+  register_diagnostic(message="Effect v4: Cause.isInterruptedOnly was renamed to Cause.hasInterruptsOnly.", severity="error")
 }

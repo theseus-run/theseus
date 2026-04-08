@@ -1,5 +1,6 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
 `return null` where {
-  register_diagnostic(message="Avoid returning null. Use Option.none() for absence, Effect.fail for errors, or a tagged union for explicit 'nothing happened' semantics.", severity="warning")
+  register_diagnostic(message="Avoid returning null. Use Option.none() for absence, Effect.fail for errors, or a tagged union.", severity="warning")
 }

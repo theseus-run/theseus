@@ -1,6 +1,6 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`$fn($args)` where {
-  $fn <: `Effect.fork`,
-  register_diagnostic(span=$fn, message="Effect v4: Effect.fork was removed. Use Effect.forkDetach (detached, fire-and-forget), Effect.forkChild (supervised), or Effect.forkScoped (tied to Scope).", severity="error")
+`Effect.fork($args)` where {
+  register_diagnostic(message="Effect v4: Effect.fork was removed. Use Effect.forkDetach (detached), Effect.forkChild (supervised), or Effect.forkScoped (tied to Scope).", severity="error")
 }

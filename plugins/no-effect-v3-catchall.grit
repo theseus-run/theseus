@@ -1,6 +1,6 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
-`$fn($args)` where {
-  $fn <: `Effect.catchAll`,
-  register_diagnostic(span=$fn, message="Effect v4: catchAll was removed. Use Effect.catchCause to handle all causes, or Effect.catch for a specific error tag.", severity="error")
+`Effect.catchAll($args)` where {
+  register_diagnostic(message="Effect v4: catchAll was removed. Use Effect.catchCause to handle all causes, or Effect.catch for a specific error tag.", severity="error")
 }

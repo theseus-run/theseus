@@ -1,6 +1,7 @@
-language js(typescript)
+engine biome(1.0)
+language js
 
 `Effect.gen(function*($adapter) { $body })` where {
   $adapter <: r"^\w+$",
-  register_diagnostic(span=$adapter, message="Effect v4: remove the adapter parameter. Use `yield* effect` directly instead of `yield* adapter(effect)`.", severity="error")
+  register_diagnostic(message="Effect v4: remove the adapter parameter. Use yield* effect directly instead of yield* adapter(effect).", severity="error")
 }
