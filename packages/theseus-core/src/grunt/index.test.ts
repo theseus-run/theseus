@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Stream } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import * as AiError from "effect/unstable/ai/AiError";
 import type { Blueprint } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
 import type { DispatchEvent } from "../dispatch/index.ts";
+import { DefaultToolCallPolicy } from "../dispatch/policy.ts";
 import {
   makeMockLanguageModel, textParts, toolCallParts,
 } from "../test-utils/mock-language-model.ts";
@@ -43,14 +44,14 @@ const blueprint: Blueprint = {
 describe("gruntAwait — text-only", () => {
   test("returns content from single text response", async () => {
     const result = await Effect.runPromise(
-      Effect.provide(gruntAwait(blueprint, "hello"), makeMockLanguageModel([textParts("hi there")])),
+      Effect.provide(gruntAwait(blueprint, "hello"), Layer.merge(makeMockLanguageModel([textParts("hi there")]), DefaultToolCallPolicy)),
     );
     expect(result.content).toBe("hi there");
   });
 
   test("accumulates usage", async () => {
     const result = await Effect.runPromise(
-      Effect.provide(gruntAwait(blueprint, "hello"), makeMockLanguageModel([textParts("ok", 20, 8)])),
+      Effect.provide(gruntAwait(blueprint, "hello"), Layer.merge(makeMockLanguageModel([textParts("ok", 20, 8)]), DefaultToolCallPolicy)),
     );
     expect(result.usage).toEqual({ inputTokens: 20, outputTokens: 8 });
   });
@@ -61,10 +62,13 @@ describe("gruntAwait — tool call loop", () => {
     const result = await Effect.runPromise(
       Effect.provide(
         gruntAwait(blueprint, "task"),
-        makeMockLanguageModel([
-          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"world"}' }]),
-          textParts("echoed: world", 20, 10),
-        ]),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"world"}' }]),
+            textParts("echoed: world", 20, 10),
+          ]),
+          DefaultToolCallPolicy,
+        ),
       ),
     );
     expect(result.content).toBe("echoed: world");
@@ -82,7 +86,7 @@ describe("gruntAwait — error", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(gruntAwait(blueprint, "task")),
-        makeMockLanguageModel([aiErr]),
+        Layer.merge(makeMockLanguageModel([aiErr]), DefaultToolCallPolicy),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -105,7 +109,7 @@ describe("grunt — events stream", () => {
           ).pipe(Stream.runDrain);
           return collected;
         }),
-        makeMockLanguageModel([textParts("hello")]),
+        Layer.merge(makeMockLanguageModel([textParts("hello")]), DefaultToolCallPolicy),
       ),
     );
     const tags = events.map((e) => e._tag);
@@ -124,10 +128,13 @@ describe("grunt — events stream", () => {
           ).pipe(Stream.runDrain);
           return collected;
         }),
-        makeMockLanguageModel([
-          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
-          textParts("done"),
-        ]),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+            textParts("done"),
+          ]),
+          DefaultToolCallPolicy,
+        ),
       ),
     );
     const tags = events.map((e) => e._tag);
@@ -140,7 +147,7 @@ describe("grunt — events stream", () => {
 describe("grunt — handle has no inject/interrupt", () => {
   test("GruntHandle only exposes events and result", async () => {
     const handle = await Effect.runPromise(
-      Effect.provide(grunt(blueprint, "task"), makeMockLanguageModel([textParts("hi")])),
+      Effect.provide(grunt(blueprint, "task"), Layer.merge(makeMockLanguageModel([textParts("hi")]), DefaultToolCallPolicy)),
     );
     expect(handle).toHaveProperty("events");
     expect(handle).toHaveProperty("result");

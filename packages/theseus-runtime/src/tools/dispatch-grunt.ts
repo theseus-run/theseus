@@ -11,7 +11,7 @@
 
 import { Effect, Layer } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import { defineTool, fromZod, gruntAwait, type Blueprint, type ToolAny } from "@theseus.run/core";
+import { defineTool, fromZod, gruntAwait, DefaultToolCallPolicy, type Blueprint, type ToolAny } from "@theseus.run/core";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -44,7 +44,10 @@ export const makeDispatchGruntTool = (workerBlueprint: Blueprint): Effect.Effect
       capabilities: ["dispatch"],
       execute: ({ task }, { fail }) =>
         gruntAwait(workerBlueprint, task).pipe(
-          Effect.provide(Layer.succeed(LanguageModel.LanguageModel, lm)),
+          Effect.provide(Layer.merge(
+            Layer.succeed(LanguageModel.LanguageModel, lm),
+            DefaultToolCallPolicy,
+          )),
           Effect.map((result) => result.content),
           Effect.catchTags({
             AgentInterrupted: (e) => Effect.fail(fail(`Grunt interrupted: ${e.reason ?? "unknown"}`)),

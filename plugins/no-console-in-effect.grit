@@ -1,0 +1,10 @@
+language js(typescript)
+
+`Effect.sync(() => console.$method($args))` where {
+  register_diagnostic(message="Avoid console inside Effect.sync. Use Effect.log, Effect.logInfo, Effect.logError, or Effect.logWarning for structured, testable logging.", severity="warning")
+}
+
+`Effect.sync(() => { $body })` where {
+  $body <: contains `console.$method($args)`,
+  register_diagnostic(message="Avoid console inside Effect.sync. Use Effect.log, Effect.logInfo, Effect.logError, or Effect.logWarning for structured, testable logging.", severity="warning")
+}

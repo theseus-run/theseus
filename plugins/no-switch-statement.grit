@@ -1,0 +1,5 @@
+language js(typescript)
+
+`switch ($discriminant) { $cases }` where {
+  register_diagnostic(span=$discriminant, message="Avoid switch statements in Effect code. Use Match.value($discriminant).pipe(Match.when(...), Match.exhaustive) for exhaustive, type-safe branching.", severity="warning")
+}

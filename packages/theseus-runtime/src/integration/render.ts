@@ -38,6 +38,7 @@ export const renderEvent = (e: DispatchEvent): void => {
     Match.tag("Thinking", () => {}),
     Match.tag("ToolCalling", (e) => console.log(cyan(`  [${e.agent}] → ${e.tool}(${truncateDisplay(JSON.stringify(e.args), 120)})`))),
     Match.tag("ToolResult", (e) => console.log(green(`  [${e.agent}] ← ${e.tool}: ${truncateDisplay(e.content)}`))),
+    Match.tag("ToolError", (e) => console.log(yellow(`  [${e.agent}] ⚠ ${e.tool}: ${e.error._tag}`))),
     Match.tag("Done", () => {}),
     Match.exhaustive,
   );

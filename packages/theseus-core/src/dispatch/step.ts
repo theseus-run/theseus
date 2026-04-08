@@ -23,10 +23,8 @@ import type { AgentError } from "../agent/index.ts";
 import type { ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import { theseusToolsToToolkit } from "../bridge/to-ai-tools.ts";
-import type { StepResult, ToolCall, ToolCallResult, Usage } from "./types.ts";
-
-/** Format any tool error into a string result (never propagates failure). */
-const formatToolError = (e: { readonly message: string }) => Effect.succeed(`Error: ${e.message}`);
+import { ToolCallUnknown, ToolCallBadArgs, ToolCallFailed } from "./types.ts";
+import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
@@ -95,60 +93,32 @@ export const tryParseArgs = (tc: ToolCall): unknown => {
 
 // ---------------------------------------------------------------------------
 // runToolCall — execute a single tool call.
-// Errors become error strings (never propagates failure).
+// Fails with typed ToolCallError — caller decides how to handle.
 // ---------------------------------------------------------------------------
 
 export const runToolCall = (
   tools: ReadonlyArray<ToolAny>,
   tc: ToolCall,
-): Effect.Effect<ToolCallResult, never> => {
+): Effect.Effect<ToolCallResult, ToolCallError> => {
   const tool = tools.find((t) => t.name === tc.name);
   if (!tool)
-    return Effect.succeed({
-      callId: tc.id,
-      name: tc.name,
-      args: tryParseArgs(tc),
-      content: `Error: unknown tool "${tc.name}"`,
-    });
+    return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
   const parsed = tryParseArgs(tc);
   const raw = typeof parsed === "string" ? undefined : parsed;
   if (raw === undefined)
-    return Effect.succeed({
-      callId: tc.id,
-      name: tc.name,
-      args: tc.arguments,
-      content: "Error: invalid JSON in tool arguments",
-    });
+    return Effect.fail(new ToolCallBadArgs({ callId: tc.id, name: tc.name, raw: tc.arguments }));
 
   return callTool(tool, raw).pipe(
-    Effect.map((r) => r.llmContent),
-    Effect.catchTags({
-      ToolError: formatToolError,
-      ToolErrorInput: formatToolError,
-      ToolErrorOutput: formatToolError,
-    }),
-    Effect.map((content) => ({
+    Effect.map((r) => ({
       callId: tc.id,
       name: tc.name,
       args: raw,
-      content,
+      content: r.llmContent,
     })),
+    Effect.mapError((cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: raw, cause })),
   );
 };
-
-// ---------------------------------------------------------------------------
-// runToolCalls — execute all tool calls in parallel
-// ---------------------------------------------------------------------------
-
-export const runToolCalls = (
-  tools: ReadonlyArray<ToolAny>,
-  toolCalls: ReadonlyArray<ToolCall>,
-): Effect.Effect<ReadonlyArray<ToolCallResult>, never> =>
-  Effect.all(
-    toolCalls.map((tc) => runToolCall(tools, tc)),
-    { concurrency: "unbounded" },
-  );
 
 // ---------------------------------------------------------------------------
 // foldStreamParts — fold StreamPartEncoded[] into PartEncoded[]

@@ -73,7 +73,17 @@
     "./plugins/no-effect-v3-catchall.grit",
     "./plugins/no-effect-v3-gen-adapter.grit",
     "./plugins/no-effect-v3-layer-constructors.grit",
-    "./plugins/no-effect-v3-schema-import.grit"
+    "./plugins/no-effect-v3-schema-import.grit",
+    "./plugins/no-switch-statement.grit",
+    "./plugins/no-nested-effect-gen.grit",
+    "./plugins/no-effect-do.grit",
+    "./plugins/no-effect-ladder.grit",
+    "./plugins/no-try-catch.grit",
+    "./plugins/no-if-in-effect-gen.grit",
+    "./plugins/no-return-null.grit",
+    "./plugins/no-console-in-effect.grit",
+    "./plugins/no-ternary-in-effect.grit",
+    "./plugins/no-pipe-ladder.grit"
   ],
   "javascript": {
     "formatter": {

@@ -15,6 +15,7 @@ import { Effect, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
 import { dispatch, type DispatchEvent } from "../dispatch/index.ts";
+import type { ToolCallPolicy } from "../dispatch/policy.ts";
 
 // ---------------------------------------------------------------------------
 // GruntHandle — fire-and-forget: observe events, await result
@@ -32,7 +33,7 @@ export interface GruntHandle {
 export const grunt = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<GruntHandle, never, LanguageModel.LanguageModel> =>
+): Effect.Effect<GruntHandle, never, LanguageModel.LanguageModel | ToolCallPolicy> =>
   dispatch(blueprint, task).pipe(
     Effect.map((handle) => ({
       events: handle.events,
@@ -47,5 +48,5 @@ export const grunt = (
 export const gruntAwait = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | ToolCallPolicy> =>
   grunt(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));

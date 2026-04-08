@@ -22,13 +22,18 @@ export type {
   Usage,
 } from "./types.ts";
 
+export type { ToolCallError } from "./types.ts";
+export { ToolCallUnknown, ToolCallBadArgs, ToolCallFailed } from "./types.ts";
+
+// Policy — injectable tool call error handling
+export { ToolCallPolicy, DefaultToolCallPolicy } from "./policy.ts";
+
 // Step — pure, reusable independently
 export {
   step,
   stepStream,
   tryParseArgs,
   runToolCall,
-  runToolCalls,
 } from "./step.ts";
 
 export type { StreamDelta } from "./step.ts";

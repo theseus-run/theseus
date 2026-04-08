@@ -1,0 +1,6 @@
+language js(typescript)
+
+`Effect.gen(function*() { $body })` where {
+  $body <: contains `Effect.gen($_)`,
+  register_diagnostic(span=$body, message="Avoid nested Effect.gen. Flatten into a single generator per function — nested generators hide sequencing and make control flow opaque.", severity="warning")
+}

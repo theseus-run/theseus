@@ -15,6 +15,7 @@ import {
   type Blueprint,
   Capsule,
   CapsuleLive,
+  DefaultToolCallPolicy,
   grunt,
   makeMissionId,
   MissionContext,
@@ -127,7 +128,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, CopilotLanguageModelLive)).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, DefaultToolCallPolicy))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

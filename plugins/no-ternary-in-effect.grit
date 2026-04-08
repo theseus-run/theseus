@@ -1,0 +1,6 @@
+language js(typescript)
+
+`Effect.gen(function*() { $body })` where {
+  $body <: contains `$cond ? $then : $else`,
+  register_diagnostic(message="Avoid ternary expressions inside Effect.gen. Use Match.value for branching or Effect.if for conditional Effects — makes decision points explicit and extensible.", severity="warning")
+}

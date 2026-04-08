@@ -1,0 +1,9 @@
+language js(typescript)
+
+`try { $body } catch ($err) { $handler }` where {
+  register_diagnostic(message="Avoid try/catch in Effect code. Use Effect.try, Effect.tryPromise, or typed error channels (Effect.fail + catchTag) to keep errors in the Effect pipeline.", severity="warning")
+}
+
+`try { $body } catch { $handler }` where {
+  register_diagnostic(message="Avoid try/catch in Effect code. Use Effect.try, Effect.tryPromise, or typed error channels (Effect.fail + catchTag) to keep errors in the Effect pipeline.", severity="warning")
+}

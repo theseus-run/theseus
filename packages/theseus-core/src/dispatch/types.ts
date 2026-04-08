@@ -4,10 +4,12 @@
  * Messages use Prompt.MessageEncoded from effect/unstable/ai directly.
  */
 
+import { Data } from "effect";
 import type { Effect, Stream } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentError } from "../agent/index.ts";
 import type { AgentResult } from "../agent/index.ts";
+import type { ToolErrors } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Usage — simple token counts for accumulation across iterations
@@ -40,6 +42,34 @@ export interface ToolCallResult {
 }
 
 // ---------------------------------------------------------------------------
+// ToolCallError — typed failure from tool execution
+// ---------------------------------------------------------------------------
+
+/** Tool not found in the blueprint's tools array. */
+export class ToolCallUnknown extends Data.TaggedError("ToolCallUnknown")<{
+  readonly callId: string;
+  readonly name: string;
+}> {}
+
+/** Arguments failed JSON.parse. */
+export class ToolCallBadArgs extends Data.TaggedError("ToolCallBadArgs")<{
+  readonly callId: string;
+  readonly name: string;
+  readonly raw: string;
+}> {}
+
+/** Tool execution failed (wraps ToolError | ToolErrorInput | ToolErrorOutput from callTool). */
+export class ToolCallFailed extends Data.TaggedError("ToolCallFailed")<{
+  readonly callId: string;
+  readonly name: string;
+  readonly args: unknown;
+  readonly cause: ToolErrors;
+}> {}
+
+/** Union of all tool call errors. */
+export type ToolCallError = ToolCallUnknown | ToolCallBadArgs | ToolCallFailed;
+
+// ---------------------------------------------------------------------------
 // StepResult — outcome of a single LLM call (no tool execution)
 // ---------------------------------------------------------------------------
 
@@ -70,6 +100,7 @@ export type DispatchEvent =
   | { readonly _tag: "Thinking";       readonly agent: string; readonly iteration: number; readonly content: string }
   | { readonly _tag: "ToolCalling";    readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
   | { readonly _tag: "ToolResult";     readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
+  | { readonly _tag: "ToolError";     readonly agent: string; readonly iteration: number; readonly tool: string; readonly error: ToolCallError }
   | { readonly _tag: "Done";          readonly agent: string; readonly result: AgentResult }
 
 // ---------------------------------------------------------------------------

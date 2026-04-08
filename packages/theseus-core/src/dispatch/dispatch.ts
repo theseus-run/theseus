@@ -19,7 +19,9 @@ import { AgentInterrupted, AgentCycleExceeded } from "../agent/index.ts";
 import type { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
-import { runToolCalls, stepStream, tryParseArgs } from "./step.ts";
+import { runToolCall, stepStream, tryParseArgs } from "./step.ts";
+import { ToolCallPolicy } from "./policy.ts";
+import type { ToolCallError } from "./types.ts";
 import type { DispatchEvent, DispatchHandle, Injection, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ const drainInjections = (
 export const dispatch = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel> =>
+): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | ToolCallPolicy> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -93,7 +95,7 @@ export const dispatch = (
       messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
       iterations: number,
-    ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
+    ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | ToolCallPolicy> =>
       Effect.gen(function* () {
         yield* Effect.yieldNow;
 
@@ -166,7 +168,20 @@ export const dispatch = (
           args: tryParseArgs(tc),
         }));
 
-        const calls = yield* runToolCalls(blueprint.tools, result.toolCalls);
+        const policy = yield* ToolCallPolicy;
+
+        const calls = yield* Effect.all(
+          result.toolCalls.map((tc) =>
+            runToolCall(blueprint.tools, tc).pipe(
+              Effect.catch((err: ToolCallError) =>
+                emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
+                  Effect.flatMap(() => policy.recover(err)),
+                ),
+              ),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        );
 
         yield* emitAll(calls, (c) => ({
           _tag: "ToolResult" as const,
@@ -244,5 +259,5 @@ export const dispatch = (
 export const dispatchAwait = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | ToolCallPolicy> =>
   dispatch(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));

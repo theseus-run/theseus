@@ -1,0 +1,6 @@
+language js(typescript)
+
+`Effect.gen(function*() { $body })` where {
+  $body <: contains `if ($cond) { $_ }`,
+  register_diagnostic(span=$cond, message="Avoid if-statements inside Effect.gen. Use Match.value for branching, Effect.when for conditional execution, or push guards into the error channel (Effect.fail in a preceding pipe).", severity="warning")
+}

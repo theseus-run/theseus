@@ -61,7 +61,11 @@ export {
   stepStream,
   tryParseArgs,
   runToolCall,
-  runToolCalls,
+  ToolCallPolicy,
+  DefaultToolCallPolicy,
+  ToolCallUnknown,
+  ToolCallBadArgs,
+  ToolCallFailed,
 } from "./dispatch/index.ts";
 export type {
   DispatchEvent,
@@ -72,6 +76,7 @@ export type {
   StepToolCalls,
   StreamDelta,
   ToolCall,
+  ToolCallError,
   ToolCallResult,
   Usage,
 } from "./dispatch/index.ts";

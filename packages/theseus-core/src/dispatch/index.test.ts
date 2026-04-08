@@ -10,9 +10,10 @@ import {
   type MockResponse,
 } from "../test-utils/mock-language-model.ts";
 import {
-  dispatch, dispatchAwait, runToolCall, runToolCalls,
+  dispatch, dispatchAwait, runToolCall,
   step, tryParseArgs, type DispatchEvent,
 } from "./index.ts";
+import { DefaultToolCallPolicy } from "./policy.ts";
 import { extractToolDefs } from "../bridge/to-ai-tools.ts";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,10 @@ import { extractToolDefs } from "../bridge/to-ai-tools.ts";
 
 const run = (blueprint: Blueprint, task: string, responses: MockResponse[]) =>
   Effect.runPromise(
-    Effect.provide(dispatchAwait(blueprint, task), makeMockLanguageModel(responses)),
+    Effect.provide(
+      dispatchAwait(blueprint, task),
+      Layer.merge(makeMockLanguageModel(responses), DefaultToolCallPolicy),
+    ),
   );
 
 const collectEvents = (blueprint: Blueprint, task: string, responses: MockResponse[]) =>
@@ -35,7 +39,7 @@ const collectEvents = (blueprint: Blueprint, task: string, responses: MockRespon
         ).pipe(Stream.runDrain);
         return events;
       }),
-      makeMockLanguageModel(responses),
+      Layer.merge(makeMockLanguageModel(responses), DefaultToolCallPolicy),
     ),
   );
 
@@ -162,22 +166,24 @@ describe("step — returns own usage only", () => {
 // ===========================================================================
 
 describe("runToolCall", () => {
-  test("unknown tool returns error string", async () => {
+  test("unknown tool fails with ToolCallUnknown", async () => {
     const tc = { id: "c1", name: "nope", arguments: "{}" };
-    const result = await Effect.runPromise(runToolCall([], tc));
-    expect(result.content).toContain("unknown tool");
+    const err = await Effect.runPromise(Effect.flip(runToolCall([], tc)));
+    expect(err._tag).toBe("ToolCallUnknown");
+    expect((err as any).name).toBe("nope");
   });
 
-  test("invalid JSON returns error string", async () => {
+  test("invalid JSON fails with ToolCallBadArgs", async () => {
     const tc = { id: "c1", name: "echo", arguments: "bad" };
-    const result = await Effect.runPromise(runToolCall([echoTool], tc));
-    expect(result.content).toContain("invalid JSON");
+    const err = await Effect.runPromise(Effect.flip(runToolCall([echoTool], tc)));
+    expect(err._tag).toBe("ToolCallBadArgs");
   });
 
-  test("ToolError returns error string", async () => {
+  test("ToolError fails with ToolCallFailed", async () => {
     const tc = { id: "c1", name: "fail", arguments: "{}" };
-    const result = await Effect.runPromise(runToolCall([failingTool], tc));
-    expect(result.content).toContain("tool blew up");
+    const err = await Effect.runPromise(Effect.flip(runToolCall([failingTool], tc)));
+    expect(err._tag).toBe("ToolCallFailed");
+    expect((err as any).cause._tag).toBe("ToolError");
   });
 
   test("success returns tool output with parsed args", async () => {
@@ -185,19 +191,6 @@ describe("runToolCall", () => {
     const result = await Effect.runPromise(runToolCall([echoTool], tc));
     expect(result.content).toBe("hi");
     expect(result.args).toEqual({ msg: "hi" });
-  });
-});
-
-describe("runToolCalls", () => {
-  test("executes multiple tool calls in parallel", async () => {
-    const tcs = [
-      { id: "c1", name: "echo", arguments: '{"msg":"a"}' },
-      { id: "c2", name: "echo", arguments: '{"msg":"b"}' },
-    ];
-    const results = await Effect.runPromise(runToolCalls([echoTool], tcs));
-    expect(results).toHaveLength(2);
-    expect(results[0]!.content).toBe("a");
-    expect(results[1]!.content).toBe("b");
   });
 });
 
@@ -279,9 +272,12 @@ describe("dispatchAwait — tool errors become strings", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        makeMockLanguageModel([
-          toolCallParts([{ id: "c1", name: "nonexistent", arguments: "{}" }]),
-        ]),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "nonexistent", arguments: "{}" }]),
+          ]),
+          DefaultToolCallPolicy,
+        ),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -310,9 +306,12 @@ describe("dispatchAwait — cycle cap", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(cappedBlueprint, "task")),
-        makeMockLanguageModel([
-          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
-        ]),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+          ]),
+          DefaultToolCallPolicy,
+        ),
       ),
     );
     expect(err._tag).toBe("AgentCycleExceeded");
@@ -330,7 +329,7 @@ describe("dispatchAwait — AiError", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        makeMockLanguageModel([aiErr]),
+        Layer.merge(makeMockLanguageModel([aiErr]), DefaultToolCallPolicy),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -411,7 +410,7 @@ describe("DispatchHandle — interrupt", () => {
     );
 
     const handle = await Effect.runPromise(
-      Effect.provide(dispatch(blueprint, "task"), neverProvider),
+      Effect.provide(dispatch(blueprint, "task"), Layer.merge(neverProvider, DefaultToolCallPolicy)),
     );
 
     await Effect.runPromise(handle.interrupt);
@@ -431,9 +430,12 @@ describe("DispatchHandle — inject", () => {
     const handle = await Effect.runPromise(
       Effect.provide(
         dispatch(blueprint, "task"),
-        makeMockLanguageModel([
-          toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
-        ]),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+          ]),
+          DefaultToolCallPolicy,
+        ),
       ),
     );
 

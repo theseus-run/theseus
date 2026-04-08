@@ -4,8 +4,8 @@
  * Run:  bun run packages/theseus-runtime/src/integration/grunt.ts
  */
 
-import { Effect, Stream } from "effect";
-import { type Blueprint, grunt } from "@theseus.run/core";
+import { Effect, Layer, Stream } from "effect";
+import { type Blueprint, grunt, DefaultToolCallPolicy } from "@theseus.run/core";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
 import { renderEvent, dim, yellow } from "./render.ts";
@@ -49,7 +49,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, CopilotLanguageModelLive)).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, DefaultToolCallPolicy))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });
