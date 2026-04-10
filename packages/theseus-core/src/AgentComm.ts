@@ -1,0 +1,24 @@
+/**
+ * AgentComm — namespace barrel for `import * as AgentComm from "@theseus.run/core/AgentComm"`
+ *
+ * Cross-agent communication protocol. Delegate dispatches workers with
+ * structured briefings, report terminates with structured results.
+ *
+ * Usage:
+ *   import * as AgentComm from "@theseus.run/core/AgentComm"
+ *
+ *   const delegateTool = yield* AgentComm.makeDelegate(workerBlueprint)
+ *   const logTool = AgentComm.makeLogTool("forge-1")
+ */
+
+// ---------------------------------------------------------------------------
+// Types (already clean — no prefix to drop)
+// ---------------------------------------------------------------------------
+
+export type { DelegateInput, ReportInput } from "./agent-comm/index.ts";
+
+// ---------------------------------------------------------------------------
+// Tools & factories
+// ---------------------------------------------------------------------------
+
+export { makeDelegate, makeLogTool, makeReadCapsuleTool, report } from "./agent-comm/index.ts";

@@ -6,6 +6,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./Tool": "./src/Tool.ts",
+    "./Dispatch": "./src/Dispatch.ts",
+    "./Capsule": "./src/Capsule.ts",
+    "./Mission": "./src/Mission.ts",
+    "./Grunt": "./src/Grunt.ts",
+    "./Agent": "./src/Agent.ts",
+    "./AgentComm": "./src/AgentComm.ts",
+    "./Bridge": "./src/Bridge.ts",
     "./agent-comm/delegate": "./src/agent-comm/delegate.ts",
     "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
   },
