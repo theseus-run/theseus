@@ -105,18 +105,17 @@ export const runToolCall = (
     return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
   const parsed = tryParseArgs(tc);
-  const raw = typeof parsed === "string" ? undefined : parsed;
-  if (raw === undefined)
+  if (typeof parsed !== "object" || parsed === null)
     return Effect.fail(new ToolCallBadArgs({ callId: tc.id, name: tc.name, raw: tc.arguments }));
 
-  return callTool(tool, raw).pipe(
+  return callTool(tool, parsed).pipe(
     Effect.map((r) => ({
       callId: tc.id,
       name: tc.name,
-      args: raw,
+      args: parsed,
       content: r.llmContent,
     })),
-    Effect.mapError((cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: raw, cause })),
+    Effect.mapError((cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause })),
   );
 };
 

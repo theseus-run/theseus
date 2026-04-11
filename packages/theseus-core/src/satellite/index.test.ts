@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer, Stream } from "effect";
 import type { Blueprint } from "../agent/index.ts";
+import type { AgentInterrupted } from "../agent/index.ts";
 import { defineTool, manualSchema } from "../tool/index.ts";
 import {
   makeMockLanguageModel, textParts, toolCallParts,
@@ -8,8 +9,9 @@ import {
 import { dispatch, dispatchAwait, type DispatchEvent } from "../dispatch/index.ts";
 import { SatelliteRingLive, DefaultSatelliteRing } from "./ring.ts";
 import type { Satellite } from "./types.ts";
-import { SatelliteAbort } from "./types.ts";
-import { toolRecovery } from "./tool-recovery.ts";
+import { SatelliteAbort, Pass, BlockTool, ReplaceResult } from "./types.ts";
+import { tokenBudget } from "./token-budget.ts";
+import { toolGuard } from "./tool-guard.ts";
 
 // ---------------------------------------------------------------------------
 // Test tools
@@ -48,7 +50,7 @@ const runWith = (satellites: Satellite<any>[], responses: any[], task = "task") 
       dispatchAwait(blueprint, task),
       Layer.merge(
         makeMockLanguageModel(responses),
-        SatelliteRingLive([toolRecovery, ...satellites]),
+        SatelliteRingLive(satellites),
       ),
     ),
   );
@@ -66,7 +68,7 @@ const collectEventsWith = (satellites: Satellite<any>[], responses: any[], task 
       }),
       Layer.merge(
         makeMockLanguageModel(responses),
-        SatelliteRingLive([toolRecovery, ...satellites]),
+        SatelliteRingLive(satellites),
       ),
     ),
   );
@@ -115,8 +117,8 @@ describe("Satellite — BeforeTool BlockTool", () => {
       initial: undefined,
       handle: (phase) =>
         phase._tag === "BeforeTool" && phase.tool.name === "echo"
-          ? Effect.succeed({ action: { _tag: "BlockTool" as const, content: "BLOCKED by guard" }, state: undefined })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: undefined }),
+          ? Effect.succeed({ action: BlockTool("BLOCKED by guard"), state: undefined })
+          : Effect.succeed({ action: Pass, state: undefined }),
     };
 
     const events = await collectEventsWith(
@@ -127,9 +129,11 @@ describe("Satellite — BeforeTool BlockTool", () => {
       ],
     );
 
-    const toolResults = events.filter((e) => e._tag === "ToolResult");
+    const toolResults = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "ToolResult" }> => e._tag === "ToolResult",
+    );
     expect(toolResults).toHaveLength(1);
-    expect((toolResults[0] as any).content).toBe("BLOCKED by guard");
+    expect(toolResults[0]!.content).toBe("BLOCKED by guard");
   });
 });
 
@@ -144,8 +148,8 @@ describe("Satellite — AfterTool ReplaceResult", () => {
       initial: undefined,
       handle: (phase) =>
         phase._tag === "AfterTool" && phase.result.content.length > 2
-          ? Effect.succeed({ action: { _tag: "ReplaceResult" as const, content: "[compacted]" }, state: undefined })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: undefined }),
+          ? Effect.succeed({ action: ReplaceResult("[compacted]"), state: undefined })
+          : Effect.succeed({ action: Pass, state: undefined }),
     };
 
     const events = await collectEventsWith(
@@ -156,9 +160,11 @@ describe("Satellite — AfterTool ReplaceResult", () => {
       ],
     );
 
-    const toolResults = events.filter((e) => e._tag === "ToolResult");
+    const toolResults = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "ToolResult" }> => e._tag === "ToolResult",
+    );
     expect(toolResults).toHaveLength(1);
-    expect((toolResults[0] as any).content).toBe("[compacted]");
+    expect(toolResults[0]!.content).toBe("[compacted]");
   });
 });
 
@@ -177,9 +183,9 @@ describe("Satellite — SatelliteAbort", () => {
               const next = used + phase.stepResult.usage.inputTokens + phase.stepResult.usage.outputTokens;
               if (next > 1)
                 return yield* Effect.fail(new SatelliteAbort({ satellite: "token-budget", reason: `${next} tokens` }));
-              return { action: { _tag: "Pass" as const }, state: next };
+              return { action: Pass, state: next };
             })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: used }),
+          : Effect.succeed({ action: Pass, state: used }),
     };
 
     const err = await Effect.runPromise(
@@ -187,13 +193,13 @@ describe("Satellite — SatelliteAbort", () => {
         Effect.flip(dispatchAwait(blueprint, "task")),
         Layer.merge(
           makeMockLanguageModel([textParts("hi", 10, 5)]),
-          SatelliteRingLive([toolRecovery, budget]),
+          SatelliteRingLive([budget]),
         ),
       ),
     );
     // SatelliteAbort is converted to AgentInterrupted by the dispatch loop
     expect(err._tag).toBe("AgentInterrupted");
-    expect((err as any).reason).toContain("token-budget");
+    expect((err as AgentInterrupted).reason).toContain("token-budget");
   });
 });
 
@@ -208,11 +214,11 @@ describe("Satellite — stateful across iterations", () => {
       initial: [],
       handle: (phase, ctx, iterations) =>
         phase._tag === "BeforeCall"
-          ? Effect.succeed({ action: { _tag: "Pass" as const }, state: [...iterations, ctx.iteration] })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: iterations }),
+          ? Effect.succeed({ action: Pass, state: [...iterations, ctx.iteration] })
+          : Effect.succeed({ action: Pass, state: iterations }),
     };
 
-    // Tool call forces 2 iterations
+    // Tool call forces 2 iterations — no crash means state tracked correctly
     await runWith(
       [iterationTracker],
       [
@@ -220,8 +226,6 @@ describe("Satellite — stateful across iterations", () => {
         textParts("done"),
       ],
     );
-
-    // Test passes if no error — satellite tracked iterations 0, 1 without crash
   });
 });
 
@@ -230,25 +234,23 @@ describe("Satellite — stateful across iterations", () => {
 // ===========================================================================
 
 describe("Satellite — composition", () => {
-  test("satellites compose in order — first transforms, second sees transformed", async () => {
+  test("terminal action short-circuits the chain", async () => {
     const blocker: Satellite = {
       name: "blocker",
       initial: undefined,
       handle: (phase) =>
         phase._tag === "BeforeTool" && phase.tool.name === "echo"
-          ? Effect.succeed({ action: { _tag: "BlockTool" as const, content: "BLOCKED" }, state: undefined })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: undefined }),
+          ? Effect.succeed({ action: BlockTool("BLOCKED"), state: undefined })
+          : Effect.succeed({ action: Pass, state: undefined }),
     };
 
-    // Second satellite should NOT see BeforeTool for "echo" because blocker already blocked it
-    // (BlockTool is terminal — chain short-circuits)
     const spy: Satellite<string[]> = {
       name: "spy",
       initial: [],
       handle: (phase, _ctx, seen) =>
         phase._tag === "BeforeTool"
-          ? Effect.succeed({ action: { _tag: "Pass" as const }, state: [...seen, phase.tool.name] })
-          : Effect.succeed({ action: { _tag: "Pass" as const }, state: seen }),
+          ? Effect.succeed({ action: Pass, state: [...seen, phase.tool.name] })
+          : Effect.succeed({ action: Pass, state: seen }),
     };
 
     const events = await collectEventsWith(
@@ -259,8 +261,10 @@ describe("Satellite — composition", () => {
       ],
     );
 
-    const toolResults = events.filter((e) => e._tag === "ToolResult");
-    expect((toolResults[0] as any).content).toBe("BLOCKED");
+    const toolResults = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "ToolResult" }> => e._tag === "ToolResult",
+    );
+    expect(toolResults[0]!.content).toBe("BLOCKED");
   });
 });
 
@@ -273,7 +277,7 @@ describe("Satellite — pass-through", () => {
     const noop: Satellite = {
       name: "noop",
       initial: undefined,
-      handle: () => Effect.succeed({ action: { _tag: "Pass" as const }, state: undefined }),
+      handle: () => Effect.succeed({ action: Pass, state: undefined }),
     };
 
     const result = await runWith(
@@ -282,5 +286,129 @@ describe("Satellite — pass-through", () => {
     );
     expect(result.content).toBe("hello");
     expect(result.result).toBe("unstructured");
+  });
+});
+
+// ===========================================================================
+// toolRecovery ordering — user satellites see ToolError before recovery
+// ===========================================================================
+
+describe("Satellite — toolRecovery is last in ring", () => {
+  test("user satellite can intercept ToolError before default recovery", async () => {
+    const failTool = defineTool<object, string>({
+      name: "fail",
+      description: "Always fails",
+      inputSchema: manualSchema({ type: "object", properties: {}, required: [] }, (r) => r as object),
+      safety: "readonly",
+      capabilities: [],
+      execute: (_input, { fail }) => Effect.fail(fail("boom")),
+      encode: () => "unreachable",
+    });
+
+    const bp: Blueprint = { ...blueprint, tools: [echoTool, failTool] };
+    let sawToolError = false;
+
+    const observer: Satellite = {
+      name: "error-observer",
+      initial: undefined,
+      handle: (phase) => {
+        if (phase._tag === "ToolError") sawToolError = true;
+        return Effect.succeed({ action: Pass, state: undefined });
+      },
+    };
+
+    await Effect.runPromise(
+      Effect.provide(
+        dispatchAwait(bp, "task"),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "fail", arguments: "{}" }]),
+            textParts("recovered"),
+          ]),
+          SatelliteRingLive([observer]),
+        ),
+      ),
+    );
+
+    expect(sawToolError).toBe(true);
+  });
+});
+
+// ===========================================================================
+// tokenBudget — built-in
+// ===========================================================================
+
+describe("tokenBudget", () => {
+  test("passes when under budget", async () => {
+    const result = await runWith(
+      [tokenBudget(1000)],
+      [textParts("hello", 10, 5)],
+    );
+    expect(result.content).toBe("hello");
+  });
+
+  test("aborts when over budget", async () => {
+    const err = await Effect.runPromise(
+      Effect.provide(
+        Effect.flip(dispatchAwait(blueprint, "task")),
+        Layer.merge(
+          makeMockLanguageModel([textParts("hi", 500, 600)]),
+          SatelliteRingLive([tokenBudget(100)]),
+        ),
+      ),
+    );
+    expect(err._tag).toBe("AgentInterrupted");
+    expect((err as AgentInterrupted).reason).toContain("token-budget");
+    expect((err as AgentInterrupted).reason).toContain("1100/100");
+  });
+
+  test("accumulates across iterations", async () => {
+    const err = await Effect.runPromise(
+      Effect.provide(
+        Effect.flip(dispatchAwait(blueprint, "task")),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }], 30, 20),
+            textParts("done", 30, 25),
+          ]),
+          SatelliteRingLive([tokenBudget(60)]),
+        ),
+      ),
+    );
+    // First iteration: 50 tokens (under 60). Second: 105 total (over 60).
+    expect(err._tag).toBe("AgentInterrupted");
+    expect((err as AgentInterrupted).reason).toContain("token-budget");
+  });
+});
+
+// ===========================================================================
+// toolGuard — built-in
+// ===========================================================================
+
+describe("toolGuard", () => {
+  test("blocks listed tools with policy message", async () => {
+    const events = await collectEventsWith(
+      [toolGuard(["echo"])],
+      [
+        toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+        textParts("done"),
+      ],
+    );
+
+    const toolResults = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "ToolResult" }> => e._tag === "ToolResult",
+    );
+    expect(toolResults[0]!.content).toContain("blocked by policy");
+  });
+
+  test("allows unlisted tools", async () => {
+    const result = await runWith(
+      [toolGuard(["shell", "write_file"])],
+      [
+        toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"allowed"}' }]),
+        textParts("done"),
+      ],
+    );
+    expect(result.content).toBe("done");
   });
 });

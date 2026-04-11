@@ -1,6 +1,4 @@
 /**
- * Default tool error recovery satellite.
- *
  * Default tool error recovery — converts tool call errors into
  * LLM-friendly error strings so the model can retry or adjust.
  *
@@ -9,6 +7,7 @@
 
 import { Effect, Match } from "effect";
 import type { Satellite } from "./types.ts";
+import { Pass, RecoverToolError } from "./types.ts";
 
 export const toolRecovery: Satellite = {
   name: "tool-recovery",
@@ -17,13 +16,12 @@ export const toolRecovery: Satellite = {
     Match.value(phase).pipe(
       Match.tag("ToolError", ({ tool, error }) =>
         Effect.succeed({
-          action: {
-            _tag: "RecoverToolError" as const,
-            result: Match.value(error).pipe(
+          action: RecoverToolError(
+            Match.value(error).pipe(
               Match.tag("ToolCallUnknown", (e) => ({
                 callId: tool.id,
                 name: e.name,
-                args: undefined as unknown,
+                args: {} as unknown,
                 content: `Error: unknown tool "${e.name}"`,
               })),
               Match.tag("ToolCallBadArgs", (e) => ({
@@ -40,10 +38,10 @@ export const toolRecovery: Satellite = {
               })),
               Match.exhaustive,
             ),
-          },
+          ),
           state: undefined,
         }),
       ),
-      Match.orElse(() => Effect.succeed({ action: { _tag: "Pass" as const }, state: undefined })),
+      Match.orElse(() => Effect.succeed({ action: Pass, state: undefined })),
     ),
 };

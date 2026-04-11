@@ -78,6 +78,18 @@ export interface Satellite<S = void> {
 }
 
 // ---------------------------------------------------------------------------
+// Action constructors — avoid `as const` noise in satellite implementations
+// ---------------------------------------------------------------------------
+
+export const Pass: Action = { _tag: "Pass" };
+export const TransformMessages = (messages: ReadonlyArray<Prompt.MessageEncoded>): Action => ({ _tag: "TransformMessages", messages });
+export const TransformStepResult = (stepResult: StepResult): Action => ({ _tag: "TransformStepResult", stepResult });
+export const ModifyArgs = (args: unknown): Action => ({ _tag: "ModifyArgs", args });
+export const BlockTool = (content: string): Action => ({ _tag: "BlockTool", content });
+export const ReplaceResult = (content: string): Action => ({ _tag: "ReplaceResult", content });
+export const RecoverToolError = (result: ToolCallResult): Action => ({ _tag: "RecoverToolError", result });
+
+// ---------------------------------------------------------------------------
 // SatelliteAny — existential type for heterogeneous satellite arrays
 // ---------------------------------------------------------------------------
 

@@ -13,7 +13,8 @@
 
 import { Effect, Layer, Match, Ref } from "effect";
 import * as ServiceMap from "effect/ServiceMap";
-import type { Action, Phase, SatelliteAny, SatelliteContext } from "./types.ts";
+import type { Phase, SatelliteAny, SatelliteContext } from "./types.ts";
+import { type Action, Pass } from "./types.ts";
 import type { SatelliteAbort } from "./types.ts";
 import { toolRecovery } from "./tool-recovery.ts";
 
@@ -83,7 +84,7 @@ export const makeSatelliteRing = (
     const run = (phase: Phase, ctx: SatelliteContext): Effect.Effect<Action, SatelliteAbort> =>
       Effect.gen(function* () {
         let currentPhase = phase;
-        let lastAction: Action = { _tag: "Pass" };
+        let lastAction: Action = Pass;
 
         for (let i = 0; i < satellites.length; i++) {
           const satellite = satellites[i]!;
@@ -120,10 +121,10 @@ export const DefaultSatelliteRing = Layer.effect(SatelliteRing)(
   makeSatelliteRing([toolRecovery]),
 );
 
-/** Build a ring Layer from a list of satellites. */
+/** Build a ring Layer from a list of satellites. Appends toolRecovery as fallback. */
 export const SatelliteRingLive = (
   satellites: ReadonlyArray<SatelliteAny>,
 ): Layer.Layer<SatelliteRing> =>
   Layer.effect(SatelliteRing)(
-    makeSatelliteRing(satellites),
+    makeSatelliteRing([...satellites, toolRecovery]),
   );

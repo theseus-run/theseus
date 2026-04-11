@@ -28,6 +28,12 @@ export { DefaultSatelliteRing as DefaultRing, SatelliteRingLive as RingLive } fr
 export { makeSatelliteRing as makeRing } from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
+// Action constructors
+// ---------------------------------------------------------------------------
+
+export { Pass, TransformMessages, TransformStepResult, ModifyArgs, BlockTool, ReplaceResult, RecoverToolError } from "./satellite/index.ts";
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -38,3 +44,5 @@ export { SatelliteAbort } from "./satellite/index.ts";
 // ---------------------------------------------------------------------------
 
 export { toolRecovery } from "./satellite/index.ts";
+export { tokenBudget } from "./satellite/index.ts";
+export { toolGuard } from "./satellite/index.ts";
