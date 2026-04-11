@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { Effect, Layer } from "effect";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as CapsuleNs from "@theseus.run/core/Capsule";
-import { TheseusDb, TheseusDbLive } from "./sqlite.ts";
+import { TheseusDbLive } from "./sqlite.ts";
 import { SqliteDispatchLog } from "./sqlite-dispatch-log.ts";
 import { SqliteCapsuleLive } from "./sqlite-capsule.ts";
 import { renderCapsule, renderFrictions, renderDecisions, renderTimeline } from "./capsule-render.ts";

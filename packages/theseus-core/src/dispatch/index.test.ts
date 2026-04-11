@@ -14,7 +14,7 @@ import {
   step, tryParseArgs, type DispatchEvent,
 } from "./index.ts";
 import { DefaultSatelliteRing } from "../satellite/ring.ts";
-import { NoopDispatchLog, InMemoryDispatchLog, DispatchLog, DispatchDefaults } from "./index.ts";
+import { InMemoryDispatchLog, DispatchLog, DispatchDefaults } from "./index.ts";
 import { extractToolDefs } from "../bridge/to-ai-tools.ts";
 
 // ---------------------------------------------------------------------------
