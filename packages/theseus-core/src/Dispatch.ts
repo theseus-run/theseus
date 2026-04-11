@@ -44,6 +44,21 @@ export type {
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------
+// Log (audit / replay / restore)
+// ---------------------------------------------------------------------------
+
+export {
+  DispatchLog as Log,
+  InMemoryDispatchLog as InMemoryLog,
+  NoopDispatchLog as NoopLog,
+} from "./dispatch/index.ts";
+
+export type {
+  EventEntry,
+  Snapshot,
+} from "./dispatch/index.ts";
+
+// ---------------------------------------------------------------------------
 // Errors (keep prefix — _tag must be globally unique)
 // ---------------------------------------------------------------------------
 

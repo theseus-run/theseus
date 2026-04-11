@@ -8,6 +8,7 @@ import {
 } from "../test-utils/mock-language-model.ts";
 import { dispatch, dispatchAwait, type DispatchEvent } from "../dispatch/index.ts";
 import { SatelliteRingLive, DefaultSatelliteRing } from "./ring.ts";
+import { NoopDispatchLog } from "../dispatch/log.ts";
 import type { Satellite } from "./types.ts";
 import { SatelliteAbort, Pass, BlockTool, ReplaceResult } from "./types.ts";
 import { tokenBudget } from "./token-budget.ts";
@@ -48,10 +49,10 @@ const runWith = (satellites: Satellite<any>[], responses: any[], task = "task") 
   Effect.runPromise(
     Effect.provide(
       dispatchAwait(blueprint, task),
-      Layer.merge(
+      Layer.merge(Layer.merge(
         makeMockLanguageModel(responses),
         SatelliteRingLive(satellites),
-      ),
+      ), NoopDispatchLog),
     ),
   );
 
@@ -66,10 +67,10 @@ const collectEventsWith = (satellites: Satellite<any>[], responses: any[], task 
         ).pipe(Stream.runDrain);
         return events;
       }),
-      Layer.merge(
+      Layer.merge(Layer.merge(
         makeMockLanguageModel(responses),
         SatelliteRingLive(satellites),
-      ),
+      ), NoopDispatchLog),
     ),
   );
 
@@ -93,13 +94,13 @@ describe("DefaultSatelliteRing — tool recovery", () => {
     const result = await Effect.runPromise(
       Effect.provide(
         dispatchAwait(bp, "task"),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "fail", arguments: "{}" }]),
             textParts("recovered"),
           ]),
           DefaultSatelliteRing,
-        ),
+        ), NoopDispatchLog),
       ),
     );
     expect(result.content).toBe("recovered");
@@ -191,10 +192,10 @@ describe("Satellite — SatelliteAbort", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([textParts("hi", 10, 5)]),
           SatelliteRingLive([budget]),
-        ),
+        ), NoopDispatchLog),
       ),
     );
     // SatelliteAbort is converted to AgentInterrupted by the dispatch loop
@@ -320,13 +321,13 @@ describe("Satellite — toolRecovery is last in ring", () => {
     await Effect.runPromise(
       Effect.provide(
         dispatchAwait(bp, "task"),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "fail", arguments: "{}" }]),
             textParts("recovered"),
           ]),
           SatelliteRingLive([observer]),
-        ),
+        ), NoopDispatchLog),
       ),
     );
 
@@ -351,10 +352,10 @@ describe("tokenBudget", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([textParts("hi", 500, 600)]),
           SatelliteRingLive([tokenBudget(100)]),
-        ),
+        ), NoopDispatchLog),
       ),
     );
     expect(err._tag).toBe("AgentInterrupted");
@@ -366,13 +367,13 @@ describe("tokenBudget", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }], 30, 20),
             textParts("done", 30, 25),
           ]),
           SatelliteRingLive([tokenBudget(60)]),
-        ),
+        ), NoopDispatchLog),
       ),
     );
     // First iteration: 50 tokens (under 60). Second: 105 total (over 60).

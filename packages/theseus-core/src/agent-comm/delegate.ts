@@ -13,6 +13,7 @@ import { fromZod } from "../tool/zod.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { gruntAwait } from "../grunt/index.ts";
 import { DefaultSatelliteRing } from "../satellite/ring.ts";
+import { NoopDispatchLog } from "../dispatch/log.ts";
 import { Capsule } from "../capsule/index.ts";
 import { z } from "zod";
 import { report } from "./report.ts";
@@ -95,10 +96,10 @@ export const makeDelegate = (
           };
 
           const agentResult = yield* gruntAwait(briefedBlueprint, input.task).pipe(
-            Effect.provide(Layer.merge(
+            Effect.provide(Layer.merge(Layer.merge(
               Layer.succeed(LanguageModel.LanguageModel, lm),
               DefaultSatelliteRing,
-            )),
+            ), NoopDispatchLog)),
             Effect.catchTags({
               AgentInterrupted: (e) => Effect.fail(fail(`Worker interrupted: ${e.reason ?? "unknown"}`)),
               AgentCycleExceeded: (e) => Effect.fail(fail(`Worker exceeded cycle cap (${e.max} iterations)`)),

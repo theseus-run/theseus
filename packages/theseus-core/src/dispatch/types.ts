@@ -119,6 +119,8 @@ export type Injection =
 // ---------------------------------------------------------------------------
 
 export interface DispatchOptions {
+  /** Dispatch identifier for logging/restore. Auto-generated if omitted. */
+  readonly dispatchId?: string
   /** Restore from a previous session — replaces the default [system, user] messages. */
   readonly messages?: ReadonlyArray<Prompt.MessageEncoded>
   /** Resume iteration count (for usage tracking continuity). */
@@ -132,6 +134,7 @@ export interface DispatchOptions {
 // ---------------------------------------------------------------------------
 
 export interface DispatchHandle {
+  readonly dispatchId: string
   readonly events: Stream.Stream<DispatchEvent>
   readonly inject: (i: Injection) => Effect.Effect<void>
   readonly interrupt: Effect.Effect<void>

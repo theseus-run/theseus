@@ -51,7 +51,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing), Dispatch.NoopLog))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

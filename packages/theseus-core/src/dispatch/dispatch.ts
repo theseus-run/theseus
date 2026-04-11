@@ -21,6 +21,7 @@ import type { Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
+import { DispatchLog } from "./log.ts";
 import { runToolCall, stepStream, tryParseArgs } from "./step.ts";
 import type { ToolCallError } from "./types.ts";
 import type { DispatchEvent, DispatchHandle, DispatchOptions, Injection, Usage } from "./types.ts";
@@ -74,18 +75,23 @@ export const dispatch = (
   blueprint: Blueprint,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | SatelliteRing> =>
+): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
+    const dispatchId = options?.dispatchId ?? `${blueprint.name}-${Date.now().toString(36)}`;
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
     const resultDeferred = yield* Deferred.make<AgentResult, AgentError>();
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
+    const log = yield* DispatchLog;
 
     const emit = (event: DispatchEvent): Effect.Effect<void> =>
-      Queue.offer(eventQueue, event).pipe(Effect.asVoid);
+      Queue.offer(eventQueue, event).pipe(
+        Effect.tap(() => log.record(dispatchId, event)),
+        Effect.asVoid,
+      );
 
     const emitAll = <T>(items: ReadonlyArray<T>, toEvent: (item: T) => DispatchEvent) =>
       Effect.all(items.map((i) => emit(toEvent(i))), { concurrency: "unbounded" });
@@ -98,7 +104,7 @@ export const dispatch = (
       messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
       iterations: number,
-    ): Effect.Effect<AgentResult, AgentError | SatelliteAbort, LanguageModel.LanguageModel | SatelliteRing> =>
+    ): Effect.Effect<AgentResult, AgentError | SatelliteAbort, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
       Effect.gen(function* () {
         yield* Effect.yieldNow;
 
@@ -114,6 +120,7 @@ export const dispatch = (
           );
 
         yield* Ref.set(messagesRef, next);
+        yield* log.snapshot(dispatchId, iterations, next, usage);
 
         const ring = yield* SatelliteRing;
         const satCtx = { agent: blueprint.name, iteration: iterations };
@@ -313,6 +320,7 @@ export const dispatch = (
     const result: Effect.Effect<AgentResult, AgentError> = Deferred.await(resultDeferred);
 
     return {
+      dispatchId,
       events: Stream.fromQueue(eventQueue).pipe(Stream.takeUntil((e) => e._tag === "Done")),
       inject: (i: Injection) => Queue.offer(injectionQueue, i).pipe(Effect.asVoid),
       interrupt: Fiber.interrupt(loopFiber).pipe(Effect.asVoid),
@@ -329,5 +337,5 @@ export const dispatchAwait = (
   blueprint: Blueprint,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
   dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

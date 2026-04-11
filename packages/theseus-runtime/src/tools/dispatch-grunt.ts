@@ -11,6 +11,7 @@
 
 import { Effect, Layer } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Tool from "@theseus.run/core/Tool";
 import type * as Agent from "@theseus.run/core/Agent";
 import * as Grunt from "@theseus.run/core/Grunt";
@@ -47,10 +48,10 @@ export const makeDispatchGruntTool = (workerBlueprint: Agent.Blueprint): Effect.
       capabilities: ["dispatch"],
       execute: ({ task }, { fail }) =>
         Grunt.gruntAwait(workerBlueprint, task).pipe(
-          Effect.provide(Layer.merge(
+          Effect.provide(Layer.merge(Layer.merge(
             Layer.succeed(LanguageModel.LanguageModel, lm),
             Satellite.DefaultRing,
-          )),
+          ), Dispatch.NoopLog)),
           Effect.map((result) => result.content),
           Effect.catchTags({
             AgentInterrupted: (e) => Effect.fail(fail(`Grunt interrupted: ${e.reason ?? "unknown"}`)),

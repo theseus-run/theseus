@@ -13,6 +13,7 @@
 import { Effect, Layer, Stream } from "effect";
 import type * as Agent from "@theseus.run/core/Agent";
 import * as Capsule from "@theseus.run/core/Capsule";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Grunt from "@theseus.run/core/Grunt";
 import * as Satellite from "@theseus.run/core/Satellite";
 import * as Mission from "@theseus.run/core/Mission";
@@ -122,7 +123,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing), Dispatch.NoopLog))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

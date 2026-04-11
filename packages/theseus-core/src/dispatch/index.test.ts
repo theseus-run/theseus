@@ -14,6 +14,7 @@ import {
   step, tryParseArgs, type DispatchEvent,
 } from "./index.ts";
 import { DefaultSatelliteRing } from "../satellite/ring.ts";
+import { NoopDispatchLog, InMemoryDispatchLog, DispatchLog } from "./log.ts";
 import { extractToolDefs } from "../bridge/to-ai-tools.ts";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +25,7 @@ const run = (blueprint: Blueprint, task: string, responses: MockResponse[]) =>
   Effect.runPromise(
     Effect.provide(
       dispatchAwait(blueprint, task),
-      Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing),
+      Layer.merge(Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing), NoopDispatchLog),
     ),
   );
 
@@ -39,7 +40,7 @@ const collectEvents = (blueprint: Blueprint, task: string, responses: MockRespon
         ).pipe(Stream.runDrain);
         return events;
       }),
-      Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing),
+      Layer.merge(Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing), NoopDispatchLog),
     ),
   );
 
@@ -272,12 +273,12 @@ describe("dispatchAwait — tool errors become strings", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "nonexistent", arguments: "{}" }]),
           ]),
           DefaultSatelliteRing,
-        ),
+        ), NoopDispatchLog),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -306,12 +307,12 @@ describe("dispatchAwait — cycle cap", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(cappedBlueprint, "task")),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
           ]),
           DefaultSatelliteRing,
-        ),
+        ), NoopDispatchLog),
       ),
     );
     expect(err._tag).toBe("AgentCycleExceeded");
@@ -329,7 +330,7 @@ describe("dispatchAwait — AiError", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(makeMockLanguageModel([aiErr]), DefaultSatelliteRing),
+        Layer.merge(Layer.merge(makeMockLanguageModel([aiErr]), DefaultSatelliteRing), NoopDispatchLog),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -410,7 +411,7 @@ describe("DispatchHandle — interrupt", () => {
     );
 
     const handle = await Effect.runPromise(
-      Effect.provide(dispatch(blueprint, "task"), Layer.merge(neverProvider, DefaultSatelliteRing)),
+      Effect.provide(dispatch(blueprint, "task"), Layer.merge(Layer.merge(neverProvider, DefaultSatelliteRing), NoopDispatchLog)),
     );
 
     await Effect.runPromise(handle.interrupt);
@@ -430,12 +431,12 @@ describe("DispatchHandle — inject", () => {
     const handle = await Effect.runPromise(
       Effect.provide(
         dispatch(blueprint, "task"),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
           ]),
           DefaultSatelliteRing,
-        ),
+        ), NoopDispatchLog),
       ),
     );
 
@@ -456,7 +457,7 @@ describe("DispatchHandle — messages", () => {
     const handle = await Effect.runPromise(
       Effect.provide(
         dispatch(blueprint, "hello"),
-        Layer.merge(makeMockLanguageModel([textParts("hi")]), DefaultSatelliteRing),
+        Layer.merge(Layer.merge(makeMockLanguageModel([textParts("hi")]), DefaultSatelliteRing), NoopDispatchLog),
       ),
     );
     await Effect.runPromise(handle.result);
@@ -470,13 +471,13 @@ describe("DispatchHandle — messages", () => {
     const handle = await Effect.runPromise(
       Effect.provide(
         dispatch(blueprint, "task"),
-        Layer.merge(
+        Layer.merge(Layer.merge(
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
             textParts("done"),
           ]),
           DefaultSatelliteRing,
-        ),
+        ), NoopDispatchLog),
       ),
     );
     await Effect.runPromise(handle.result);
@@ -504,9 +505,77 @@ describe("dispatch — DispatchOptions", () => {
     const result = await Effect.runPromise(
       Effect.provide(
         dispatchAwait(blueprint, "continue", { messages: restored }),
-        Layer.merge(makeMockLanguageModel([textParts("done")]), DefaultSatelliteRing),
+        Layer.merge(Layer.merge(makeMockLanguageModel([textParts("done")]), DefaultSatelliteRing), NoopDispatchLog),
       ),
     );
     expect(result.content).toBe("done");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DispatchLog — audit / replay / restore
+// ---------------------------------------------------------------------------
+
+describe("DispatchLog — InMemory", () => {
+  test("records events during dispatch", async () => {
+    const { events, log } = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          const log = yield* DispatchLog;
+          const handle = yield* dispatch(blueprint, "task");
+          const evts: DispatchEvent[] = [];
+          yield* Stream.tap(handle.events, (e) =>
+            Effect.sync(() => { evts.push(e); }),
+          ).pipe(Stream.runDrain);
+          return { events: evts, log };
+        }),
+        Layer.merge(Layer.merge(makeMockLanguageModel([textParts("hello")]), DefaultSatelliteRing), InMemoryDispatchLog),
+      ),
+    );
+    const logged = await Effect.runPromise(log.events());
+    expect(logged.length).toBeGreaterThanOrEqual(events.length);
+    expect(logged[0]!.event._tag).toBe("Calling");
+    expect(logged[0]!.dispatchId).toContain("test-grunt");
+  });
+
+  test("snapshots messages for restore", async () => {
+    const log = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          const log = yield* DispatchLog;
+          yield* dispatchAwait(blueprint, "task");
+          return log;
+        }),
+        Layer.merge(Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+            textParts("done"),
+          ]),
+          DefaultSatelliteRing,
+        ), InMemoryDispatchLog),
+      ),
+    );
+    // Get all events to find the dispatchId
+    const allEvents = await Effect.runPromise(log.events());
+    const dispatchId = allEvents[0]!.dispatchId;
+
+    // Restore should return the latest snapshot
+    const opts = await Effect.runPromise(log.restore(dispatchId));
+    expect(opts).toBeDefined();
+    expect(opts!.messages!.length).toBeGreaterThanOrEqual(2);
+    expect(opts!.iteration).toBeGreaterThanOrEqual(0);
+  });
+
+  test("restore returns undefined for unknown dispatchId", async () => {
+    const log = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          return yield* DispatchLog;
+        }),
+        InMemoryDispatchLog,
+      ),
+    );
+    const opts = await Effect.runPromise(log.restore("nonexistent"));
+    expect(opts).toBeUndefined();
   });
 });
