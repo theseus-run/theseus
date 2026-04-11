@@ -11,6 +11,7 @@
  *   import * as Agent from "@theseus.run/core/Agent"
  *   import * as AgentComm from "@theseus.run/core/AgentComm"
  *   import * as Bridge from "@theseus.run/core/Bridge"
+ *   import * as Daemon from "@theseus.run/core/Daemon"
  *
  * This root barrel re-exports all namespace barrels for convenience.
  * Prefer the direct namespace imports above.
@@ -25,3 +26,4 @@ export * as Agent from "./Agent.ts";
 export * as AgentComm from "./AgentComm.ts";
 export * as Bridge from "./Bridge.ts";
 export * as Satellite from "./Satellite.ts";
+export * as Daemon from "./Daemon.ts";

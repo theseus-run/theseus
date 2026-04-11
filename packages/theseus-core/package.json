@@ -15,6 +15,8 @@
     "./AgentComm": "./src/AgentComm.ts",
     "./Bridge": "./src/Bridge.ts",
     "./Satellite": "./src/Satellite.ts",
+    "./Daemon": "./src/Daemon.ts",
+    "./test-utils/mock-language-model": "./src/test-utils/mock-language-model.ts",
     "./agent-comm/delegate": "./src/agent-comm/delegate.ts",
     "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
   },

@@ -7,7 +7,7 @@
  */
 
 import { Data } from "effect";
-import type { AgentResult, ResultKind } from "../agent/index.ts";
+import type { AgentResult } from "../agent/index.ts";
 import type { DispatchEvent, DispatchOptions, Injection, Usage } from "../dispatch/types.ts";
 
 // ---------------------------------------------------------------------------
