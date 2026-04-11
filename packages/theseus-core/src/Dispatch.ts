@@ -31,6 +31,7 @@ export {
 export type {
   DispatchEvent as Event,
   DispatchHandle as Handle,
+  DispatchOptions as Options,
   Injection,
   StepResult,
   StepText,

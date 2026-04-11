@@ -115,6 +115,19 @@ export type Injection =
   | { readonly _tag: "Redirect";        readonly task: string }
 
 // ---------------------------------------------------------------------------
+// DispatchOptions — optional configuration for dispatch
+// ---------------------------------------------------------------------------
+
+export interface DispatchOptions {
+  /** Restore from a previous session — replaces the default [system, user] messages. */
+  readonly messages?: ReadonlyArray<Prompt.MessageEncoded>
+  /** Resume iteration count (for usage tracking continuity). */
+  readonly iteration?: number
+  /** Resume usage accumulation. */
+  readonly usage?: Usage
+}
+
+// ---------------------------------------------------------------------------
 // DispatchHandle — live interface to a running dispatch
 // ---------------------------------------------------------------------------
 
@@ -123,4 +136,6 @@ export interface DispatchHandle {
   readonly inject: (i: Injection) => Effect.Effect<void>
   readonly interrupt: Effect.Effect<void>
   readonly result: Effect.Effect<AgentResult, AgentError>
+  /** Snapshot current message history. */
+  readonly messages: Effect.Effect<ReadonlyArray<Prompt.MessageEncoded>>
 }

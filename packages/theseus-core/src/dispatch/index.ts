@@ -13,6 +13,7 @@
 export type {
   DispatchEvent,
   DispatchHandle,
+  DispatchOptions,
   Injection,
   StepResult,
   StepText,

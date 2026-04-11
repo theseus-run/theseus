@@ -446,3 +446,67 @@ describe("DispatchHandle — inject", () => {
     expect((err as AgentInterrupted).reason).toContain("Interrupted");
   });
 });
+
+// ---------------------------------------------------------------------------
+// DispatchHandle — messages snapshot
+// ---------------------------------------------------------------------------
+
+describe("DispatchHandle — messages", () => {
+  test("exposes current message history after completion", async () => {
+    const handle = await Effect.runPromise(
+      Effect.provide(
+        dispatch(blueprint, "hello"),
+        Layer.merge(makeMockLanguageModel([textParts("hi")]), DefaultSatelliteRing),
+      ),
+    );
+    await Effect.runPromise(handle.result);
+    const msgs = await Effect.runPromise(handle.messages);
+    expect(msgs.length).toBeGreaterThanOrEqual(2);
+    expect(msgs[0]).toEqual({ role: "system", content: "You are a test agent." });
+    expect(msgs[1]).toEqual({ role: "user", content: "hello" });
+  });
+
+  test("includes tool messages after tool call iteration", async () => {
+    const handle = await Effect.runPromise(
+      Effect.provide(
+        dispatch(blueprint, "task"),
+        Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+            textParts("done"),
+          ]),
+          DefaultSatelliteRing,
+        ),
+      ),
+    );
+    await Effect.runPromise(handle.result);
+    const msgs = await Effect.runPromise(handle.messages);
+    // system + user + assistant(tool-call) + tool(result) = 4 minimum
+    expect(msgs.length).toBeGreaterThanOrEqual(4);
+    const roles = msgs.map((m) => m.role);
+    expect(roles).toContain("assistant");
+    expect(roles).toContain("tool");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DispatchOptions — restore from previous session
+// ---------------------------------------------------------------------------
+
+describe("dispatch — DispatchOptions", () => {
+  test("accepts initial messages for session restoration", async () => {
+    const restored = [
+      { role: "system" as const, content: "You are a test agent." },
+      { role: "user" as const, content: "original task" },
+      { role: "assistant" as const, content: "I started working on it." },
+      { role: "user" as const, content: "continue" },
+    ];
+    const result = await Effect.runPromise(
+      Effect.provide(
+        dispatchAwait(blueprint, "continue", { messages: restored }),
+        Layer.merge(makeMockLanguageModel([textParts("done")]), DefaultSatelliteRing),
+      ),
+    );
+    expect(result.content).toBe("done");
+  });
+});
