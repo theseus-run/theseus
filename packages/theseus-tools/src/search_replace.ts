@@ -6,7 +6,7 @@
  */
 
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const CONTEXT_LINES = 4;
@@ -55,11 +55,11 @@ const fuzzyFind = (
   return null;
 };
 
-export const searchReplace = defineTool<Input, string>({
+export const searchReplace = Tool.define<Input, string>({
   name: "search_replace",
   description:
     "Replace exact text in a file. Finds `old` text and replaces with `new` text. Falls back to whitespace-normalized matching if exact match fails.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "write",
   capabilities: ["fs.write"],
   execute: ({ path, old: oldText, new: newText }, { fail }) =>

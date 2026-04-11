@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { Capsule, CapsuleError, CapsuleId } from "./index.ts";
+import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
 import { CapsuleLive } from "./memory.ts";
 
 const run = <A>(effect: Effect.Effect<A, any, Capsule>) =>
   Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
 
-describe("CapsuleId", () => {
-  test("includes slug and date components", () => {
-    const id = CapsuleId("my-mission");
+describe("makeCapsuleId", () => {
+  test("includes slug and date components", async () => {
+    const id = await Effect.runPromise(makeCapsuleId("my-mission"));
     expect(id).toContain("my-mission");
     expect(id.length).toBeGreaterThan(20);
   });

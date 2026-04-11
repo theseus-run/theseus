@@ -8,7 +8,7 @@
 
 import { $ } from "bun";
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const MAX_MATCHES = 100;
@@ -74,11 +74,11 @@ const formatMatches = (matches: GrepMatch[], total: number): string => {
   return parts.join("\n");
 };
 
-export const grep = defineTool<Input, string>({
+export const grep = Tool.define<Input, string>({
   name: "grep",
   description:
     "Search file contents with a regex pattern. Returns file:line:content grouped by file. Uses ripgrep for speed.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ pattern, path, glob: globPattern, context_lines }, { fail, retriable }) => {

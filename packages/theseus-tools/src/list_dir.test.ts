@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { listDir } from "./list_dir.ts";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,7 +25,7 @@ afterAll(async () => {
 
 describe("list_dir", () => {
   test("lists files and directories", async () => {
-    const result = await Effect.runPromise(callTool(listDir, { path: dir }));
+    const result = await Effect.runPromise(Tool.call(listDir, { path: dir }));
     expect(result.llmContent).toContain("src/");
     expect(result.llmContent).toContain("docs/");
     expect(result.llmContent).toContain("index.ts");
@@ -33,14 +33,14 @@ describe("list_dir", () => {
   });
 
   test("filters noise directories", async () => {
-    const result = await Effect.runPromise(callTool(listDir, { path: dir }));
+    const result = await Effect.runPromise(Tool.call(listDir, { path: dir }));
     expect(result.llmContent).not.toContain("node_modules");
     expect(result.llmContent).not.toContain(".git");
     expect(result.llmContent).not.toContain(".DS_Store");
   });
 
   test("sorts directories first, then files", async () => {
-    const result = await Effect.runPromise(callTool(listDir, { path: dir }));
+    const result = await Effect.runPromise(Tool.call(listDir, { path: dir }));
     const lines = result.llmContent.split("\n");
     const firstDir = lines.findIndex((l) => l.endsWith("/"));
     const firstFile = lines.findIndex((l) => !l.endsWith("/") && !l.endsWith("@"));
@@ -48,14 +48,14 @@ describe("list_dir", () => {
   });
 
   test("indicates directories with /", async () => {
-    const result = await Effect.runPromise(callTool(listDir, { path: dir }));
+    const result = await Effect.runPromise(Tool.call(listDir, { path: dir }));
     expect(result.llmContent).toContain("src/");
     expect(result.llmContent).toContain("docs/");
   });
 
   test("errors on non-existent path", async () => {
     const err = await Effect.runPromise(
-      callTool(listDir, { path: join(dir, "nope") }).pipe(Effect.flip),
+      Tool.call(listDir, { path: join(dir, "nope") }).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolError");
   });

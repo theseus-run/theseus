@@ -43,6 +43,7 @@ export class MissionErrorInvalidTransition extends Data.TaggedError("MissionErro
 }> {}
 
 // Re-exports for convenience
-export { MissionId, makeMissionId } from "./id.ts";
+export type { MissionId } from "./id.ts";
+export { makeMissionId } from "./id.ts";
 export type { MissionStatus } from "./status.ts";
 export { isValidTransition, deriveStatus } from "./status.ts";

@@ -9,7 +9,7 @@
  */
 
 import { Effect, Match } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 import { extname } from "node:path";
 
@@ -68,11 +68,11 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>;
 
-export const outline = defineTool<Input, string>({
+export const outline = Tool.define<Input, string>({
   name: "outline",
   description:
     "Extract symbol outline from a source file (functions, classes, types, imports). Uses tree-sitter for fast, accurate parsing. Much cheaper than read_file for structural understanding.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ path }, { fail }) =>

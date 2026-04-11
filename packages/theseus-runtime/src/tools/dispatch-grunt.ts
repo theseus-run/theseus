@@ -11,7 +11,10 @@
 
 import { Effect, Layer } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import { defineTool, fromZod, gruntAwait, DefaultToolCallPolicy, type Blueprint, type ToolAny } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
+import type * as Agent from "@theseus.run/core/Agent";
+import * as Grunt from "@theseus.run/core/Grunt";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -28,25 +31,25 @@ type Input = z.infer<typeof inputSchema>;
  *
  * @param workerBlueprint - Blueprint for the worker grunt (tools, systemPrompt)
  */
-export const makeDispatchGruntTool = (workerBlueprint: Blueprint): Effect.Effect<ToolAny, never, LanguageModel.LanguageModel> =>
+export const makeDispatchGruntTool = (workerBlueprint: Agent.Blueprint): Effect.Effect<Tool.Any, never, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     // Capture the LanguageModel service at tool creation time
     const lm = yield* LanguageModel.LanguageModel;
 
-    return defineTool<Input, string>({
+    return Tool.define<Input, string>({
       name: "dispatch_grunt",
       description:
         `Delegate a task to a worker grunt ("${workerBlueprint.name}"). ` +
         "The grunt has its own tools and fresh context. " +
         "Returns the grunt's final text output. Use this for work that requires file access, code exploration, or execution.",
-      inputSchema: fromZod(inputSchema),
+      inputSchema: Tool.fromZod(inputSchema),
       safety: "write",
       capabilities: ["dispatch"],
       execute: ({ task }, { fail }) =>
-        gruntAwait(workerBlueprint, task).pipe(
+        Grunt.gruntAwait(workerBlueprint, task).pipe(
           Effect.provide(Layer.merge(
             Layer.succeed(LanguageModel.LanguageModel, lm),
-            DefaultToolCallPolicy,
+            Dispatch.DefaultPolicy,
           )),
           Effect.map((result) => result.content),
           Effect.catchTags({

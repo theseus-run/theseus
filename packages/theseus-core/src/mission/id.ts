@@ -22,12 +22,3 @@ export const makeMissionId = (slug?: string): Effect.Effect<MissionId> =>
     const date = new Date().toISOString().slice(0, 10);
     return (slug ? `${id}-${date}-${slug}` : `${id}-${date}`) as MissionId;
   });
-
-/** @deprecated Use makeMissionId (effectful) */
-export const MissionId = (slug?: string): MissionId => {
-  const id = nanoid7();
-  const date = new Date().toISOString().slice(0, 10);
-  return slug
-    ? `${id}-${date}-${slug}` as MissionId
-    : `${id}-${date}` as MissionId;
-};

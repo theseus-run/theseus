@@ -6,7 +6,7 @@
 
 import { Glob } from "bun";
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const MAX_RESULTS = 100;
@@ -18,11 +18,11 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>;
 
-export const glob = defineTool<Input, string>({
+export const glob = Tool.define<Input, string>({
   name: "glob",
   description:
     "Find files matching a glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns up to 100 file paths. Respects common ignore patterns.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ pattern, path }, { fail }) =>

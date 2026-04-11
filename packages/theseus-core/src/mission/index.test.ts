@@ -2,24 +2,24 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Capsule } from "../capsule/index.ts";
 import { CapsuleLive } from "../capsule/memory.ts";
-import { MissionId } from "./id.ts";
+import { makeMissionId } from "./id.ts";
 import { isValidTransition, deriveStatus } from "./status.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
 import { MissionContext } from "./context.ts";
 import { MissionLive } from "./layer.ts";
 
 // ===========================================================================
-// MissionId
+// makeMissionId
 // ===========================================================================
 
-describe("MissionId", () => {
-  test("format: NANOID7-date-slug", () => {
-    const id = MissionId("fix-auth-bug");
+describe("makeMissionId", () => {
+  test("format: NANOID7-date-slug", async () => {
+    const id = await Effect.runPromise(makeMissionId("fix-auth-bug"));
     expect(id).toMatch(/^[A-Z0-9]{7}-\d{4}-\d{2}-\d{2}-fix-auth-bug$/);
   });
 
-  test("slug is optional", () => {
-    const id = MissionId();
+  test("slug is optional", async () => {
+    const id = await Effect.runPromise(makeMissionId());
     expect(id).toMatch(/^[A-Z0-9]{7}-\d{4}-\d{2}-\d{2}$/);
   });
 });
@@ -114,18 +114,30 @@ describe("deriveStatus", () => {
 // MissionLive — layer composition
 // ===========================================================================
 
-const missionConfig = {
-  id: MissionId("test-mission"),
-  goal: "Test the mission system",
-  criteria: ["All tests pass", "Types are clean"],
-};
+const makeMissionConfig = Effect.gen(function* () {
+  const id = yield* makeMissionId("test-mission");
+  return {
+    id,
+    goal: "Test the mission system",
+    criteria: ["All tests pass", "Types are clean"],
+  };
+});
 
 const capsuleLayer = CapsuleLive("test-mission");
-const missionLayer = Layer.provide(MissionLive(missionConfig), capsuleLayer);
-const fullLayer = Layer.merge(capsuleLayer, missionLayer);
+
+const makeFullLayer = Effect.gen(function* () {
+  const config = yield* makeMissionConfig;
+  const missionLayer = Layer.provide(MissionLive(config), capsuleLayer);
+  return Layer.merge(capsuleLayer, missionLayer);
+});
 
 const runMission = <A>(effect: Effect.Effect<A, any, MissionContext | Capsule>) =>
-  Effect.runPromise(Effect.provide(effect, fullLayer));
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fullLayer = yield* makeFullLayer;
+      return yield* Effect.provide(effect, fullLayer);
+    }),
+  );
 
 describe("MissionLive — creation", () => {
   test("mission starts in pending status", async () => {
@@ -185,15 +197,18 @@ describe("MissionLive — transitions", () => {
 
   test("invalid transition fails with MissionErrorInvalidTransition", async () => {
     const error = await Effect.runPromise(
-      Effect.provide(
-        Effect.flip(
-          Effect.gen(function* () {
-            const ctx = yield* MissionContext;
-            yield* ctx.transition("done"); // pending → done is invalid
-          }),
-        ),
-        fullLayer,
-      ),
+      Effect.gen(function* () {
+        const layer = yield* makeFullLayer;
+        return yield* Effect.provide(
+          Effect.flip(
+            Effect.gen(function* () {
+              const ctx = yield* MissionContext;
+              yield* ctx.transition("done"); // pending → done is invalid
+            }),
+          ),
+          layer,
+        );
+      }),
     );
     expect(error).toBeInstanceOf(MissionErrorInvalidTransition);
     expect((error as MissionErrorInvalidTransition).from).toBe("pending");

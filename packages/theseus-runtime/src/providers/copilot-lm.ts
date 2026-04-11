@@ -27,7 +27,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
-import { Config } from "../config.ts";
+import { RuntimeConfig, RuntimeConfigLive } from "../config.ts";
 
 // ---------------------------------------------------------------------------
 // Internal errors — private to this module, mapped to AiError at the boundary
@@ -556,11 +556,12 @@ const readOauthToken: Effect.Effect<string, CopilotAuthError> =
 export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageModel)(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
+    const config = yield* RuntimeConfig;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
     const exchangeToken = (oauthToken: string): Effect.Effect<TokenCache, CopilotAuthError | CopilotParseError> =>
       Effect.gen(function* () {
-        const req = HttpClientRequest.get(Config.copilotAuthUrl).pipe(
+        const req = HttpClientRequest.get(config.copilotAuthUrl).pipe(
           HttpClientRequest.setHeaders({
             Authorization: `Token ${oauthToken}`,
             "User-Agent": "theseus-runtime/0.0.1",
@@ -597,8 +598,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
       CopilotAuthError | CopilotParseError
     > =>
       Effect.gen(function* () {
-        const model = Config.model;
-        const maxTokens = Config.maxTokens;
+        const model = config.model;
+        const maxTokens = config.maxTokens;
         const bearer = yield* getBearer();
         const useResponses = shouldUseResponsesApi(model);
 
@@ -628,8 +629,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
             };
 
         const endpoint = useResponses
-          ? `${Config.copilotApiUrl}/responses`
-          : `${Config.copilotApiUrl}/chat/completions`;
+          ? `${config.copilotApiUrl}/responses`
+          : `${config.copilotApiUrl}/chat/completions`;
 
         const req = HttpClientRequest.post(endpoint).pipe(
           HttpClientRequest.setHeaders(headers),
@@ -690,5 +691,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
   }),
 );
 
-/** Convenience live layer with BunHttpClient. */
-export const CopilotLanguageModelLive = CopilotLanguageModelLayer.pipe(Layer.provide(BunHttpClient.layer));
+/** Convenience live layer with BunHttpClient + RuntimeConfigLive. */
+export const CopilotLanguageModelLive = CopilotLanguageModelLayer.pipe(
+  Layer.provide(BunHttpClient.layer),
+  Layer.provide(RuntimeConfigLive),
+);

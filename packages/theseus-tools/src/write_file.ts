@@ -8,7 +8,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -18,11 +18,11 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>;
 
-export const writeFile = defineTool<Input, string>({
+export const writeFile = Tool.define<Input, string>({
   name: "write_file",
   description:
     "Create or overwrite a file with the given content. Creates parent directories if needed.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "write",
   capabilities: ["fs.write"],
   execute: ({ path, content }, { fail }) =>

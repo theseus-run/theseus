@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { readFile } from "./read_file.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,7 +21,7 @@ describe("read_file", () => {
     const path = join(dir, "hello.ts");
     await writeFile(path, "const a = 1;\nconst b = 2;\nconst c = 3;\n");
 
-    const result = await Effect.runPromise(callTool(readFile, { path }));
+    const result = await Effect.runPromise(Tool.call(readFile, { path }));
     expect(result.llmContent).toContain("1\tconst a = 1;");
     expect(result.llmContent).toContain("2\tconst b = 2;");
     expect(result.llmContent).toContain("3\tconst c = 3;");
@@ -30,7 +30,7 @@ describe("read_file", () => {
   test("errors on file not found", async () => {
     const path = join(dir, "nonexistent.ts");
     const err = await Effect.runPromise(
-      callTool(readFile, { path }).pipe(Effect.flip),
+      Tool.call(readFile, { path }).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolError");
   });
@@ -43,7 +43,7 @@ describe("read_file", () => {
     ]);
     await writeFile(path, png);
 
-    const result = await Effect.runPromise(callTool(readFile, { path }));
+    const result = await Effect.runPromise(Tool.call(readFile, { path }));
     expect(result.llmContent).toContain("Binary file");
   });
 
@@ -53,7 +53,7 @@ describe("read_file", () => {
     await writeFile(path, lines);
 
     const result = await Effect.runPromise(
-      callTool(readFile, { path, offset: 10, limit: 5 }),
+      Tool.call(readFile, { path, offset: 10, limit: 5 }),
     );
     expect(result.llmContent).toContain("line 10");
     expect(result.llmContent).toContain("line 14");
@@ -65,7 +65,7 @@ describe("read_file", () => {
     const path = join(dir, "long.txt");
     await writeFile(path, longLine);
 
-    const result = await Effect.runPromise(callTool(readFile, { path }));
+    const result = await Effect.runPromise(Tool.call(readFile, { path }));
     expect(result.llmContent).toContain("...");
     expect(result.llmContent.length).toBeLessThan(3000);
   });
@@ -75,7 +75,7 @@ describe("read_file", () => {
     const path = join(dir, "huge.txt");
     await writeFile(path, lines);
 
-    const result = await Effect.runPromise(callTool(readFile, { path }));
+    const result = await Effect.runPromise(Tool.call(readFile, { path }));
     expect(result.llmContent).toContain("truncated");
     expect(result.llmContent).toContain("of 2500 lines");
   });

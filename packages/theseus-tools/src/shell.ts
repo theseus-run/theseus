@@ -8,7 +8,7 @@
 
 import { $ } from "bun";
 import { Duration, Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -35,11 +35,11 @@ const truncateOutput = (output: string, maxBytes: number): string => {
   return `${head}\n\n[... ${elided} bytes truncated ...]\n\n${tail}`;
 };
 
-export const shell = defineTool<Input, string>({
+export const shell = Tool.define<Input, string>({
   name: "shell",
   description:
     "Execute a shell command. Returns stdout, stderr, and exit code. Timeout defaults to 30 seconds. Output capped at 8KB.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "destructive",
   capabilities: ["shell.exec"],
   execute: ({ command, timeout_ms }, { fail, retriable }) => {

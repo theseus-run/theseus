@@ -38,7 +38,7 @@ export { makeCapsuleId as makeId } from "./capsule/index.ts";
 // Layers
 // ---------------------------------------------------------------------------
 
-export { CapsuleLive as Live, InMemoryCapsuleLive as InMemoryLive } from "./capsule/memory.ts";
+export { CapsuleLive as Live } from "./capsule/memory.ts";
 
 // ---------------------------------------------------------------------------
 // Errors (keep prefix)

@@ -52,6 +52,3 @@ export const CapsuleLive = (slug: string): Layer.Layer<Capsule> =>
       });
     }),
   );
-
-/** @deprecated Use CapsuleLive instead */
-export const InMemoryCapsuleLive = CapsuleLive;

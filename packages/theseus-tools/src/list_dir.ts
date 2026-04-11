@@ -7,7 +7,7 @@
 
 import { readdir } from "node:fs/promises";
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const NOISE = new Set([
@@ -32,11 +32,11 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>;
 
-export const listDir = defineTool<Input, string>({
+export const listDir = Tool.define<Input, string>({
   name: "list_dir",
   description:
     "List files and directories at the given path. Filters noise (node_modules, .git, dist, etc). Directories end with /.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ path }, { fail }) =>

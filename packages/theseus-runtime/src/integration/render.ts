@@ -3,7 +3,7 @@
  */
 
 import { Match } from "effect";
-import type { DispatchEvent } from "@theseus.run/core";
+import type * as Dispatch from "@theseus.run/core/Dispatch";
 
 // ---------------------------------------------------------------------------
 // Colors
@@ -25,7 +25,7 @@ export const truncateDisplay = (s: string, max = 100): string =>
 
 let streamingLine = false;
 
-export const renderEvent = (e: DispatchEvent): void => {
+export const renderEvent = (e: Dispatch.Event): void => {
   if (streamingLine && e._tag !== "TextDelta" && e._tag !== "ThinkingDelta") {
     process.stdout.write("\n");
     streamingLine = false;

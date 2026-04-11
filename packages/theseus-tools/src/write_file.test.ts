@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { writeFile as writeFileTool } from "./write_file.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ describe("write_file", () => {
     const content = 'export const hello = "world";\n';
 
     const result = await Effect.runPromise(
-      callTool(writeFileTool, { path, content }),
+      Tool.call(writeFileTool, { path, content }),
     );
     expect(result.llmContent).toContain("Wrote");
     expect(result.llmContent).toContain("lines");
@@ -37,7 +37,7 @@ describe("write_file", () => {
 
     const newContent = "new content\n";
     await Effect.runPromise(
-      callTool(writeFileTool, { path, content: newContent }),
+      Tool.call(writeFileTool, { path, content: newContent }),
     );
 
     const written = await readFile(path, "utf-8");
@@ -49,7 +49,7 @@ describe("write_file", () => {
     const content = "deep file\n";
 
     const result = await Effect.runPromise(
-      callTool(writeFileTool, { path, content }),
+      Tool.call(writeFileTool, { path, content }),
     );
     expect(result.llmContent).toContain("Wrote");
 
@@ -62,7 +62,7 @@ describe("write_file", () => {
     const content = "line 1\nline 2\nline 3\n";
 
     const result = await Effect.runPromise(
-      callTool(writeFileTool, { path, content }),
+      Tool.call(writeFileTool, { path, content }),
     );
     expect(result.llmContent).toContain("4 lines");
   });

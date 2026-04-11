@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { searchReplace } from "./search_replace.ts";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ describe("search_replace", () => {
     await writeFile(path, 'const name = "old";\n');
 
     const result = await Effect.runPromise(
-      callTool(searchReplace, { path, old: '"old"', new: '"new"' }),
+      Tool.call(searchReplace, { path, old: '"old"', new: '"new"' }),
     );
     expect(result.llmContent).toContain("exact");
     expect(result.llmContent).toContain("Replaced 1 occurrence");
@@ -37,7 +37,7 @@ describe("search_replace", () => {
     await writeFile(path, "function  hello( x:  number ) {\n  return x;\n}\n");
 
     const result = await Effect.runPromise(
-      callTool(searchReplace, {
+      Tool.call(searchReplace, {
         path,
         old: "function hello( x: number ) {",
         new: "function hello( x: string ) {",
@@ -54,7 +54,7 @@ describe("search_replace", () => {
     await writeFile(path, "const a = 1;\nconst b = 1;\nconst a = 1;\n");
 
     const err = await Effect.runPromise(
-      callTool(searchReplace, { path, old: "const a = 1;", new: "const a = 2;" }).pipe(
+      Tool.call(searchReplace, { path, old: "const a = 1;", new: "const a = 2;" }).pipe(
         Effect.flip,
       ),
     );
@@ -66,7 +66,7 @@ describe("search_replace", () => {
     await writeFile(path, "const x = 1;\n");
 
     const err = await Effect.runPromise(
-      callTool(searchReplace, { path, old: "const y = 2;", new: "const y = 3;" }).pipe(
+      Tool.call(searchReplace, { path, old: "const y = 2;", new: "const y = 3;" }).pipe(
         Effect.flip,
       ),
     );
@@ -75,7 +75,7 @@ describe("search_replace", () => {
 
   test("errors on file not found", async () => {
     const err = await Effect.runPromise(
-      callTool(searchReplace, {
+      Tool.call(searchReplace, {
         path: join(dir, "nope.ts"),
         old: "a",
         new: "b",
@@ -90,7 +90,7 @@ describe("search_replace", () => {
     await writeFile(path, lines);
 
     const result = await Effect.runPromise(
-      callTool(searchReplace, { path, old: "line 10", new: "REPLACED" }),
+      Tool.call(searchReplace, { path, old: "line 10", new: "REPLACED" }),
     );
     expect(result.llmContent).toContain("REPLACED");
     expect(result.llmContent).toContain("line 9");

@@ -5,7 +5,7 @@
  */
 
 import { Effect } from "effect";
-import type { ToolError } from "@theseus.run/core";
+import type * as Tool from "@theseus.run/core/Tool";
 
 // ---------------------------------------------------------------------------
 // Types for web-tree-sitter (CJS module)
@@ -48,8 +48,8 @@ const languageCache = new Map<string, TreeSitterLanguageInstance>();
 
 /** Lazily init tree-sitter WASM runtime (cached after first call). */
 export const initTreeSitter = (
-  fail: (msg: string) => ToolError,
-): Effect.Effect<{ Parser: TreeSitterParser; Language: TreeSitterLanguageStatic }, ToolError> =>
+  fail: (msg: string) => Tool.ToolError,
+): Effect.Effect<{ Parser: TreeSitterParser; Language: TreeSitterLanguageStatic }, Tool.ToolError> =>
   Effect.tryPromise({
     try: () => {
       if (!parserPromise) {
@@ -70,8 +70,8 @@ export const initTreeSitter = (
 /** Load (and cache) a tree-sitter grammar by name. */
 export const loadLanguage = (
   grammarName: string,
-  fail: (msg: string) => ToolError,
-): Effect.Effect<TreeSitterLanguageInstance, ToolError> =>
+  fail: (msg: string) => Tool.ToolError,
+): Effect.Effect<TreeSitterLanguageInstance, Tool.ToolError> =>
   Effect.gen(function* () {
     const cached = languageCache.get(grammarName);
     if (cached) return cached;
@@ -90,8 +90,8 @@ export const loadLanguage = (
 export const parse = (
   content: string,
   grammarName: string,
-  fail: (msg: string) => ToolError,
-): Effect.Effect<TreeSitterTree, ToolError> =>
+  fail: (msg: string) => Tool.ToolError,
+): Effect.Effect<TreeSitterTree, Tool.ToolError> =>
   Effect.gen(function* () {
     const { Parser: ParserClass } = yield* initTreeSitter(fail);
     const lang = yield* loadLanguage(grammarName, fail);

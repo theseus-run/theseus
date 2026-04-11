@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { outline } from "./outline/index.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -48,7 +48,7 @@ import { readFile } from "node:fs";
 `,
     );
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     const out = result.llmContent;
 
     expect(out).toContain("interface");
@@ -76,7 +76,7 @@ import { readFile } from "node:fs";
     const path = join(dir, "empty.ts");
     await writeFile(path, "");
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     expect(result.llmContent).toContain("Empty file");
   });
 
@@ -84,7 +84,7 @@ import { readFile } from "node:fs";
     const path = join(dir, "whitespace.ts");
     await writeFile(path, "   \n\n  \n");
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     expect(result.llmContent).toContain("Empty file");
   });
 
@@ -93,14 +93,14 @@ import { readFile } from "node:fs";
     await writeFile(path, '{"key": "value"}');
 
     const err = await Effect.runPromise(
-      callTool(outline, { path }).pipe(Effect.flip),
+      Tool.call(outline, { path }).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolError");
   });
 
   test("errors on file not found", async () => {
     const err = await Effect.runPromise(
-      callTool(outline, { path: join(dir, "nope.ts") }).pipe(Effect.flip),
+      Tool.call(outline, { path: join(dir, "nope.ts") }).pipe(Effect.flip),
     );
     expect(err._tag).toBe("ToolError");
   });
@@ -119,7 +119,7 @@ export const Button = ({ label }: { label: string }) => {
 `,
     );
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     expect(result.llmContent).toContain("App");
     expect(result.llmContent).toContain("Button");
   });
@@ -139,7 +139,7 @@ export const Button = ({ label }: { label: string }) => {
 `,
     );
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     expect(result.llmContent).toContain("Service.fetch");
     expect(result.llmContent).toContain("Service.getInstance");
     expect(result.llmContent).toContain("static");
@@ -157,7 +157,7 @@ class Calculator {
 `,
     );
 
-    const result = await Effect.runPromise(callTool(outline, { path }));
+    const result = await Effect.runPromise(Tool.call(outline, { path }));
     expect(result.llmContent).toContain("add");
     expect(result.llmContent).toContain("Calculator");
     expect(result.llmContent).toContain("multiply");

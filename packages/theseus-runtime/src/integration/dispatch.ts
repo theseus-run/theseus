@@ -5,7 +5,8 @@
  */
 
 import { Effect, Layer, Stream } from "effect";
-import { type Blueprint, dispatch, DefaultToolCallPolicy } from "@theseus.run/core";
+import type * as Agent from "@theseus.run/core/Agent";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
 import { renderEvent } from "./render.ts";
@@ -17,7 +18,7 @@ import { renderEvent } from "./render.ts";
 const coreDir =
   new URL(".", import.meta.url).pathname.replace(/\/integration\/?$/, "");
 
-const blueprint: Blueprint = {
+const blueprint: Agent.Blueprint = {
   name: "explorer",
   systemPrompt:
     "You are a code explorer. Use tools to inspect directories and files, then give a concise summary of what you find.",
@@ -28,7 +29,7 @@ const blueprint: Blueprint = {
 const program = Effect.gen(function* () {
   console.log("Dispatching...\n");
 
-  const handle = yield* dispatch(
+  const handle = yield* Dispatch.dispatch(
     blueprint,
     `List the contents of "${coreDir}" and give me a one-paragraph summary of what primitives are implemented there.`,
   );
@@ -49,7 +50,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, DefaultToolCallPolicy))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Dispatch.DefaultPolicy))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { grep } from "./grep.ts";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,7 +40,7 @@ describe("grep", () => {
   test("finds matches across files", async () => {
     if (!hasRg) return; // ripgrep not on PATH
     const result = await Effect.runPromise(
-      callTool(grep, { pattern: "hello", path: dir }),
+      Tool.call(grep, { pattern: "hello", path: dir }),
     );
     expect(result.llmContent).toContain("foo.ts");
     expect(result.llmContent).toContain("bar.ts");
@@ -49,7 +49,7 @@ describe("grep", () => {
   test("returns 'No matches found' for no results", async () => {
     if (!hasRg) return;
     const result = await Effect.runPromise(
-      callTool(grep, { pattern: "nonexistent_string_xyz", path: dir }),
+      Tool.call(grep, { pattern: "nonexistent_string_xyz", path: dir }),
     );
     expect(result.llmContent).toContain("No matches found");
   });
@@ -57,7 +57,7 @@ describe("grep", () => {
   test("supports glob filtering", async () => {
     if (!hasRg) return;
     const result = await Effect.runPromise(
-      callTool(grep, { pattern: "Hello", path: dir, glob: "*.md" }),
+      Tool.call(grep, { pattern: "Hello", path: dir, glob: "*.md" }),
     );
     expect(result.llmContent).not.toContain(".ts");
   });
@@ -65,7 +65,7 @@ describe("grep", () => {
   test("supports regex patterns", async () => {
     if (!hasRg) return;
     const result = await Effect.runPromise(
-      callTool(grep, { pattern: "function\\s+\\w+", path: dir }),
+      Tool.call(grep, { pattern: "function\\s+\\w+", path: dir }),
     );
     expect(result.llmContent).toContain("greet");
   });
@@ -73,7 +73,7 @@ describe("grep", () => {
   test("groups results by file", async () => {
     if (!hasRg) return;
     const result = await Effect.runPromise(
-      callTool(grep, { pattern: "hello", path: dir }),
+      Tool.call(grep, { pattern: "hello", path: dir }),
     );
     const lines = result.llmContent.split("\n");
     const fileHeaders = lines.filter((l) => l && !l.startsWith(" "));

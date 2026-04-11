@@ -9,7 +9,7 @@
  */
 
 import { Effect } from "effect";
-import { defineTool, fromZod } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { z } from "zod";
 
 const MAX_LINES = 2000;
@@ -26,11 +26,11 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>;
 
-export const readFile = defineTool<Input, string>({
+export const readFile = Tool.define<Input, string>({
   name: "read_file",
   description:
     "Read a file's contents. Returns line-numbered text. Use offset/limit for large files. Returns binary indicator for non-text files.",
-  inputSchema: fromZod(inputSchema),
+  inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ path, offset, limit }, { fail }) =>

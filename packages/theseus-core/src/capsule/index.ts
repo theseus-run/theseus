@@ -28,15 +28,6 @@ export const makeCapsuleId = (slug: string): Effect.Effect<CapsuleId> =>
     return `${date}-${time}-${rand}-${slug}` as CapsuleId;
   });
 
-/** @deprecated Use makeCapsuleId (effectful) */
-export const CapsuleId = (slug: string): CapsuleId => {
-  const now = new Date();
-  const date = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const time = now.toISOString().slice(11, 16).replace(":", "");
-  const rand = Math.random().toString(36).slice(2, 9);
-  return `${date}-${time}-${rand}-${slug}` as CapsuleId;
-};
-
 // ---------------------------------------------------------------------------
 // CapsuleEvent — append-only log entry
 // ---------------------------------------------------------------------------

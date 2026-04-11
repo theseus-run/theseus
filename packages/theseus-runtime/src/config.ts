@@ -56,19 +56,3 @@ export const RuntimeConfigLive = Layer.succeed(RuntimeConfig, {
   copilotApiUrl:
     env("THESEUS_COPILOT_API_URL") ?? "https://api.githubcopilot.com",
 });
-
-// ---------------------------------------------------------------------------
-// Backward compat — keep existing Config export for now (deprecated)
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use RuntimeConfig service instead */
-export const Config = {
-  model: env("THESEUS_MODEL") ?? "gpt-5.4",
-  maxTokens: envInt("THESEUS_MAX_TOKENS", 4096),
-  shellMaxOutput: envInt("THESEUS_SHELL_MAX_OUTPUT", 8192),
-  copilotAuthUrl:
-    env("THESEUS_COPILOT_AUTH_URL") ??
-    "https://api.github.com/copilot_internal/v2/token",
-  copilotApiUrl:
-    env("THESEUS_COPILOT_API_URL") ?? "https://api.githubcopilot.com",
-} as const;

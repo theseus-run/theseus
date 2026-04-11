@@ -5,7 +5,9 @@
  */
 
 import { Effect, Layer, Stream } from "effect";
-import { type Blueprint, grunt, DefaultToolCallPolicy } from "@theseus.run/core";
+import type * as Agent from "@theseus.run/core/Agent";
+import * as Dispatch from "@theseus.run/core/Dispatch";
+import * as Grunt from "@theseus.run/core/Grunt";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
 import { renderEvent, dim, yellow } from "./render.ts";
@@ -16,7 +18,7 @@ import { renderEvent, dim, yellow } from "./render.ts";
 
 const coreDir = new URL("../../theseus-core/src", import.meta.url).pathname;
 
-const blueprint: Blueprint = {
+const blueprint: Agent.Blueprint = {
   name: "explorer",
   systemPrompt:
     "You are a code explorer. Use tools to inspect directories and files, then give a concise summary of what you find.",
@@ -31,7 +33,7 @@ const task =
 const program = Effect.gen(function* () {
   console.log(yellow(`\n  grunt "${blueprint.name}" dispatched\n`));
 
-  const handle = yield* grunt(blueprint, task);
+  const handle = yield* Grunt.grunt(blueprint, task);
 
   // Drain events to console
   yield* Stream.tap(handle.events, (e) => Effect.sync(() => renderEvent(e))).pipe(
@@ -49,7 +51,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, DefaultToolCallPolicy))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Dispatch.DefaultPolicy))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

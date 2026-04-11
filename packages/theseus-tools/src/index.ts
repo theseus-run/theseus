@@ -24,13 +24,13 @@ import { writeFile } from "./write_file.ts";
 import { shell } from "./shell.ts";
 import { outline } from "./outline/index.ts";
 
-import type { ToolAny } from "@theseus.run/core";
+import type * as Tool from "@theseus.run/core/Tool";
 
 /** Read-only tools — safe for planner/atlas agents. */
-export const readonlyTools: ReadonlyArray<ToolAny> = [readFile, listDir, glob, grep, outline];
+export const readonlyTools: ReadonlyArray<Tool.Any> = [readFile, listDir, glob, grep, outline];
 
 /** All tools — full access for coder/forge agents. */
-export const allTools: ReadonlyArray<ToolAny> = [
+export const allTools: ReadonlyArray<Tool.Any> = [
   readFile,
   listDir,
   glob,

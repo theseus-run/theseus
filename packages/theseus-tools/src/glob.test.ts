@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Effect } from "effect";
-import { callTool } from "@theseus.run/core";
+import * as Tool from "@theseus.run/core/Tool";
 import { glob } from "./glob.ts";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -27,7 +27,7 @@ afterAll(async () => {
 describe("glob", () => {
   test("matches pattern", async () => {
     const result = await Effect.runPromise(
-      callTool(glob, { pattern: "**/*.ts", path: dir }),
+      Tool.call(glob, { pattern: "**/*.ts", path: dir }),
     );
     expect(result.llmContent).toContain("src/index.ts");
     expect(result.llmContent).toContain("src/utils/helper.ts");
@@ -35,14 +35,14 @@ describe("glob", () => {
 
   test("filters noise directories", async () => {
     const result = await Effect.runPromise(
-      callTool(glob, { pattern: "**/*.js", path: dir }),
+      Tool.call(glob, { pattern: "**/*.js", path: dir }),
     );
     expect(result.llmContent).not.toContain("node_modules");
   });
 
   test("returns 'No files found' for no matches", async () => {
     const result = await Effect.runPromise(
-      callTool(glob, { pattern: "**/*.py", path: dir }),
+      Tool.call(glob, { pattern: "**/*.py", path: dir }),
     );
     expect(result.llmContent).toContain("No files found");
   });
@@ -55,7 +55,7 @@ describe("glob", () => {
     }
 
     const result = await Effect.runPromise(
-      callTool(glob, { pattern: "many/*.txt", path: dir }),
+      Tool.call(glob, { pattern: "many/*.txt", path: dir }),
     );
     expect(result.llmContent).toContain("capped at 100");
   });
