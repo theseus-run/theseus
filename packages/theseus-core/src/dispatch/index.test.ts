@@ -13,7 +13,7 @@ import {
   dispatch, dispatchAwait, runToolCall,
   step, tryParseArgs, type DispatchEvent,
 } from "./index.ts";
-import { DefaultToolCallPolicy } from "./policy.ts";
+import { DefaultSatelliteRing } from "../satellite/ring.ts";
 import { extractToolDefs } from "../bridge/to-ai-tools.ts";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ const run = (blueprint: Blueprint, task: string, responses: MockResponse[]) =>
   Effect.runPromise(
     Effect.provide(
       dispatchAwait(blueprint, task),
-      Layer.merge(makeMockLanguageModel(responses), DefaultToolCallPolicy),
+      Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing),
     ),
   );
 
@@ -39,7 +39,7 @@ const collectEvents = (blueprint: Blueprint, task: string, responses: MockRespon
         ).pipe(Stream.runDrain);
         return events;
       }),
-      Layer.merge(makeMockLanguageModel(responses), DefaultToolCallPolicy),
+      Layer.merge(makeMockLanguageModel(responses), DefaultSatelliteRing),
     ),
   );
 
@@ -276,7 +276,7 @@ describe("dispatchAwait — tool errors become strings", () => {
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "nonexistent", arguments: "{}" }]),
           ]),
-          DefaultToolCallPolicy,
+          DefaultSatelliteRing,
         ),
       ),
     );
@@ -310,7 +310,7 @@ describe("dispatchAwait — cycle cap", () => {
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
           ]),
-          DefaultToolCallPolicy,
+          DefaultSatelliteRing,
         ),
       ),
     );
@@ -329,7 +329,7 @@ describe("dispatchAwait — AiError", () => {
     const err = await Effect.runPromise(
       Effect.provide(
         Effect.flip(dispatchAwait(blueprint, "task")),
-        Layer.merge(makeMockLanguageModel([aiErr]), DefaultToolCallPolicy),
+        Layer.merge(makeMockLanguageModel([aiErr]), DefaultSatelliteRing),
       ),
     );
     expect(err._tag).toBe("AgentLLMError");
@@ -410,7 +410,7 @@ describe("DispatchHandle — interrupt", () => {
     );
 
     const handle = await Effect.runPromise(
-      Effect.provide(dispatch(blueprint, "task"), Layer.merge(neverProvider, DefaultToolCallPolicy)),
+      Effect.provide(dispatch(blueprint, "task"), Layer.merge(neverProvider, DefaultSatelliteRing)),
     );
 
     await Effect.runPromise(handle.interrupt);
@@ -434,7 +434,7 @@ describe("DispatchHandle — inject", () => {
           makeMockLanguageModel([
             toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
           ]),
-          DefaultToolCallPolicy,
+          DefaultSatelliteRing,
         ),
       ),
     );

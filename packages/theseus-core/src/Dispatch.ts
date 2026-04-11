@@ -43,15 +43,6 @@ export type {
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------
-// Policy (short aliases)
-// ---------------------------------------------------------------------------
-
-export {
-  DefaultToolCallPolicy as DefaultPolicy,
-  ToolCallPolicy as Policy,
-} from "./dispatch/index.ts";
-
-// ---------------------------------------------------------------------------
 // Errors (keep prefix — _tag must be globally unique)
 // ---------------------------------------------------------------------------
 

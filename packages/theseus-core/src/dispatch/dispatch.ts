@@ -19,8 +19,9 @@ import { AgentInterrupted, AgentCycleExceeded } from "../agent/index.ts";
 import type { AgentError } from "../agent/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
+import { SatelliteRing } from "../satellite/ring.ts";
+import type { SatelliteAbort } from "../satellite/types.ts";
 import { runToolCall, stepStream, tryParseArgs } from "./step.ts";
-import { ToolCallPolicy } from "./policy.ts";
 import type { ToolCallError } from "./types.ts";
 import type { DispatchEvent, DispatchHandle, Injection, Usage } from "./types.ts";
 
@@ -72,7 +73,7 @@ const drainInjections = (
 export const dispatch = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | ToolCallPolicy> =>
+): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | SatelliteRing> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -95,7 +96,7 @@ export const dispatch = (
       messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
       iterations: number,
-    ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | ToolCallPolicy> =>
+    ): Effect.Effect<AgentResult, AgentError | SatelliteAbort, LanguageModel.LanguageModel | SatelliteRing> =>
       Effect.gen(function* () {
         yield* Effect.yieldNow;
 
@@ -110,9 +111,21 @@ export const dispatch = (
             new AgentCycleExceeded({ agent: blueprint.name, max: maxIter, usage }),
           );
 
+        const ring = yield* SatelliteRing;
+        const satCtx = { agent: blueprint.name, iteration: iterations };
+
+        // --- Phase: BeforeCall ---
+        const beforeCallAction = yield* ring.run(
+          { _tag: "BeforeCall", messages: next },
+          satCtx,
+        );
+        const callMessages = beforeCallAction._tag === "TransformMessages"
+          ? beforeCallAction.messages
+          : next;
+
         yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
-        const result = yield* stepStream(next, blueprint.tools, blueprint.name, (chunk) =>
+        const rawResult = yield* stepStream(callMessages, blueprint.tools, blueprint.name, (chunk) =>
           Match.value(chunk.type).pipe(
             Match.when("text-delta", () =>
               emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: chunk.delta }),
@@ -123,11 +136,20 @@ export const dispatch = (
             Match.orElse(() => Effect.void),
           ),
         );
-        const totalUsage = addUsage(usage, result.usage);
+        const totalUsage = addUsage(usage, rawResult.usage);
 
-        if (result.thinking) {
-          yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: result.thinking });
+        if (rawResult.thinking) {
+          yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: rawResult.thinking });
         }
+
+        // --- Phase: AfterCall ---
+        const afterCallAction = yield* ring.run(
+          { _tag: "AfterCall", stepResult: rawResult },
+          satCtx,
+        );
+        const result = afterCallAction._tag === "TransformStepResult"
+          ? afterCallAction.stepResult
+          : rawResult;
 
         if (result._tag === "text") return {
           result: "unstructured" as const,
@@ -168,17 +190,51 @@ export const dispatch = (
           args: tryParseArgs(tc),
         }));
 
-        const policy = yield* ToolCallPolicy;
-
+        // --- Phase: BeforeTool + execute + ToolError + AfterTool (per tool) ---
         const calls = yield* Effect.all(
           result.toolCalls.map((tc) =>
-            runToolCall(blueprint.tools, tc).pipe(
-              Effect.catch((err: ToolCallError) =>
-                emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
-                  Effect.flatMap(() => policy.recover(err)),
+            Effect.gen(function* () {
+              // BeforeTool
+              const beforeAction = yield* ring.run(
+                { _tag: "BeforeTool", tool: tc },
+                satCtx,
+              );
+
+              if (beforeAction._tag === "BlockTool") {
+                return { callId: tc.id, name: tc.name, args: undefined as unknown, content: beforeAction.content };
+              }
+
+              const effectiveTc = beforeAction._tag === "ModifyArgs"
+                ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
+                : tc;
+
+              // Execute tool
+              const callResult = yield* runToolCall(blueprint.tools, effectiveTc).pipe(
+                Effect.catch((err: ToolCallError) =>
+                  emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
+                    Effect.flatMap(() =>
+                      ring.run({ _tag: "ToolError", tool: tc, error: err }, satCtx).pipe(
+                        Effect.flatMap((action) =>
+                          action._tag === "RecoverToolError"
+                            ? Effect.succeed(action.result)
+                            : Effect.fail(new AgentInterrupted({ agent: blueprint.name, reason: `Unrecovered tool error: ${tc.name}` })),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+
+              // AfterTool
+              const afterAction = yield* ring.run(
+                { _tag: "AfterTool", tool: tc, result: callResult },
+                satCtx,
+              );
+
+              return afterAction._tag === "ReplaceResult"
+                ? { ...callResult, content: afterAction.content }
+                : callResult;
+            }),
           ),
           { concurrency: "unbounded" },
         );
@@ -213,7 +269,7 @@ export const dispatch = (
         };
 
         return yield* loop(
-          [...next, assistantMsg, ...toolMessages],
+          [...callMessages, assistantMsg, ...toolMessages],
           totalUsage,
           iterations + 1,
         );
@@ -226,6 +282,12 @@ export const dispatch = (
 
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
       loop(initialMessages, zeroUsage, 0).pipe(
+        // Convert SatelliteAbort to AgentInterrupted for the outer error channel
+        Effect.mapError((err) =>
+          err._tag === "SatelliteAbort"
+            ? new AgentInterrupted({ agent: blueprint.name, reason: `Satellite "${err.satellite}": ${err.reason}` })
+            : err,
+        ),
         Effect.tap((result) =>
           emit({ _tag: "Done", agent: blueprint.name, result }),
         ),
@@ -259,5 +321,5 @@ export const dispatch = (
 export const dispatchAwait = (
   blueprint: Blueprint,
   task: string,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | ToolCallPolicy> =>
+): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing> =>
   dispatch(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));

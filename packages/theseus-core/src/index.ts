@@ -24,3 +24,4 @@ export * as Grunt from "./Grunt.ts";
 export * as Agent from "./Agent.ts";
 export * as AgentComm from "./AgentComm.ts";
 export * as Bridge from "./Bridge.ts";
+export * as Satellite from "./Satellite.ts";

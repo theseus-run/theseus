@@ -25,6 +25,7 @@ export interface Blueprint {
   readonly systemPrompt: string;
   readonly tools: ReadonlyArray<ToolAny>;
   readonly maxIterations?: number;
+  readonly model?: string;
 }
 
 // ---------------------------------------------------------------------------

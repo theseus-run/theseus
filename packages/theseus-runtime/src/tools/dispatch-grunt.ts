@@ -14,7 +14,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Tool from "@theseus.run/core/Tool";
 import type * as Agent from "@theseus.run/core/Agent";
 import * as Grunt from "@theseus.run/core/Grunt";
-import * as Dispatch from "@theseus.run/core/Dispatch";
+import * as Satellite from "@theseus.run/core/Satellite";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -49,7 +49,7 @@ export const makeDispatchGruntTool = (workerBlueprint: Agent.Blueprint): Effect.
         Grunt.gruntAwait(workerBlueprint, task).pipe(
           Effect.provide(Layer.merge(
             Layer.succeed(LanguageModel.LanguageModel, lm),
-            Dispatch.DefaultPolicy,
+            Satellite.DefaultRing,
           )),
           Effect.map((result) => result.content),
           Effect.catchTags({
