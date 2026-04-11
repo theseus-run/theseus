@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "types": ["@types/bun"],
     "jsx": "react-jsx",
     "jsxImportSource": "react",
     "paths": {

@@ -1,21 +1,8 @@
 /**
- * InkRuntimeBusLive — allocates the RuntimeBus queues for icarus-cli.
+ * Bus layer — STUB.
  *
- * This layer is provided by icarus-cli so that when the runtime is wired
- * in, both sides share the same queue instances.
+ * The old InkRuntimeBusLive (RuntimeBus with UIEvent/RuntimeCommand queues)
+ * has been removed. The new architecture uses Dispatch.Handle.events directly.
  *
- * The runtime package also exports RuntimeBusLive as a standalone fallback
- * for headless / test use.
+ * This file will be rewritten when icarus-cli is wired to the new primitives.
  */
-
-import type { RuntimeCommand, UIEvent } from "@theseus.run/runtime";
-import { RuntimeBus } from "@theseus.run/runtime";
-import { Effect, Layer, Queue } from "effect";
-
-export const InkRuntimeBusLive: Layer.Layer<RuntimeBus> = Layer.effect(RuntimeBus)(
-  Effect.gen(function* () {
-    const events = yield* Queue.unbounded<UIEvent>();
-    const commands = yield* Queue.unbounded<RuntimeCommand>();
-    return RuntimeBus.of({ events, commands });
-  }),
-);
