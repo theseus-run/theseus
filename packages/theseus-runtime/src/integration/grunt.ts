@@ -8,7 +8,6 @@ import { Effect, Layer, Stream } from "effect";
 import type * as Agent from "@theseus.run/core/Agent";
 import * as Grunt from "@theseus.run/core/Grunt";
 import * as Dispatch from "@theseus.run/core/Dispatch";
-import * as Satellite from "@theseus.run/core/Satellite";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { allTools } from "@theseus.run/tools";
 import { renderEvent, dim, yellow } from "./render.ts";
@@ -52,7 +51,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing), Dispatch.NoopLog))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Dispatch.Defaults))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

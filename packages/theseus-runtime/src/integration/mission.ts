@@ -15,7 +15,6 @@ import type * as Agent from "@theseus.run/core/Agent";
 import * as Capsule from "@theseus.run/core/Capsule";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Grunt from "@theseus.run/core/Grunt";
-import * as Satellite from "@theseus.run/core/Satellite";
 import * as Mission from "@theseus.run/core/Mission";
 import * as AgentComm from "@theseus.run/core/AgentComm";
 import { readonlyTools } from "@theseus.run/tools";
@@ -123,7 +122,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-Effect.runPromise(Effect.provide(program, Layer.merge(Layer.merge(CopilotLanguageModelLive, Satellite.DefaultRing), Dispatch.NoopLog))).catch((e) => {
+Effect.runPromise(Effect.provide(program, Layer.merge(CopilotLanguageModelLive, Dispatch.Defaults))).catch((e) => {
   console.error("Failed:", e);
   process.exit(1);
 });

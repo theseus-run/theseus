@@ -15,7 +15,6 @@ import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Tool from "@theseus.run/core/Tool";
 import type * as Agent from "@theseus.run/core/Agent";
 import * as Grunt from "@theseus.run/core/Grunt";
-import * as Satellite from "@theseus.run/core/Satellite";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -48,10 +47,10 @@ export const makeDispatchGruntTool = (workerBlueprint: Agent.Blueprint): Effect.
       capabilities: ["dispatch"],
       execute: ({ task }, { fail }) =>
         Grunt.gruntAwait(workerBlueprint, task).pipe(
-          Effect.provide(Layer.merge(Layer.merge(
+          Effect.provide(Layer.merge(
             Layer.succeed(LanguageModel.LanguageModel, lm),
-            Satellite.DefaultRing,
-          ), Dispatch.NoopLog)),
+            Dispatch.Defaults,
+          )),
           Effect.map((result) => result.content),
           Effect.catchTags({
             AgentInterrupted: (e) => Effect.fail(fail(`Grunt interrupted: ${e.reason ?? "unknown"}`)),
