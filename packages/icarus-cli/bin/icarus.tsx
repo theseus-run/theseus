@@ -11,8 +11,10 @@ import { render } from "ink";
 import { Effect, Stream } from "effect";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import type * as Agent from "@theseus.run/core/Agent";
+import type * as Daemon from "@theseus.run/core/Daemon";
 import {
   isDaemonRunning,
+  cleanupDaemonFiles,
   makeDaemonBridgeClient,
 } from "@theseus.run/runtime/daemon";
 import { createStore } from "../src/store.ts";
@@ -25,7 +27,9 @@ import { resolve, dirname } from "node:path";
 // ---------------------------------------------------------------------------
 
 const workspace = process.cwd();
-const initialMessage = process.argv.slice(2).join(" ") || null;
+const restartDaemon = process.argv.includes("--restart");
+const args = process.argv.slice(2).filter((a) => a !== "--restart");
+const initialMessage = args.join(" ") || null;
 
 const DAEMON_START_SCRIPT = resolve(
   dirname(new URL(import.meta.url).pathname),
@@ -44,10 +48,16 @@ const BLUEPRINT: Agent.Blueprint = {
 // Daemon lifecycle
 // ---------------------------------------------------------------------------
 
-const ensureDaemon = (): boolean => {
+const killDaemon = (): void => {
   const status = isDaemonRunning(workspace);
-  if (status.running) return true;
+  if (status.running && status.pid) {
+    try { process.kill(status.pid, "SIGTERM"); } catch { /* ignore */ }
+    Bun.sleepSync(200);
+  }
+  cleanupDaemonFiles(workspace);
+};
 
+const startDaemon = (): void => {
   // biome-ignore lint/suspicious/noConsole: startup info
   console.log("[icarus] starting daemon...");
   const child = spawn("bun", ["run", DAEMON_START_SCRIPT, workspace], {
@@ -65,7 +75,18 @@ const ensureDaemon = (): boolean => {
   }
   // biome-ignore lint/suspicious/noConsole: startup info
   console.log(`[icarus] daemon started (pid ${check.pid})`);
-  return true;
+};
+
+const ensureDaemon = (restart: boolean): void => {
+  if (restart) {
+    killDaemon();
+    startDaemon();
+    return;
+  }
+
+  const status = isDaemonRunning(workspace);
+  if (status.running) return;
+  startDaemon();
 };
 
 // ---------------------------------------------------------------------------
@@ -83,14 +104,13 @@ const startSession = (
   store: ReturnType<typeof createStore>,
   taskText: string,
 ) => {
+  store.pushUserMessage(taskText);
+
   Effect.runPromise(
     Effect.gen(function* () {
       const client = yield* makeDaemonBridgeClient(workspace);
       const handle = yield* client.dispatch(BLUEPRINT, taskText);
       session = { handle, draining: true };
-
-      // Reset store for new session
-      store.reset();
 
       // Drain events into store
       yield* Stream.tap(handle.events, (event: Dispatch.Event) =>
@@ -115,23 +135,18 @@ const injectMessage = (store: ReturnType<typeof createStore>, text: string) => {
   // Add user message to store for display
   store.pushUserMessage(text);
 
+  // If previous response is done, start a new session
+  if (!session.draining) {
+    startSession(store, text);
+    return;
+  }
+
+  // Inject user message into the running dispatch
   Effect.runPromise(
-    Effect.gen(function* () {
-      const handle = session!.handle;
-
-      // If previous response is done, the dispatch loop has ended.
-      // We need a new dispatch. For now, start a fresh session.
-      if (!session!.draining) {
-        startSession(store, text);
-        return;
-      }
-
-      // Inject user message into the running dispatch
-      yield* handle.inject({
-        _tag: "AppendMessages",
-        messages: [{ role: "user", content: [{ _tag: "Text", content: text }] }],
-      });
-    }),
+    session.handle.inject({
+      _tag: "AppendMessages",
+      messages: [{ role: "user" as const, content: text }],
+    }) as Effect.Effect<void>,
   ).catch((e) => {
     // biome-ignore lint/suspicious/noConsole: error
     console.error("[inject error]", e);
@@ -143,7 +158,7 @@ const injectMessage = (store: ReturnType<typeof createStore>, text: string) => {
 // ---------------------------------------------------------------------------
 
 const main = async () => {
-  ensureDaemon();
+  ensureDaemon(restartDaemon);
 
   const store = createStore();
 

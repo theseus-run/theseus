@@ -15,9 +15,10 @@ import type * as Agent from "@theseus.run/core/Agent";
 // ---------------------------------------------------------------------------
 
 export type ChatLine =
-  | { readonly kind: "user"; readonly text: string }
-  | { readonly kind: "system"; readonly text: string }
-  | { readonly kind: "event"; readonly event: Dispatch.Event };
+  | { readonly kind: "user"; readonly text: string; readonly id: number }
+  | { readonly kind: "assistant"; readonly text: string; readonly id: number }
+  | { readonly kind: "system"; readonly text: string; readonly id: number }
+  | { readonly kind: "event"; readonly event: Dispatch.Event; readonly id: number };
 
 // ---------------------------------------------------------------------------
 // State
@@ -61,6 +62,7 @@ export interface Store {
 
 export const createStore = (): Store => {
   let state = initialState;
+  let nextId = 0;
   const listeners = new Set<() => void>();
 
   const notify = () => { for (const cb of listeners) cb(); };
@@ -71,10 +73,26 @@ export const createStore = (): Store => {
   };
 
   const push = (event: Dispatch.Event) => {
-    const lines = [...state.lines, { kind: "event" as const, event }];
     let { streamText, iteration, agent, result, running } = state;
 
     if (event.agent && !agent) agent = event.agent;
+
+    // Only non-delta events go into the scrollback lines
+    const isDisplayable =
+      event._tag !== "TextDelta" &&
+      event._tag !== "ThinkingDelta" &&
+      event._tag !== "Thinking";
+
+    // Flush accumulated stream text before any non-delta event
+    let currentLines = state.lines;
+    if (isDisplayable && streamText) {
+      currentLines = [...currentLines, { kind: "assistant" as const, text: streamText, id: nextId++ }];
+      streamText = "";
+    }
+
+    const lines = isDisplayable
+      ? [...currentLines, { kind: "event" as const, event, id: nextId++ }]
+      : currentLines;
 
     switch (event._tag) {
       case "Calling":
@@ -85,6 +103,16 @@ export const createStore = (): Store => {
         streamText += event.content;
         break;
       case "Done":
+        // Flush accumulated stream text as a line before Done
+        if (streamText) {
+          const flushed = [
+            ...lines,
+            { kind: "assistant" as const, text: streamText, id: nextId++ },
+          ];
+          state = { lines: flushed, streamText: "", iteration, agent, result: event.result, running: false };
+          notify();
+          return;
+        }
         result = event.result;
         running = false;
         break;
@@ -95,11 +123,11 @@ export const createStore = (): Store => {
   };
 
   const pushUserMessage = (text: string) => {
-    update({ lines: [...state.lines, { kind: "user", text }] });
+    update({ lines: [...state.lines, { kind: "user", text, id: nextId++ }] });
   };
 
   const pushSystem = (text: string) => {
-    update({ lines: [...state.lines, { kind: "system", text }] });
+    update({ lines: [...state.lines, { kind: "system", text, id: nextId++ }] });
   };
 
   const reset = () => {

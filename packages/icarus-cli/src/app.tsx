@@ -48,6 +48,8 @@ const ChatLineView = ({ line }: { line: ChatLine }) => {
   switch (line.kind) {
     case "user":
       return <Text color="blue" bold>{`> ${line.text}`}</Text>;
+    case "assistant":
+      return <Text>{line.text}</Text>;
     case "system":
       return <Text color="yellow" dimColor>{`[system] ${line.text}`}</Text>;
     case "event":
@@ -91,32 +93,16 @@ const App = ({ store, onSubmit }: AppProps) => {
     }
   });
 
-  // Filter displayable lines (skip TextDelta/ThinkingDelta/Thinking events)
-  const displayLines = state.lines.filter(
-    (l) =>
-      l.kind !== "event" ||
-      (l.event._tag !== "TextDelta" &&
-        l.event._tag !== "ThinkingDelta" &&
-        l.event._tag !== "Thinking"),
-  );
-
   return (
     <Box flexDirection="column">
-      {/* Scrollback */}
-      <Static items={displayLines}>
-        {(line, i) => (
-          <Box key={i}>
+      {/* Scrollback — lines are pre-filtered in store, append-only */}
+      <Static items={state.lines as ChatLine[]}>
+        {(line) => (
+          <Box key={line.id}>
             <ChatLineView line={line} />
           </Box>
         )}
       </Static>
-
-      {/* Streaming text */}
-      {state.streamText ? (
-        <Box marginTop={1}>
-          <Text>{state.streamText}</Text>
-        </Box>
-      ) : null}
 
       {/* Status bar */}
       <Box marginTop={1}>
