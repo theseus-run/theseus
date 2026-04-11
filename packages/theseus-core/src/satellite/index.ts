@@ -12,3 +12,5 @@ export type { SatelliteActionCallback } from "./ring.ts";
 export { toolRecovery } from "./tool-recovery.ts";
 export { tokenBudget } from "./token-budget.ts";
 export { toolGuard } from "./tool-guard.ts";
+export { backgroundSatellite } from "./background.ts";
+export type { BackgroundSatelliteConfig } from "./background.ts";

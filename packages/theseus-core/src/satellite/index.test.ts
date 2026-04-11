@@ -14,6 +14,7 @@ import type { Satellite } from "./types.ts";
 import { SatelliteAbort, Pass, BlockTool, ReplaceResult } from "./types.ts";
 import { tokenBudget } from "./token-budget.ts";
 import { toolGuard } from "./tool-guard.ts";
+import { backgroundSatellite } from "./background.ts";
 
 // ---------------------------------------------------------------------------
 // Test tools
@@ -394,5 +395,110 @@ describe("toolGuard", () => {
       ],
     );
     expect(result.content).toBe("done");
+  });
+});
+
+// ===========================================================================
+// backgroundSatellite — async work, sync polling
+// ===========================================================================
+
+describe("backgroundSatellite", () => {
+  test("passes when no work is triggered", async () => {
+    const bg = backgroundSatellite<string, string>({
+      name: "noop-bg",
+      shouldStart: () => null,
+      work: (input) => Effect.succeed(input),
+      toAction: (result) => ReplaceResult(result),
+    });
+
+    const result = await runWith([bg], [textParts("hello")]);
+    expect(result.content).toBe("hello");
+  });
+
+  test("starts work on trigger phase, injects result when ready", async () => {
+    // Background satellite: on AfterTool, starts async "compaction".
+    // On next BeforeCall (iteration 2), work is done → ReplaceResult.
+    const bg = backgroundSatellite<string, string>({
+      name: "compactor",
+      shouldStart: (phase) =>
+        phase._tag === "AfterTool" ? phase.result.content : null,
+      work: (content) =>
+        // Simulate async work — returns compacted version
+        Effect.succeed(`[compacted:${content.length}]`),
+      toAction: (result) => ReplaceResult(result),
+    });
+
+    // Iteration 1: tool call → AfterTool triggers work → work completes immediately
+    // Iteration 2: text response. But ReplaceResult on a non-AfterTool phase is a no-op
+    // in the ring (applyActionToPhase ignores mismatched phase/action combos).
+    // The action IS returned though — we can verify via events.
+    const events = await collectEventsWith(
+      [bg],
+      [
+        toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"long output here"}' }]),
+        textParts("final"),
+      ],
+    );
+
+    // The satellite triggers on AfterTool, and the action is emitted as SatelliteAction
+    const satActions = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "SatelliteAction" }> =>
+        e._tag === "SatelliteAction" && e.satellite === "compactor",
+    );
+    expect(satActions.length).toBeGreaterThanOrEqual(1);
+    expect(satActions.some((e) => e.action === "ReplaceResult")).toBe(true);
+  });
+
+  test("passes while work is still in-flight", async () => {
+    // Use a Deferred to control when the background work completes.
+    // The work won't resolve during the dispatch — satellite should Pass every time.
+    const bg = backgroundSatellite<string, string>({
+      name: "slow-worker",
+      shouldStart: (phase) =>
+        phase._tag === "BeforeCall" ? "start" : null,
+      work: (_input) =>
+        // Never completes within the test — simulates slow async work
+        Effect.never,
+      toAction: (result) => ReplaceResult(result),
+    });
+
+    // Dispatch completes with text response in iteration 1.
+    // The background satellite starts work at BeforeCall but it never finishes.
+    // The dispatch should still complete normally — not blocked.
+    const result = await runWith([bg], [textParts("not blocked")]);
+    expect(result.content).toBe("not blocked");
+  });
+
+  test("resets on work failure and can restart", async () => {
+    let attempt = 0;
+    const bg = backgroundSatellite<number, string>({
+      name: "retry-bg",
+      shouldStart: (phase) =>
+        phase._tag === "BeforeCall" ? ++attempt : null,
+      work: (n): Effect.Effect<string> =>
+        n === 1
+          ? Effect.die(new Error("first attempt fails"))
+          : Effect.succeed(`ok-${n}`),
+      toAction: (result) => ReplaceResult(result),
+    });
+
+    // 3 iterations: tool call → tool call → text
+    // BeforeCall iter 0: starts work (attempt=1) → fails → resets
+    // BeforeCall iter 1: starts work (attempt=2) → succeeds
+    // BeforeCall iter 2: work done → ReplaceResult returned
+    const events = await collectEventsWith(
+      [bg],
+      [
+        toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"a"}' }]),
+        toolCallParts([{ id: "c2", name: "echo", arguments: '{"msg":"b"}' }]),
+        textParts("final"),
+      ],
+    );
+
+    const satActions = events.filter(
+      (e): e is Extract<DispatchEvent, { _tag: "SatelliteAction" }> =>
+        e._tag === "SatelliteAction" && e.satellite === "retry-bg",
+    );
+    expect(satActions.some((e) => e.action === "ReplaceResult")).toBe(true);
   });
 });
