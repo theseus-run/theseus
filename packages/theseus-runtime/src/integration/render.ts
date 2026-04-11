@@ -39,6 +39,8 @@ export const renderEvent = (e: Dispatch.Event): void => {
     Match.tag("ToolCalling", (e) => console.log(cyan(`  [${e.agent}] → ${e.tool}(${truncateDisplay(JSON.stringify(e.args), 120)})`))),
     Match.tag("ToolResult", (e) => console.log(green(`  [${e.agent}] ← ${e.tool}: ${truncateDisplay(e.content)}`))),
     Match.tag("ToolError", (e) => console.log(yellow(`  [${e.agent}] ⚠ ${e.tool}: ${e.error._tag}`))),
+    Match.tag("SatelliteAction", (e) => console.log(dim(`  [${e.agent}] ⊛ ${e.satellite}: ${e.action} @ ${e.phase}`))),
+    Match.tag("Injected", (e) => console.log(yellow(`  [${e.agent}] ⇐ ${e.injection}${e.detail ? `: ${truncateDisplay(e.detail)}` : ""}`))),
     Match.tag("Done", () => {}),
     Match.exhaustive,
   );

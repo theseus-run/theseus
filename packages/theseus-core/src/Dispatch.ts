@@ -51,6 +51,7 @@ export {
   DispatchLog as Log,
   InMemoryDispatchLog as InMemoryLog,
   NoopDispatchLog as NoopLog,
+  DispatchDefaults as Defaults,
 } from "./dispatch/index.ts";
 
 export type {

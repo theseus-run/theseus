@@ -42,3 +42,6 @@ export type { StreamDelta } from "./step.ts";
 
 // Dispatch — full machine
 export { dispatch, dispatchAwait } from "./dispatch.ts";
+
+// Defaults — pre-composed layer for SatelliteRing + DispatchLog
+export { DispatchDefaults } from "./defaults.ts";

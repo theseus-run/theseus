@@ -85,18 +85,29 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
         ),
 
       restore: (dispatchId) =>
-        Ref.get(snapshotsRef).pipe(
-          Effect.map((snaps) => {
-            const matching = snaps.filter((s) => s.dispatchId === dispatchId);
-            if (matching.length === 0) return undefined;
-            const latest = matching[matching.length - 1]!;
-            return {
-              messages: latest.messages,
-              iteration: latest.iteration,
-              usage: latest.usage,
-            };
-          }),
-        ),
+        Effect.gen(function* () {
+          const snaps = yield* Ref.get(snapshotsRef);
+          const matching = snaps.filter((s) => s.dispatchId === dispatchId);
+          if (matching.length === 0) return undefined;
+          const latest = matching[matching.length - 1]!;
+
+          // Look for parent link in events
+          const entries = yield* Ref.get(eventsRef);
+          const parentLink = entries.find(
+            (e) => e.dispatchId === dispatchId
+              && e.event._tag === "Injected"
+              && e.event.injection === "ParentLink",
+          );
+
+          const parentId = parentLink?.event._tag === "Injected" ? parentLink.event.detail : undefined;
+          const opts: DispatchOptions = {
+            dispatchId,
+            messages: latest.messages,
+            iteration: latest.iteration,
+            usage: latest.usage,
+          };
+          return parentId !== undefined ? { ...opts, parentDispatchId: parentId } : opts;
+        }),
     };
   }),
 );

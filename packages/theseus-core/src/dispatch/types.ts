@@ -94,14 +94,16 @@ export interface StepToolCalls {
 // ---------------------------------------------------------------------------
 
 export type DispatchEvent =
-  | { readonly _tag: "Calling";        readonly agent: string; readonly iteration: number }
-  | { readonly _tag: "TextDelta";      readonly agent: string; readonly iteration: number; readonly content: string }
-  | { readonly _tag: "ThinkingDelta";  readonly agent: string; readonly iteration: number; readonly content: string }
-  | { readonly _tag: "Thinking";       readonly agent: string; readonly iteration: number; readonly content: string }
-  | { readonly _tag: "ToolCalling";    readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
-  | { readonly _tag: "ToolResult";     readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
-  | { readonly _tag: "ToolError";     readonly agent: string; readonly iteration: number; readonly tool: string; readonly error: ToolCallError }
-  | { readonly _tag: "Done";          readonly agent: string; readonly result: AgentResult }
+  | { readonly _tag: "Calling";          readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "TextDelta";        readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "ThinkingDelta";    readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "Thinking";         readonly agent: string; readonly iteration: number; readonly content: string }
+  | { readonly _tag: "ToolCalling";      readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
+  | { readonly _tag: "ToolResult";       readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
+  | { readonly _tag: "ToolError";        readonly agent: string; readonly iteration: number; readonly tool: string; readonly error: ToolCallError }
+  | { readonly _tag: "SatelliteAction";  readonly agent: string; readonly iteration: number; readonly satellite: string; readonly phase: string; readonly action: string }
+  | { readonly _tag: "Injected";         readonly agent: string; readonly iteration: number; readonly injection: string; readonly detail?: string }
+  | { readonly _tag: "Done";             readonly agent: string; readonly result: AgentResult }
 
 // ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside
@@ -121,6 +123,8 @@ export type Injection =
 export interface DispatchOptions {
   /** Dispatch identifier for logging/restore. Auto-generated if omitted. */
   readonly dispatchId?: string
+  /** Link to parent dispatch (for delegate → worker tracing). */
+  readonly parentDispatchId?: string
   /** Restore from a previous session — replaces the default [system, user] messages. */
   readonly messages?: ReadonlyArray<Prompt.MessageEncoded>
   /** Resume iteration count (for usage tracking continuity). */

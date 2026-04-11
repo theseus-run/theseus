@@ -14,10 +14,8 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { AgentResult } from "../agent/index.ts";
 import { AgentInterrupted, AgentCycleExceeded } from "../agent/index.ts";
-import type { AgentError } from "../agent/index.ts";
-import type { Blueprint } from "../agent/index.ts";
+import type { AgentResult, AgentError, Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
@@ -43,11 +41,13 @@ const addUsage = (a: Usage, b: Usage): Usage => ({
 const drainInjections = (
   injectionQueue: Queue.Queue<Injection>,
   messages: ReadonlyArray<Prompt.MessageEncoded>,
+  onInjection: (injection: Injection) => Effect.Effect<void>,
 ): Effect.Effect<ReadonlyArray<Prompt.MessageEncoded> | null> =>
   Effect.gen(function* () {
     let current = messages;
     let opt = yield* Queue.poll(injectionQueue);
     while (Option.isSome(opt)) {
+      yield* onInjection(opt.value);
       const prev = current;
       const next = Match.value(opt.value).pipe(
         Match.tag("Interrupt", () => null as ReadonlyArray<Prompt.MessageEncoded> | null),
@@ -105,10 +105,18 @@ export const dispatch = (
       usage: Usage,
       iterations: number,
     ): Effect.Effect<AgentResult, AgentError | SatelliteAbort, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-      Effect.gen(function* () {
+      Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(Effect.gen(function* () {
         yield* Effect.yieldNow;
 
-        const next = yield* drainInjections(injectionQueue, messages);
+        const logInjection = (injection: Injection): Effect.Effect<void> => {
+          const detail = injection._tag === "Redirect" ? injection.task
+            : injection._tag === "Interrupt" ? injection.reason
+            : undefined;
+          const base = { _tag: "Injected" as const, agent: blueprint.name, iteration: iterations, injection: injection._tag };
+          return emit(detail !== undefined ? { ...base, detail } : base);
+        };
+
+        const next = yield* drainInjections(injectionQueue, messages, logInjection);
         if (next === null)
           return yield* Effect.fail(
             new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
@@ -124,11 +132,14 @@ export const dispatch = (
 
         const ring = yield* SatelliteRing;
         const satCtx = { agent: blueprint.name, iteration: iterations };
+        const onSatAction = (satellite: string, phase: string, action: string) =>
+          emit({ _tag: "SatelliteAction", agent: blueprint.name, iteration: iterations, satellite, phase, action });
 
         // --- Phase: BeforeCall ---
         const beforeCallAction = yield* ring.run(
           { _tag: "BeforeCall", messages: next },
           satCtx,
+          onSatAction,
         );
         const callMessages = beforeCallAction._tag === "TransformMessages"
           ? beforeCallAction.messages
@@ -146,7 +157,7 @@ export const dispatch = (
             ),
             Match.orElse(() => Effect.void),
           ),
-        );
+        ).pipe(Effect.withSpan("llm-call", { attributes: { "llm.agent": blueprint.name, "llm.iteration": iterations } }));
         const totalUsage = addUsage(usage, rawResult.usage);
 
         if (rawResult.thinking) {
@@ -157,6 +168,7 @@ export const dispatch = (
         const afterCallAction = yield* ring.run(
           { _tag: "AfterCall", stepResult: rawResult },
           satCtx,
+          onSatAction,
         );
         const result = afterCallAction._tag === "TransformStepResult"
           ? afterCallAction.stepResult
@@ -209,6 +221,7 @@ export const dispatch = (
               const beforeAction = yield* ring.run(
                 { _tag: "BeforeTool", tool: tc },
                 satCtx,
+                onSatAction,
               );
 
               if (beforeAction._tag === "BlockTool") {
@@ -224,7 +237,7 @@ export const dispatch = (
                 Effect.catch((err: ToolCallError) =>
                   emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
                     Effect.flatMap(() =>
-                      ring.run({ _tag: "ToolError", tool: tc, error: err }, satCtx).pipe(
+                      ring.run({ _tag: "ToolError", tool: tc, error: err }, satCtx, onSatAction).pipe(
                         Effect.flatMap((action) =>
                           action._tag === "RecoverToolError"
                             ? Effect.succeed(action.result)
@@ -240,12 +253,13 @@ export const dispatch = (
               const afterAction = yield* ring.run(
                 { _tag: "AfterTool", tool: tc, result: callResult },
                 satCtx,
+                onSatAction,
               );
 
               return afterAction._tag === "ReplaceResult"
                 ? { ...callResult, content: afterAction.content }
                 : callResult;
-            }),
+            }).pipe(Effect.withSpan("tool-call", { attributes: { "tool.name": tc.name, "tool.id": tc.id } })),
           ),
           { concurrency: "unbounded" },
         );
@@ -284,7 +298,7 @@ export const dispatch = (
           totalUsage,
           iterations + 1,
         );
-      });
+      }));
 
     const initialMessages: ReadonlyArray<Prompt.MessageEncoded> = options?.messages ?? [
       { role: "system", content: blueprint.systemPrompt },
@@ -292,6 +306,17 @@ export const dispatch = (
     ];
     const initialUsage = options?.usage ?? zeroUsage;
     const initialIteration = options?.iteration ?? 0;
+
+    // Record parent link for dispatch tracing
+    if (options?.parentDispatchId) {
+      yield* log.record(dispatchId, {
+        _tag: "Injected",
+        agent: blueprint.name,
+        iteration: initialIteration,
+        injection: "ParentLink",
+        detail: options.parentDispatchId,
+      });
+    }
 
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
       loop(initialMessages, initialUsage, initialIteration).pipe(
@@ -314,6 +339,10 @@ export const dispatch = (
           }),
         ),
         Effect.ensuring(Queue.end(eventQueue)),
+        // OTEL: dispatch span — auto parent-child when nested dispatches use withSpan
+        Effect.withSpan("dispatch", { attributes: { "dispatch.id": dispatchId, "dispatch.agent": blueprint.name } }),
+        Effect.annotateLogs("dispatchId", dispatchId),
+        Effect.annotateLogs("agent", blueprint.name),
       ),
     );
 

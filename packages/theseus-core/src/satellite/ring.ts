@@ -22,6 +22,13 @@ import { toolRecovery } from "./tool-recovery.ts";
 // SatelliteRing — service definition
 // ---------------------------------------------------------------------------
 
+/** Callback for observing individual satellite decisions. */
+export type SatelliteActionCallback = (
+  satellite: string,
+  phase: string,
+  action: string,
+) => Effect.Effect<void>;
+
 export class SatelliteRing extends ServiceMap.Service<
   SatelliteRing,
   {
@@ -29,6 +36,7 @@ export class SatelliteRing extends ServiceMap.Service<
     readonly run: (
       phase: Phase,
       ctx: SatelliteContext,
+      onAction?: SatelliteActionCallback,
     ) => Effect.Effect<Action, SatelliteAbort>;
   }
 >()("SatelliteRing") {}
@@ -73,7 +81,7 @@ const isTerminalAction = (action: Action): boolean =>
 export const makeSatelliteRing = (
   satellites: ReadonlyArray<SatelliteAny>,
 ): Effect.Effect<{
-  readonly run: (phase: Phase, ctx: SatelliteContext) => Effect.Effect<Action, SatelliteAbort>;
+  readonly run: (phase: Phase, ctx: SatelliteContext, onAction?: SatelliteActionCallback) => Effect.Effect<Action, SatelliteAbort>;
 }> =>
   Effect.gen(function* () {
     // Each satellite gets its own Ref for state persistence across iterations
@@ -81,7 +89,7 @@ export const makeSatelliteRing = (
       satellites.map((s) => Ref.make(s.initial)),
     );
 
-    const run = (phase: Phase, ctx: SatelliteContext): Effect.Effect<Action, SatelliteAbort> =>
+    const run = (phase: Phase, ctx: SatelliteContext, onAction?: SatelliteActionCallback): Effect.Effect<Action, SatelliteAbort> =>
       Effect.gen(function* () {
         let currentPhase = phase;
         let lastAction: Action = Pass;
@@ -100,6 +108,7 @@ export const makeSatelliteRing = (
           yield* Ref.set(ref, nextState);
 
           if (action._tag !== "Pass") {
+            if (onAction) yield* onAction(satellite.name, phase._tag, action._tag);
             lastAction = action;
             if (isTerminalAction(action)) break;
             currentPhase = applyActionToPhase(currentPhase, action);

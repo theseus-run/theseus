@@ -14,7 +14,7 @@
 import { Effect, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
-import { dispatch, type DispatchEvent } from "../dispatch/index.ts";
+import { dispatch, type DispatchEvent, type DispatchOptions } from "../dispatch/index.ts";
 import type { DispatchLog } from "../dispatch/log.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
 
@@ -34,8 +34,9 @@ export interface GruntHandle {
 export const grunt = (
   blueprint: Blueprint,
   task: string,
+  options?: DispatchOptions,
 ): Effect.Effect<GruntHandle, never, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-  dispatch(blueprint, task).pipe(
+  dispatch(blueprint, task, options).pipe(
     Effect.map((handle) => ({
       events: handle.events,
       result: handle.result,
@@ -49,5 +50,6 @@ export const grunt = (
 export const gruntAwait = (
   blueprint: Blueprint,
   task: string,
+  options?: DispatchOptions,
 ): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-  grunt(blueprint, task).pipe(Effect.flatMap((handle) => handle.result));
+  grunt(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

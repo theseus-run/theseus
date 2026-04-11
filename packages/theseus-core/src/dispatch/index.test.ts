@@ -578,4 +578,95 @@ describe("DispatchLog — InMemory", () => {
     const opts = await Effect.runPromise(log.restore("nonexistent"));
     expect(opts).toBeUndefined();
   });
+
+  test("records parentDispatchId and restores it", async () => {
+    const log = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          const log = yield* DispatchLog;
+          yield* dispatchAwait(blueprint, "task", {
+            dispatchId: "child-1",
+            parentDispatchId: "parent-1",
+          });
+          return log;
+        }),
+        Layer.merge(Layer.merge(makeMockLanguageModel([textParts("hi")]), DefaultSatelliteRing), InMemoryDispatchLog),
+      ),
+    );
+    const opts = await Effect.runPromise(log.restore("child-1"));
+    expect(opts).toBeDefined();
+    expect(opts!.parentDispatchId).toBe("parent-1");
+    expect(opts!.dispatchId).toBe("child-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SatelliteAction events
+// ---------------------------------------------------------------------------
+
+describe("DispatchLog — SatelliteAction events", () => {
+  test("logs satellite actions when a satellite returns non-Pass", async () => {
+    const events = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          const log = yield* DispatchLog;
+          yield* dispatchAwait(blueprint, "task");
+          return yield* log.events();
+        }),
+        Layer.merge(Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "fail", arguments: "{}" }]),
+            textParts("recovered"),
+          ]),
+          DefaultSatelliteRing,
+        ), InMemoryDispatchLog),
+      ),
+    );
+    const satActions = events.filter((e) => e.event._tag === "SatelliteAction");
+    expect(satActions.length).toBeGreaterThanOrEqual(1);
+    const recovery = satActions.find(
+      (e) => e.event._tag === "SatelliteAction" && e.event.satellite === "tool-recovery",
+    );
+    expect(recovery).toBeDefined();
+    if (recovery && recovery.event._tag === "SatelliteAction") {
+      expect(recovery.event.action).toBe("RecoverToolError");
+      expect(recovery.event.phase).toBe("ToolError");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Injected events
+// ---------------------------------------------------------------------------
+
+describe("DispatchLog — Injected events", () => {
+  test("logs Interrupt injection", async () => {
+    const events = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          const log = yield* DispatchLog;
+          const handle = yield* dispatch(blueprint, "task");
+          yield* handle.inject({ _tag: "Interrupt", reason: "user cancelled" });
+          // Wait for result (will be AgentInterrupted)
+          yield* Effect.flip(handle.result);
+          return yield* log.events();
+        }),
+        Layer.merge(Layer.merge(
+          makeMockLanguageModel([
+            toolCallParts([{ id: "c1", name: "echo", arguments: '{"msg":"x"}' }]),
+          ]),
+          DefaultSatelliteRing,
+        ), InMemoryDispatchLog),
+      ),
+    );
+    const injections = events.filter((e) => e.event._tag === "Injected");
+    expect(injections.length).toBeGreaterThanOrEqual(1);
+    const interrupt = injections.find(
+      (e) => e.event._tag === "Injected" && e.event.injection === "Interrupt",
+    );
+    expect(interrupt).toBeDefined();
+    if (interrupt && interrupt.event._tag === "Injected") {
+      expect(interrupt.event.detail).toBe("user cancelled");
+    }
+  });
 });
