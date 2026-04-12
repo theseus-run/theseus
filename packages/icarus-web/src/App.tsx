@@ -23,9 +23,9 @@ import { PromptInput } from "@/components/prompt-kit/prompt-input";
 // Pure display transform — hook is untouched.
 // ---------------------------------------------------------------------------
 
-export interface MergedEvent extends DispatchEvent {
+export type MergedEvent = DispatchEvent & {
   resultEvent?: DispatchEvent; // ToolResult or ToolError folded in
-}
+};
 
 type DisplayMessage = Omit<ChatMessage, "event"> & { event?: MergedEvent };
 

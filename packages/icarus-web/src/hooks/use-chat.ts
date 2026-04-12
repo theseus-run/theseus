@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { WsClient, BridgeResponse, DispatchEvent, AgentResult } from "../lib/ws-client";
+import type { WsClient, ClientEvent } from "../lib/ws-client";
+import type { DispatchEvent, AgentResult } from "../lib/ws-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,7 +52,7 @@ export function useChat(client: WsClient | null) {
     (role: ChatMessage["role"], content: string, event?: DispatchEvent) => {
       setMessages((prev) => [
         ...prev,
-        { id: nextId.current++, role, content, event, timestamp: Date.now() },
+        { id: nextId.current++, role, content, timestamp: Date.now(), ...(event !== undefined ? { event } : {}) },
       ]);
     },
     [],
@@ -61,7 +62,7 @@ export function useChat(client: WsClient | null) {
   useEffect(() => {
     if (!client) return;
 
-    const unsub = client.subscribe((msg: BridgeResponse) => {
+    const unsub = client.subscribe((msg: ClientEvent) => {
       switch (msg._tag) {
         case "Event":
           handleEvent(msg.event!);

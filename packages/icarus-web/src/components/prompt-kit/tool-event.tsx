@@ -15,17 +15,18 @@ import * as Collapsible from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import type { DispatchEvent } from "@/lib/ws-client";
 import type { MergedEvent } from "@/App";
+
+/** Narrowed type for tool-related events (ToolCalling, ToolResult, ToolError). */
+type ToolMergedEvent = Extract<MergedEvent, { readonly tool: string }>;
 import { TOOL_META } from "@theseus.run/tools/metadata";
 
 // ---------------------------------------------------------------------------
 // Types & state
 // ---------------------------------------------------------------------------
 
-type ToolState = "calling" | "done" | "error" | "satellite" | "injected";
+type ToolState = "calling" | "done" | "error";
 
-function resolveState(event: MergedEvent): ToolState {
-  if (event._tag === "SatelliteAction") return "satellite";
-  if (event._tag === "Injected") return "injected";
+function resolveState(event: ToolMergedEvent): ToolState {
   if (!event.resultEvent) return "calling";
   return event.resultEvent._tag === "ToolError" ? "error" : "done";
 }
@@ -194,13 +195,12 @@ function ErrorSection({ error }: { error: { _tag?: string; message?: string } })
 // Component
 // ---------------------------------------------------------------------------
 
-export function ToolEvent({ event, className }: { event: DispatchEvent; className?: string }) {
+export function ToolEvent({ event, className }: { event: DispatchEvent; className?: string | undefined }) {
   const merged = event as MergedEvent;
   const [open, setOpen] = useState(false);
-  const state = resolveState(merged);
 
-  // Satellite
-  if (state === "satellite") {
+  // Satellite — narrowed by _tag
+  if (merged._tag === "SatelliteAction") {
     return (
       <div className={cn("px-4 py-0.5", className)}>
         <div
@@ -213,8 +213,8 @@ export function ToolEvent({ event, className }: { event: DispatchEvent; classNam
     );
   }
 
-  // Injected
-  if (state === "injected") {
+  // Injected — narrowed by _tag
+  if (merged._tag === "Injected") {
     return (
       <div className={cn("px-4 py-0.5", className)}>
         <div
@@ -228,11 +228,14 @@ export function ToolEvent({ event, className }: { event: DispatchEvent; classNam
     );
   }
 
-  // Tool call card
-  const toolName = merged.tool ?? "tool";
-  const args = formatArgs(merged.args);
+  // Tool call card — after satellite/injected early returns, only tool events remain
+  if (merged._tag !== "ToolCalling" && merged._tag !== "ToolResult" && merged._tag !== "ToolError") return null;
+  const toolEvent = merged as ToolMergedEvent;
+  const state = resolveState(toolEvent);
+  const toolName = toolEvent.tool;
+  const args = formatArgs("args" in toolEvent ? toolEvent.args : undefined);
   const paramDescriptions = getParamDescriptions(toolName);
-  const result = merged.resultEvent;
+  const result = toolEvent.resultEvent;
   const hasContent = args.length > 0 || !!result;
 
   return (

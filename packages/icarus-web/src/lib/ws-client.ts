@@ -3,66 +3,32 @@
  *
  * Sends/receives plain JSON messages matching the daemon BridgeRequest/BridgeResponse
  * protocol, minus the length-prefix framing (WebSocket handles framing).
+ *
+ * Types are imported from @theseus.run/core — no local redefinitions.
  */
 
-export type Listener = (msg: BridgeResponse) => void;
+import type { BridgeResponse } from "@theseus.run/core/Daemon";
+import type { Event as DispatchEvent, DispatchSummary } from "@theseus.run/core/Dispatch";
+import type { Event as CapsuleEvent } from "@theseus.run/core/Capsule";
+import type { Result as AgentResult } from "@theseus.run/core/Agent";
 
-export interface DispatchSummary {
-  dispatchId: string;
-  agent: string;
-  task: string;
-  startedAt: number;
-  completedAt: number | null;
-  status: "running" | "done" | "failed";
-  usage: { inputTokens: number; outputTokens: number };
-}
+// Re-export core types for convenience (using their canonical names)
+export type { BridgeResponse, DispatchSummary, CapsuleEvent, DispatchEvent, AgentResult };
 
-export interface CapsuleEvent {
-  type: string;
-  at: string;
-  by: string;
-  data: unknown;
-}
+// ---------------------------------------------------------------------------
+// ClientEvent — BridgeResponse + synthetic connection events
+// ---------------------------------------------------------------------------
 
-export interface BridgeResponse {
-  _tag: string;
-  id: string;
-  dispatchId?: string;
-  capsuleId?: string;
-  event?: DispatchEvent;
-  result?: AgentResult;
-  error?: { code: string; message: string };
-  dispatches?: DispatchSummary[] | Array<{
-    dispatchId: string;
-    agent: string;
-    iteration: number;
-    state: string;
-  }>;
-  events?: Array<{ dispatchId: string; timestamp: number; event: DispatchEvent }> | CapsuleEvent[];
-}
+export type ClientEvent =
+  | BridgeResponse
+  | { readonly _tag: "Connected"; readonly id: string }
+  | { readonly _tag: "Disconnected"; readonly id: string };
 
-export interface DispatchEvent {
-  _tag: string;
-  agent: string;
-  iteration?: number;
-  content?: string;
-  tool?: string;
-  args?: unknown;
-  error?: { _tag: string; message?: string };
-  satellite?: string;
-  phase?: string;
-  action?: string;
-  injection?: string;
-  detail?: string;
-  result?: AgentResult;
-}
+export type Listener = (msg: ClientEvent) => void;
 
-export interface AgentResult {
-  result: string;
-  summary: string;
-  content: string;
-  usage: { inputTokens: number; outputTokens: number };
-}
+// ---------------------------------------------------------------------------
+// WsClient
+// ---------------------------------------------------------------------------
 
 let reqCounter = 0;
 const makeId = () => `req-${++reqCounter}-${Date.now().toString(36)}`;
@@ -86,13 +52,13 @@ export class WsClient {
 
     ws.onopen = () => {
       this._connected = true;
-      this.emit({ _tag: "Connected", id: "" } as BridgeResponse);
+      this.emit({ _tag: "Connected", id: "" });
     };
 
     ws.onclose = () => {
       this._connected = false;
       this.ws = null;
-      this.emit({ _tag: "Disconnected", id: "" } as BridgeResponse);
+      this.emit({ _tag: "Disconnected", id: "" });
       // Auto-reconnect after 2s
       this.reconnectTimer = setTimeout(() => this.connect(), 2000);
     };
@@ -131,13 +97,13 @@ export class WsClient {
     return () => this.listeners.delete(listener);
   }
 
-  private emit(msg: BridgeResponse) {
+  private emit(msg: ClientEvent) {
     for (const l of this.listeners) l(msg);
   }
 
   private send(msg: Record<string, unknown>): string {
     const id = makeId();
-    msg.id = id;
+    msg["id"] = id;
     this.ws?.send(JSON.stringify(msg));
     return id;
   }
@@ -149,7 +115,7 @@ export class WsClient {
       // Timeout after 30s
       const timer = setTimeout(() => {
         this.pendingCallbacks.delete(id);
-        resolve({ _tag: "Error", id, error: { code: "TIMEOUT", message: "Request timed out" } });
+        resolve({ _tag: "Error", id, error: { code: "TIMEOUT", message: "Request timed out" } } as unknown as BridgeResponse);
       }, 30_000);
       this.pendingCallbacks.set(id, (resp) => {
         clearTimeout(timer);
@@ -194,15 +160,15 @@ export class WsClient {
 
   async listDispatches(limit?: number): Promise<DispatchSummary[]> {
     const resp = await this.request({ _tag: "ListDispatches", ...(limit !== undefined ? { limit } : {}) });
-    if (resp._tag === "DispatchList" && resp.dispatches) {
-      return resp.dispatches as DispatchSummary[];
+    if (resp._tag === "DispatchList") {
+      return resp.dispatches as unknown as DispatchSummary[];
     }
     return [];
   }
 
   async getDispatchEvents(dispatchId: string) {
     const resp = await this.request({ _tag: "GetDispatchEvents", dispatchId });
-    if (resp._tag === "DispatchEventsInfo" && resp.events) {
+    if (resp._tag === "DispatchEventsInfo") {
       return resp.events;
     }
     return [];
@@ -210,8 +176,8 @@ export class WsClient {
 
   async getCapsuleEvents(capsuleId: string): Promise<CapsuleEvent[]> {
     const resp = await this.request({ _tag: "GetCapsuleEvents", capsuleId });
-    if (resp._tag === "CapsuleEventsInfo" && resp.events) {
-      return resp.events as CapsuleEvent[];
+    if (resp._tag === "CapsuleEventsInfo") {
+      return resp.events as unknown as CapsuleEvent[];
     }
     return [];
   }
