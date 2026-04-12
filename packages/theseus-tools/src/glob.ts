@@ -13,7 +13,7 @@ const MAX_RESULTS = 100;
 
 const inputSchema = z.object({
   pattern: z.string().min(1),
-  path: z.string().min(1).optional(),
+  path: z.string().min(1).optional().describe("Root directory to scan (default: cwd)"),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -21,7 +21,7 @@ type Input = z.infer<typeof inputSchema>;
 export const glob = Tool.define<Input, string>({
   name: "glob",
   description:
-    "Find files matching a glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns up to 100 file paths. Respects common ignore patterns.",
+    "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns ≤100 paths. Skips node_modules, .git, dist, coverage.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],

@@ -71,7 +71,7 @@ type Input = z.infer<typeof inputSchema>;
 export const outline = Tool.define<Input, string>({
   name: "outline",
   description:
-    "Extract symbol outline from a source file (functions, classes, types, imports). Uses tree-sitter for fast, accurate parsing. Much cheaper than read_file for structural understanding.",
+    "Extract symbol outline (functions, classes, types, imports) from a source file. Prefer over read_file for structural understanding. Supports: .ts .tsx .js .jsx .py .go .rs",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
@@ -96,7 +96,12 @@ export const outline = Tool.define<Input, string>({
 
       // Binary detection
       const mime = file.type;
-      if (mime && !mime.startsWith("text/") && !mime.includes("javascript") && !mime.includes("typescript")) {
+      if (
+        mime &&
+        !mime.startsWith("text/") &&
+        !mime.includes("javascript") &&
+        !mime.includes("typescript")
+      ) {
         return `Binary file (${mime}, ${file.size} bytes)`;
       }
 

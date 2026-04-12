@@ -13,17 +13,14 @@ const CONTEXT_LINES = 4;
 
 const inputSchema = z.object({
   path: z.string().min(1),
-  old: z.string().min(1),
-  new: z.string(),
+  old: z.string().min(1).describe("Text to find — must match exactly once"),
+  new: z.string().describe("Replacement text (empty string to delete)"),
 });
 
 type Input = z.infer<typeof inputSchema>;
 
 /** Find the position of `needle` in `haystack` using whitespace-normalized comparison. */
-const fuzzyFind = (
-  haystack: string,
-  needle: string,
-): { start: number; end: number } | null => {
+const fuzzyFind = (haystack: string, needle: string): { start: number; end: number } | null => {
   const haystackLines = haystack.split("\n");
   const needleLines = needle.split("\n");
   const needleNorm = needleLines.map((l) => l.replace(/\s+/g, " ").trim());
@@ -41,8 +38,7 @@ const fuzzyFind = (
       // Calculate character positions
       const start = haystackLines.slice(0, i).join("\n").length + (i > 0 ? 1 : 0);
       const end =
-        haystackLines.slice(0, i + needleLines.length).join("\n").length +
-        (i > 0 ? 1 : 0);
+        haystackLines.slice(0, i + needleLines.length).join("\n").length + (i > 0 ? 1 : 0);
       // Adjust: we want to use original line positions
       const matchedText = haystackLines.slice(i, i + needleLines.length).join("\n");
       const startPos = haystack.indexOf(matchedText);
@@ -58,7 +54,7 @@ const fuzzyFind = (
 export const searchReplace = Tool.define<Input, string>({
   name: "search_replace",
   description:
-    "Replace exact text in a file. Finds `old` text and replaces with `new` text. Falls back to whitespace-normalized matching if exact match fails.",
+    "Replace text in a file. Exact match first, whitespace-normalized fallback. Errors if old text matches in multiple places.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "write",
   capabilities: ["fs.write"],
@@ -93,8 +89,7 @@ export const searchReplace = Tool.define<Input, string>({
               `Text not found in ${path}. Verify the 'old' text matches the file content exactly.`,
             );
           }
-          result =
-            content.slice(0, fuzzy.start) + newText + content.slice(fuzzy.end);
+          result = content.slice(0, fuzzy.start) + newText + content.slice(fuzzy.end);
           matchType = "whitespace-normalized";
         }
 
@@ -103,12 +98,8 @@ export const searchReplace = Tool.define<Input, string>({
         // Build context around edit site
         const lines = result.split("\n");
         const editStart = result.indexOf(newText);
-        const editLine =
-          editStart === -1
-            ? 0
-            : result.slice(0, editStart).split("\n").length - 1;
-        const editEndLine =
-          editLine + (newText === "" ? 0 : newText.split("\n").length - 1);
+        const editLine = editStart === -1 ? 0 : result.slice(0, editStart).split("\n").length - 1;
+        const editEndLine = editLine + (newText === "" ? 0 : newText.split("\n").length - 1);
 
         const ctxStart = Math.max(0, editLine - CONTEXT_LINES);
         const ctxEnd = Math.min(lines.length, editEndLine + CONTEXT_LINES + 1);

@@ -16,7 +16,13 @@ const MAX_OUTPUT_BYTES = 8192;
 
 const inputSchema = z.object({
   command: z.string().min(1),
-  timeout_ms: z.number().int().min(1000).max(600_000).optional(),
+  timeout_ms: z
+    .number()
+    .int()
+    .min(1000)
+    .max(600_000)
+    .optional()
+    .describe("Timeout (default 30000, max 600000)"),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -38,7 +44,7 @@ const truncateOutput = (output: string, maxBytes: number): string => {
 export const shell = Tool.define<Input, string>({
   name: "shell",
   description:
-    "Execute a shell command. Returns stdout, stderr, and exit code. Timeout defaults to 30 seconds. Output capped at 8KB.",
+    "Run a shell command. Returns stdout, stderr, exit code. Default timeout 30s (max 600s). Output capped at 8KB.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "destructive",
   capabilities: ["shell.exec"],
@@ -63,10 +69,7 @@ export const shell = Tool.define<Input, string>({
 
         const parts: string[] = [];
         if (stdout) parts.push(stdout);
-        if (stderr)
-          parts.push(
-            `[stderr]\n${truncateOutput(stderr, MAX_OUTPUT_BYTES / 2)}`,
-          );
+        if (stderr) parts.push(`[stderr]\n${truncateOutput(stderr, MAX_OUTPUT_BYTES / 2)}`);
         parts.push(`[exit code: ${exitCode}]`);
 
         return Effect.succeed(parts.join("\n"));

@@ -35,7 +35,7 @@ type Input = z.infer<typeof inputSchema>;
 export const listDir = Tool.define<Input, string>({
   name: "list_dir",
   description:
-    "List files and directories at the given path. Filters noise (node_modules, .git, dist, etc). Directories end with /.",
+    "List directory contents. Dirs end with /, symlinks with @. Skips node_modules, .git, dist, build, coverage.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],

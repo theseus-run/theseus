@@ -20,8 +20,8 @@ const TEXT_MIMES = ["json", "xml", "javascript", "typescript", "ecmascript"];
 
 const inputSchema = z.object({
   path: z.string().min(1),
-  offset: z.number().int().min(1).optional(),
-  limit: z.number().int().min(1).optional(),
+  offset: z.number().int().min(1).optional().describe("Start at this line number (1-indexed)"),
+  limit: z.number().int().min(1).optional().describe("Max lines to return (default 2000)"),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -29,7 +29,7 @@ type Input = z.infer<typeof inputSchema>;
 export const readFile = Tool.define<Input, string>({
   name: "read_file",
   description:
-    "Read a file's contents. Returns line-numbered text. Use offset/limit for large files. Returns binary indicator for non-text files.",
+    "Read a file. Returns line-numbered text. Binary files return a type indicator. Use offset/limit for large files.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
@@ -70,9 +70,7 @@ export const readFile = Tool.define<Input, string>({
         .map((line, i) => {
           const lineNum = String(start + i + 1).padStart(padWidth, " ");
           const truncated =
-            line.length > MAX_LINE_LENGTH
-              ? `${line.slice(0, MAX_LINE_LENGTH)}...`
-              : line;
+            line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)}...` : line;
           return `${lineNum}\t${truncated}`;
         })
         .join("\n");

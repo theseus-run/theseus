@@ -20,8 +20,7 @@ type Input = z.infer<typeof inputSchema>;
 
 export const writeFile = Tool.define<Input, string>({
   name: "write_file",
-  description:
-    "Create or overwrite a file with the given content. Creates parent directories if needed.",
+  description: "Create or overwrite a file. Creates parent directories automatically.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "write",
   capabilities: ["fs.write"],

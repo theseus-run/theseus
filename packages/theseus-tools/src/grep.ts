@@ -15,9 +15,15 @@ const MAX_MATCHES = 100;
 
 const inputSchema = z.object({
   pattern: z.string().min(1),
-  path: z.string().min(1).optional(),
-  glob: z.string().optional(),
-  context_lines: z.number().int().min(0).max(10).optional(),
+  path: z.string().min(1).optional().describe("Root directory or file to search (default: cwd)"),
+  glob: z.string().optional().describe("File filter pattern (e.g. *.ts)"),
+  context_lines: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .optional()
+    .describe("Lines of context around each match"),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -77,18 +83,13 @@ const formatMatches = (matches: GrepMatch[], total: number): string => {
 export const grep = Tool.define<Input, string>({
   name: "grep",
   description:
-    "Search file contents with a regex pattern. Returns file:line:content grouped by file. Uses ripgrep for speed.",
+    "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",
   inputSchema: Tool.fromZod(inputSchema),
   safety: "readonly",
   capabilities: ["fs.read"],
   execute: ({ pattern, path, glob: globPattern, context_lines }, { fail, retriable }) => {
     // Build ripgrep args
-    const args = [
-      "rg",
-      "--json",
-      "--max-count", "10",
-      "--sort", "modified",
-    ];
+    const args = ["rg", "--json", "--max-count", "10", "--sort", "modified"];
 
     if (globPattern) args.push("--glob", globPattern);
     if (context_lines !== undefined && context_lines > 0) {
