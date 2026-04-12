@@ -110,12 +110,11 @@ export class WsClient {
 
   /** Send a request and wait for the correlated response. */
   private request(msg: Record<string, unknown>): Promise<BridgeResponse> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const id = this.send(msg);
-      // Timeout after 30s
       const timer = setTimeout(() => {
         this.pendingCallbacks.delete(id);
-        resolve({ _tag: "Error", id, error: { code: "TIMEOUT", message: "Request timed out" } } as unknown as BridgeResponse);
+        reject(new Error("Request timed out"));
       }, 30_000);
       this.pendingCallbacks.set(id, (resp) => {
         clearTimeout(timer);
@@ -127,12 +126,22 @@ export class WsClient {
   async dispatch(
     blueprint: { name: string; systemPrompt: string; tools: unknown[]; maxIterations?: number },
     task: string,
+    continueFrom?: string,
   ): Promise<{ dispatchId: string } | null> {
-    const resp = await this.request({ _tag: "Dispatch", blueprint, task });
-    if (resp._tag === "Ack" && resp.dispatchId) {
-      return { dispatchId: resp.dispatchId };
+    try {
+      const resp = await this.request({
+        _tag: "Dispatch",
+        blueprint,
+        task,
+        ...(continueFrom !== undefined ? { continueFrom } : {}),
+      });
+      if (resp._tag === "Ack" && resp.dispatchId) {
+        return { dispatchId: resp.dispatchId };
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
   }
 
   inject(dispatchId: string, text: string) {
@@ -150,35 +159,54 @@ export class WsClient {
     this.send({ _tag: "Ping" });
   }
 
-  async status() {
-    return this.request({ _tag: "Status" });
+  async status(): Promise<BridgeResponse | null> {
+    try {
+      return await this.request({ _tag: "Status" });
+    } catch {
+      return null;
+    }
   }
 
   shutdown() {
     this.send({ _tag: "Shutdown", graceful: true });
   }
 
-  async listDispatches(limit?: number): Promise<DispatchSummary[]> {
-    const resp = await this.request({ _tag: "ListDispatches", ...(limit !== undefined ? { limit } : {}) });
-    if (resp._tag === "DispatchList") {
-      return resp.dispatches as unknown as DispatchSummary[];
+  async listDispatches(limit?: number): Promise<ReadonlyArray<DispatchSummary>> {
+    try {
+      const resp = await this.request({ _tag: "ListDispatches", ...(limit !== undefined ? { limit } : {}) });
+      return resp._tag === "DispatchList" ? resp.dispatches : [];
+    } catch {
+      return [];
     }
-    return [];
   }
 
   async getDispatchEvents(dispatchId: string) {
-    const resp = await this.request({ _tag: "GetDispatchEvents", dispatchId });
-    if (resp._tag === "DispatchEventsInfo") {
-      return resp.events;
+    try {
+      const resp = await this.request({ _tag: "GetDispatchEvents", dispatchId });
+      return resp._tag === "DispatchEventsInfo" ? resp.events : [];
+    } catch {
+      return [];
     }
-    return [];
   }
 
-  async getCapsuleEvents(capsuleId: string): Promise<CapsuleEvent[]> {
-    const resp = await this.request({ _tag: "GetCapsuleEvents", capsuleId });
-    if (resp._tag === "CapsuleEventsInfo") {
-      return resp.events as unknown as CapsuleEvent[];
+  async getMessages(dispatchId: string): Promise<ReadonlyArray<{ role: string; content: string }>> {
+    try {
+      const resp = await this.request({ _tag: "GetMessages", dispatchId });
+      if (resp._tag === "Messages") {
+        return resp.messages;
+      }
+      return [];
+    } catch {
+      return [];
     }
-    return [];
+  }
+
+  async getCapsuleEvents(capsuleId: string): Promise<ReadonlyArray<CapsuleEvent>> {
+    try {
+      const resp = await this.request({ _tag: "GetCapsuleEvents", capsuleId });
+      return resp._tag === "CapsuleEventsInfo" ? resp.events : [];
+    } catch {
+      return [];
+    }
   }
 }

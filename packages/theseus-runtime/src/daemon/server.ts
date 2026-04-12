@@ -146,16 +146,31 @@ export const DaemonServerLive = Effect.gen(function* () {
             return;
           }
 
+          // Resolve dispatch options — restore from previous dispatch if continuing
+          let options = r.options;
+          if (r.continueFrom) {
+            const restored = yield* log.restore(r.continueFrom);
+            if (restored?.messages) {
+              // Final snapshot includes assistant response — just append new user message
+              options = {
+                ...options,
+                messages: [...restored.messages, { role: "user" as const, content: r.task }],
+                iteration: restored.iteration,
+                usage: restored.usage,
+              };
+            }
+          }
+
           // Create per-dispatch Capsule backed by SQLite
           const capsuleLayer = Layer.provide(SqliteCapsuleLive(blueprint.name), dbLayer);
           const getCapsule = Effect.gen(function* () { return yield* CapsuleNs.Capsule; });
           const capsule = yield* Effect.provide(getCapsule, capsuleLayer);
 
           // Log dispatch start to capsule
-          yield* capsule.log({ type: "dispatch.start", by: "runtime", data: { task: r.task, agent: blueprint.name } });
+          yield* capsule.log({ type: "dispatch.start", by: "runtime", data: { task: r.task, agent: blueprint.name, continueFrom: r.continueFrom } });
 
           const handle = yield* Effect.provide(
-            Dispatch.dispatch(blueprint, r.task, r.options),
+            Dispatch.dispatch(blueprint, r.task, options),
             depsLayer,
           );
           yield* registry.register(handle, blueprint.name);
@@ -190,6 +205,15 @@ export const DaemonServerLive = Effect.gen(function* () {
                 handle.result.pipe(
                   Effect.tap((result) =>
                     Effect.gen(function* () {
+                      // Save final snapshot with assistant response for session continuity
+                      const finalMessages = yield* handle.messages;
+                      yield* log.snapshot(
+                        handle.dispatchId,
+                        -1, // sentinel: final snapshot including assistant response
+                        [...finalMessages, { role: "assistant" as const, content: result.content }],
+                        result.usage,
+                      );
+
                       // Log dispatch completion to capsule
                       yield* capsule.log({
                         type: "dispatch.done",
@@ -279,6 +303,20 @@ export const DaemonServerLive = Effect.gen(function* () {
           Effect.tap((events) =>
             Effect.sync(() => sendResponse(socket, { _tag: "DispatchEventsInfo", id: r.id, events })),
           ),
+          Effect.asVoid,
+        );
+      }),
+
+      Match.when("GetMessages", () => {
+        const r = req as Extract<Daemon.BridgeRequest, { _tag: "GetMessages" }>;
+        return log.restore(r.dispatchId).pipe(
+          Effect.tap((restored) => {
+            const messages = (restored?.messages ?? []).map((m: any) => ({
+              role: String(m.role ?? ""),
+              content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+            }));
+            return Effect.sync(() => sendResponse(socket, { _tag: "Messages", id: r.id, messages }));
+          }),
           Effect.asVoid,
         );
       }),

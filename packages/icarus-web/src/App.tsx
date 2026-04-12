@@ -72,7 +72,7 @@ type View = { kind: "list" } | { kind: "chat" };
 
 export default function App() {
   const { client, connected } = useWsClient();
-  const { messages, running, agent, iteration, sendMessage, reset } = useChat(client);
+  const { messages, running, agent, iteration, sendMessage, reset, loadDispatch } = useChat(client);
   const { dispatches, loading, refresh } = useDispatches(client);
   const [view, setView] = useState<View>({ kind: "list" });
   const [input, setInput] = useState("");
@@ -97,9 +97,8 @@ export default function App() {
     setView({ kind: "list" });
   };
 
-  const handleSelectDispatch = (_dispatchId: string) => {
-    // TODO: load dispatch history and show in chat view
-    // For now, just switch to chat
+  const handleSelectDispatch = (dispatchId: string) => {
+    loadDispatch(dispatchId);
     setView({ kind: "chat" });
   };
 

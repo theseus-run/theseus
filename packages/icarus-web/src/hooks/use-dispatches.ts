@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { WsClient, DispatchSummary } from "../lib/ws-client";
 
 export function useDispatches(client: WsClient | null) {
-  const [dispatches, setDispatches] = useState<DispatchSummary[]>([]);
+  const [dispatches, setDispatches] = useState<ReadonlyArray<DispatchSummary>>([]);
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
 

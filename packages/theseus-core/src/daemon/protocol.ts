@@ -37,7 +37,7 @@ export interface SerializedBlueprint {
 // ---------------------------------------------------------------------------
 
 export type BridgeRequest =
-  | { readonly _tag: "Dispatch";          readonly id: string; readonly blueprint: SerializedBlueprint; readonly task: string; readonly options?: DispatchOptions }
+  | { readonly _tag: "Dispatch";          readonly id: string; readonly blueprint: SerializedBlueprint; readonly task: string; readonly options?: DispatchOptions; readonly continueFrom?: string }
   | { readonly _tag: "Inject";            readonly id: string; readonly dispatchId: string; readonly injection: Injection }
   | { readonly _tag: "Interrupt";         readonly id: string; readonly dispatchId: string }
   | { readonly _tag: "Subscribe";         readonly id: string; readonly dispatchId: string }
@@ -48,6 +48,7 @@ export type BridgeRequest =
   | { readonly _tag: "ListDispatches";    readonly id: string; readonly limit?: number }
   | { readonly _tag: "GetDispatchEvents"; readonly id: string; readonly dispatchId: string }
   | { readonly _tag: "GetCapsuleEvents";  readonly id: string; readonly capsuleId: string }
+  | { readonly _tag: "GetMessages";       readonly id: string; readonly dispatchId: string }
 
 // ---------------------------------------------------------------------------
 // BridgeResponse — daemon → client
@@ -63,6 +64,7 @@ export type BridgeResponse =
   | { readonly _tag: "DispatchList";       readonly id: string; readonly dispatches: ReadonlyArray<DispatchSummary> }
   | { readonly _tag: "DispatchEventsInfo"; readonly id: string; readonly events: ReadonlyArray<EventEntry> }
   | { readonly _tag: "CapsuleEventsInfo";  readonly id: string; readonly events: ReadonlyArray<CapsuleEvent> }
+  | { readonly _tag: "Messages";           readonly id: string; readonly messages: ReadonlyArray<{ readonly role: string; readonly content: string }> }
 
 // ---------------------------------------------------------------------------
 // BridgeError — typed error for protocol-level failures

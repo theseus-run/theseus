@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { DispatchSummary } from "@/lib/ws-client";
 
 interface DispatchListProps {
-  dispatches: DispatchSummary[];
+  dispatches: ReadonlyArray<DispatchSummary>;
   loading: boolean;
   onSelect: (dispatchId: string) => void;
   onNew: () => void;
