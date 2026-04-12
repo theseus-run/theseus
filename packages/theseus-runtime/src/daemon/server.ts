@@ -151,10 +151,12 @@ export const DaemonServerLive = Effect.gen(function* () {
           socket.data.subscriptions.add(handle.dispatchId);
 
           // Stream events to client in background
+          // Skip deltas over the wire — CLI shows full text from AgentResult.content
+          const skipOverWire = new Set(["TextDelta", "ThinkingDelta", "Thinking"]);
           yield* Effect.forkDetach({ startImmediately: true })(
             Stream.tap(handle.events, (event: Dispatch.Event) =>
               Effect.sync(() => {
-                if (socket.data.subscriptions.has(handle.dispatchId)) {
+                if (!skipOverWire.has(event._tag) && socket.data.subscriptions.has(handle.dispatchId)) {
                   sendResponse(socket, {
                     _tag: "Event",
                     id: r.id,

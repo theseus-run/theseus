@@ -26,8 +26,6 @@ export type ChatLine =
 
 export interface StoreState {
   readonly lines: ReadonlyArray<ChatLine>;
-  /** Accumulated text from TextDelta events (current response). */
-  readonly streamText: string;
   /** Latest iteration number. */
   readonly iteration: number;
   /** Agent name (from first event). */
@@ -40,7 +38,6 @@ export interface StoreState {
 
 const initialState: StoreState = {
   lines: [],
-  streamText: "",
   iteration: 0,
   agent: "",
   result: null,
@@ -73,52 +70,35 @@ export const createStore = (): Store => {
   };
 
   const push = (event: Dispatch.Event) => {
-    let { streamText, iteration, agent, result, running } = state;
+    let { iteration, agent, result, running } = state;
 
     if (event.agent && !agent) agent = event.agent;
 
-    // Only non-delta events go into the scrollback lines
-    const isDisplayable =
-      event._tag !== "TextDelta" &&
-      event._tag !== "ThinkingDelta" &&
-      event._tag !== "Thinking";
-
-    // Flush accumulated stream text before any non-delta event
-    let currentLines = state.lines;
-    if (isDisplayable && streamText) {
-      currentLines = [...currentLines, { kind: "assistant" as const, text: streamText, id: nextId++ }];
-      streamText = "";
+    // Skip deltas entirely — server doesn't send them, full text comes via Done
+    if (event._tag === "TextDelta" || event._tag === "ThinkingDelta" || event._tag === "Thinking") {
+      return;
     }
 
-    const lines = isDisplayable
-      ? [...currentLines, { kind: "event" as const, event, id: nextId++ }]
-      : currentLines;
+    let lines = [...state.lines, { kind: "event" as const, event, id: nextId++ }];
 
     switch (event._tag) {
       case "Calling":
         iteration = event.iteration;
-        streamText = "";
-        break;
-      case "TextDelta":
-        streamText += event.content;
         break;
       case "Done":
-        // Flush accumulated stream text as a line before Done
-        if (streamText) {
-          const flushed = [
+        // Show the full response from result.content
+        if (event.result.content) {
+          lines = [
             ...lines,
-            { kind: "assistant" as const, text: streamText, id: nextId++ },
+            { kind: "assistant" as const, text: event.result.content, id: nextId++ },
           ];
-          state = { lines: flushed, streamText: "", iteration, agent, result: event.result, running: false };
-          notify();
-          return;
         }
         result = event.result;
         running = false;
         break;
     }
 
-    state = { lines, streamText, iteration, agent, result, running };
+    state = { lines, iteration, agent, result, running };
     notify();
   };
 

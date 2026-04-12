@@ -380,14 +380,15 @@ class StreamAccumulator {
       Match.when(() => !!delta.reasoning_content, () => {
         if (!this.reasoningId) {
           this.reasoningId = `reasoning_${Date.now()}`;
-          return { type: "reasoning-start", id: this.reasoningId } as any;
         }
         return { type: "reasoning-delta", id: this.reasoningId, delta: delta.reasoning_content } as any;
       }),
       Match.when(() => !!delta.content, () => {
         if (!this.textId) {
           this.textId = `text_${Date.now()}`;
-          return { type: "text-start", id: this.textId } as any;
+          // Emit as text-delta directly — text-start has no delta field
+          // and would lose the first chunk's content
+          return { type: "text-delta", id: this.textId, delta: delta.content } as any;
         }
         return { type: "text-delta", id: this.textId, delta: delta.content } as any;
       }),
@@ -425,7 +426,6 @@ class StreamAccumulator {
         if (!data.delta) return null;
         if (!this.textId) {
           this.textId = `text_${Date.now()}`;
-          return { type: "text-start", id: this.textId } as any;
         }
         return { type: "text-delta", id: this.textId, delta: data.delta } as any;
       }),
@@ -433,7 +433,6 @@ class StreamAccumulator {
         if (!data.delta) return null;
         if (!this.reasoningId) {
           this.reasoningId = `reasoning_${Date.now()}`;
-          return { type: "reasoning-start", id: this.reasoningId } as any;
         }
         return { type: "reasoning-delta", id: this.reasoningId, delta: data.delta } as any;
       }),
