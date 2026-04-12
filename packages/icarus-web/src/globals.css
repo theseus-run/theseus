@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+
+  --color-card: #09090b;
+  --color-card-foreground: #fafafa;
+
+  --color-popover: #09090b;
+  --color-popover-foreground: #fafafa;
+
+  --color-primary: #fafafa;
+  --color-primary-foreground: #18181b;
+
+  --color-secondary: #27272a;
+  --color-secondary-foreground: #fafafa;
+
+  --color-muted: #27272a;
+  --color-muted-foreground: #a1a1aa;
+
+  --color-accent: #27272a;
+  --color-accent-foreground: #fafafa;
+
+  --color-destructive: #7f1d1d;
+  --color-destructive-foreground: #fafafa;
+
+  --color-border: #27272a;
+  --color-input: #27272a;
+  --color-ring: #d4d4d8;
+
+  --radius: 0.5rem;
+
+  --color-sidebar-background: #09090b;
+  --color-sidebar-foreground: #fafafa;
+  --color-sidebar-primary: #fafafa;
+  --color-sidebar-primary-foreground: #18181b;
+  --color-sidebar-accent: #27272a;
+  --color-sidebar-accent-foreground: #fafafa;
+  --color-sidebar-border: #27272a;
+  --color-sidebar-ring: #d4d4d8;
+}
+
+body {
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Markdown body ────────────────────────────────────────────── */
+
+.markdown-body {
+  color: #e4e4e7;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: #fafafa;
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+.markdown-body h1 { font-size: 1.25em; }
+.markdown-body h2 { font-size: 1.1em; }
+.markdown-body h3 { font-size: 1em; }
+
+.markdown-body p {
+  margin: 0.5em 0;
+}
+
+.markdown-body strong {
+  color: #fafafa;
+  font-weight: 600;
+}
+
+.markdown-body em {
+  color: #d4d4d8;
+  font-style: italic;
+}
+
+.markdown-body a {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
+
+.markdown-body li {
+  margin: 0.2em 0;
+}
+
+.markdown-body li::marker {
+  color: #71717a;
+}
+
+.markdown-body code {
+  background: #27272a;
+  color: #a78bfa;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  background: none;
+  color: #e4e4e7;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid #3f3f46;
+  padding-left: 1em;
+  color: #a1a1aa;
+  margin: 0.75em 0;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #27272a;
+  margin: 1em 0;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #27272a;
+  padding: 0.35em 0.75em;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: #18181b;
+  color: #fafafa;
+  font-weight: 600;
+}

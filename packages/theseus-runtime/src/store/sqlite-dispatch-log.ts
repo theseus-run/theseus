@@ -39,6 +39,19 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> =
         "SELECT event_json FROM dispatch_events WHERE dispatch_id = ? AND event_tag = 'Injected' LIMIT 1",
       );
 
+      const selectDispatchList = db.prepare(`
+        SELECT
+          dispatch_id,
+          MIN(timestamp) as started_at,
+          MAX(CASE WHEN event_tag = 'Done' THEN timestamp END) as completed_at,
+          MAX(CASE WHEN event_tag = 'Calling' THEN json_extract(event_json, '$.agent') END) as agent,
+          MAX(CASE WHEN event_tag = 'Done' THEN event_json END) as done_json
+        FROM dispatch_events
+        GROUP BY dispatch_id
+        ORDER BY MIN(timestamp) DESC
+        LIMIT ?
+      `);
+
       return {
         record: (dispatchId: string, event: Dispatch.Event) =>
           Effect.sync(() => {
@@ -94,6 +107,31 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> =
               usage: JSON.parse(row.usage_json),
             };
             return parentDispatchId !== undefined ? { ...opts, parentDispatchId } : opts;
+          }),
+
+        list: (options?: { limit?: number }) =>
+          Effect.sync(() => {
+            const limit = options?.limit ?? 100;
+            const rows = selectDispatchList.all(limit) as Array<{
+              dispatch_id: string;
+              started_at: number;
+              completed_at: number | null;
+              agent: string | null;
+              done_json: string | null;
+            }>;
+            return rows.map((row): Dispatch.DispatchSummary => {
+              const doneEvent = row.done_json ? JSON.parse(row.done_json) : null;
+              const result = doneEvent?.result;
+              return {
+                dispatchId: row.dispatch_id,
+                agent: row.agent ?? "",
+                task: "",
+                startedAt: row.started_at,
+                completedAt: row.completed_at,
+                status: row.completed_at ? "done" : "running",
+                usage: result?.usage ?? { inputTokens: 0, outputTokens: 0 },
+              };
+            });
           }),
       };
     }),

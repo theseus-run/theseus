@@ -28,7 +28,7 @@ export { ToolCallUnknown, ToolCallBadArgs, ToolCallFailed } from "./types.ts";
 
 // Log — append-only audit/replay/restore
 export { DispatchLog, InMemoryDispatchLog, NoopDispatchLog } from "./log.ts";
-export type { EventEntry, Snapshot } from "./log.ts";
+export type { EventEntry, Snapshot, DispatchSummary } from "./log.ts";
 
 // Step — pure, reusable independently
 export {

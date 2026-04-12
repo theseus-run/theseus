@@ -32,6 +32,16 @@ export interface Snapshot {
   readonly usage: Usage;
 }
 
+export interface DispatchSummary {
+  readonly dispatchId: string;
+  readonly agent: string;
+  readonly task: string;
+  readonly startedAt: number;
+  readonly completedAt: number | null;
+  readonly status: "running" | "done" | "failed";
+  readonly usage: Usage;
+}
+
 // ---------------------------------------------------------------------------
 // DispatchLog — service definition
 // ---------------------------------------------------------------------------
@@ -52,6 +62,8 @@ export class DispatchLog extends ServiceMap.Service<
     readonly events: (dispatchId?: string) => Effect.Effect<ReadonlyArray<EventEntry>>;
     /** Get restore options for a dispatch (latest snapshot). */
     readonly restore: (dispatchId: string) => Effect.Effect<DispatchOptions | undefined>;
+    /** List dispatch summaries (most recent first). */
+    readonly list: (options?: { limit?: number }) => Effect.Effect<ReadonlyArray<DispatchSummary>>;
   }
 >()("DispatchLog") {}
 
@@ -108,6 +120,35 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
           };
           return parentId !== undefined ? { ...opts, parentDispatchId: parentId } : opts;
         }),
+
+      list: (options) =>
+        Ref.get(eventsRef).pipe(
+          Effect.map((entries) => {
+            const byId = new Map<string, EventEntry[]>();
+            for (const e of entries) {
+              const arr = byId.get(e.dispatchId) ?? [];
+              arr.push(e);
+              byId.set(e.dispatchId, arr);
+            }
+            const summaries: DispatchSummary[] = [];
+            for (const [dispatchId, evts] of byId) {
+              const first = evts[0]!;
+              const last = evts[evts.length - 1]!;
+              const done = evts.find((e) => e.event._tag === "Done");
+              summaries.push({
+                dispatchId,
+                agent: first.event._tag === "Calling" ? first.event.agent : "",
+                task: "",
+                startedAt: first.timestamp,
+                completedAt: done ? done.timestamp : null,
+                status: done ? "done" : last.event._tag === "Done" ? "done" : "running",
+                usage: done?.event._tag === "Done" ? done.event.result.usage : { inputTokens: 0, outputTokens: 0 },
+              });
+            }
+            summaries.sort((a, b) => b.startedAt - a.startedAt);
+            return options?.limit ? summaries.slice(0, options.limit) : summaries;
+          }),
+        ),
     };
   }),
 );
@@ -121,4 +162,5 @@ export const NoopDispatchLog: Layer.Layer<DispatchLog> = Layer.succeed(DispatchL
   snapshot: () => Effect.void,
   events: () => Effect.succeed([]),
   restore: () => Effect.succeed(undefined),
+  list: () => Effect.succeed([]),
 });
