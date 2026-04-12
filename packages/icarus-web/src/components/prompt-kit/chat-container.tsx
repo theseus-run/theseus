@@ -28,8 +28,7 @@ export function ChatContainer({
   children: ReactNode;
   className?: string;
 }) {
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } =
-    useStickToBottom();
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
   return (
     <Ctx value={{ scrollRef, contentRef, isAtBottom, scrollToBottom }}>
@@ -48,11 +47,10 @@ export function ChatContainerContent({
   const { scrollRef, contentRef } = useChatContainer();
 
   return (
-    <div
-      ref={scrollRef}
-      className={cn("flex-1 overflow-y-auto", className)}
-    >
-      <div ref={contentRef}>{children}</div>
+    <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
+      <div ref={contentRef} className="w-full">
+        {children}
+      </div>
     </div>
   );
 }

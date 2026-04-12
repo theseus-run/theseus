@@ -12,8 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-collapsible": "1.1.12",
     "@theseus.run/core": "workspace:*",
     "@theseus.run/runtime": "workspace:*",
+    "@theseus.run/tools": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "effect": "4.0.0-beta.33",

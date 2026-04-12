@@ -41,6 +41,37 @@
   --color-sidebar-accent-foreground: #fafafa;
   --color-sidebar-border: #27272a;
   --color-sidebar-ring: #d4d4d8;
+
+  /* ── Tool block ─────────────────────────────────────────────── */
+  --tool-radius: 0px;
+  --tool-border: #27272a;
+  --tool-header-bg: #111113;
+  --tool-body-bg: #0c0c0e;
+  --tool-subheader-bg: #18181b;
+
+  /* typography — one size for all tool text */
+  --tool-fs: 12px;
+  --tool-text: #a1a1aa;
+  --tool-text-dim: #52525b;
+  --tool-text-name: #e4e4e7;
+  --tool-state-running: #52525b;
+  --tool-state-done: #4ade80;
+  --tool-state-err: #a1a1aa;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────── */
+
+@keyframes collapsible-down {
+  from { height: 0; opacity: 0; }
+  to   { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes collapsible-up {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to   { height: 0; opacity: 0; }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
 body {

@@ -7,19 +7,38 @@
 
 export type Listener = (msg: BridgeResponse) => void;
 
+export interface DispatchSummary {
+  dispatchId: string;
+  agent: string;
+  task: string;
+  startedAt: number;
+  completedAt: number | null;
+  status: "running" | "done" | "failed";
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+export interface CapsuleEvent {
+  type: string;
+  at: string;
+  by: string;
+  data: unknown;
+}
+
 export interface BridgeResponse {
   _tag: string;
   id: string;
   dispatchId?: string;
+  capsuleId?: string;
   event?: DispatchEvent;
   result?: AgentResult;
   error?: { code: string; message: string };
-  dispatches?: Array<{
+  dispatches?: DispatchSummary[] | Array<{
     dispatchId: string;
     agent: string;
     iteration: number;
     state: string;
   }>;
+  events?: Array<{ dispatchId: string; timestamp: number; event: DispatchEvent }> | CapsuleEvent[];
 }
 
 export interface DispatchEvent {
@@ -171,5 +190,29 @@ export class WsClient {
 
   shutdown() {
     this.send({ _tag: "Shutdown", graceful: true });
+  }
+
+  async listDispatches(limit?: number): Promise<DispatchSummary[]> {
+    const resp = await this.request({ _tag: "ListDispatches", ...(limit !== undefined ? { limit } : {}) });
+    if (resp._tag === "DispatchList" && resp.dispatches) {
+      return resp.dispatches as DispatchSummary[];
+    }
+    return [];
+  }
+
+  async getDispatchEvents(dispatchId: string) {
+    const resp = await this.request({ _tag: "GetDispatchEvents", dispatchId });
+    if (resp._tag === "DispatchEventsInfo" && resp.events) {
+      return resp.events;
+    }
+    return [];
+  }
+
+  async getCapsuleEvents(capsuleId: string): Promise<CapsuleEvent[]> {
+    const resp = await this.request({ _tag: "GetCapsuleEvents", capsuleId });
+    if (resp._tag === "CapsuleEventsInfo" && resp.events) {
+      return resp.events as CapsuleEvent[];
+    }
+    return [];
   }
 }

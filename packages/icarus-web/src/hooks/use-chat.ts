@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { WsClient, type BridgeResponse, type DispatchEvent, type AgentResult } from "../lib/ws-client";
+import type { WsClient, BridgeResponse, DispatchEvent, AgentResult } from "../lib/ws-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,14 +38,12 @@ const BLUEPRINT = {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useChat() {
+export function useChat(client: WsClient | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
   const [agent, setAgent] = useState("");
   const [iteration, setIteration] = useState(0);
 
-  const clientRef = useRef<WsClient | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const nextId = useRef(0);
 
@@ -59,23 +57,12 @@ export function useChat() {
     [],
   );
 
-  // Connect on mount
+  // Subscribe to events from the shared client
   useEffect(() => {
-    const wsUrl =
-      window.location.protocol === "https:" ? "wss:" : "ws:";
-    const client = new WsClient(
-      `${wsUrl}//${window.location.host}/ws`,
-    );
-    clientRef.current = client;
+    if (!client) return;
 
     const unsub = client.subscribe((msg: BridgeResponse) => {
       switch (msg._tag) {
-        case "Connected":
-          setConnected(true);
-          break;
-        case "Disconnected":
-          setConnected(false);
-          break;
         case "Event":
           handleEvent(msg.event!);
           break;
@@ -88,14 +75,9 @@ export function useChat() {
       }
     });
 
-    client.connect();
-
-    return () => {
-      unsub();
-      client.disconnect();
-    };
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [client]);
 
   const handleEvent = useCallback(
     (event: DispatchEvent) => {
@@ -165,7 +147,6 @@ export function useChat() {
 
   const sendMessage = useCallback(
     async (text: string) => {
-      const client = clientRef.current;
       if (!client?.connected) return;
 
       addMessage("user", text);
@@ -199,7 +180,6 @@ export function useChat() {
 
   return {
     messages,
-    connected,
     running,
     agent,
     iteration,

@@ -148,7 +148,8 @@ export const DaemonServerLive = Effect.gen(function* () {
 
           // Create per-dispatch Capsule backed by SQLite
           const capsuleLayer = Layer.provide(SqliteCapsuleLive(blueprint.name), dbLayer);
-          const capsule = yield* Effect.provide(CapsuleNs.Capsule, capsuleLayer);
+          const getCapsule = Effect.gen(function* () { return yield* CapsuleNs.Capsule; });
+          const capsule = yield* Effect.provide(getCapsule, capsuleLayer);
 
           // Log dispatch start to capsule
           yield* capsule.log({ type: "dispatch.start", by: "runtime", data: { task: r.task, agent: blueprint.name } });
@@ -264,7 +265,7 @@ export const DaemonServerLive = Effect.gen(function* () {
 
       Match.when("ListDispatches", () => {
         const r = req as Extract<Daemon.BridgeRequest, { _tag: "ListDispatches" }>;
-        return log.list({ limit: r.limit }).pipe(
+        return log.list(r.limit !== undefined ? { limit: r.limit } : undefined).pipe(
           Effect.tap((dispatches) =>
             Effect.sync(() => sendResponse(socket, { _tag: "DispatchList", id: r.id, dispatches })),
           ),

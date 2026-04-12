@@ -14,6 +14,9 @@ import {
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
 import { DaemonServer, DaemonServerLive, ToolRegistry, makeToolRegistry } from "./server.ts";
 import { makeDaemonBridgeClient } from "./client.ts";
+import { TheseusDbLive, SqliteDispatchLog } from "../store/index.ts";
+import * as Satellite from "@theseus.run/core/Satellite";
+import { join } from "node:path";
 
 // ===========================================================================
 // Codec — length-prefixed framing
@@ -212,6 +215,10 @@ describe("Server + Client E2E", () => {
     cleanupDaemonFiles(e2eWorkspace);
   });
 
+  const testDbPath = join(e2eWorkspace, ".theseus", "theseus.db");
+  const testDbLayer = TheseusDbLive(testDbPath);
+  const testLogLayer = Layer.provide(SqliteDispatchLog, testDbLayer);
+
   const startTestServer = (responses: any[]) =>
     Effect.gen(function* () {
       const server = yield* DaemonServer;
@@ -223,7 +230,9 @@ describe("Server + Client E2E", () => {
           Layer.effect(DaemonServer)(DaemonServerLive),
           Layer.mergeAll(
             makeMockLanguageModel(responses),
-            Dispatch.Defaults,
+            testLogLayer,
+            Satellite.DefaultRing,
+            testDbLayer,
             Layer.succeed(ToolRegistry, makeToolRegistry([echoTool])),
             Layer.effect(DispatchRegistry)(DispatchRegistryLive),
           ),
