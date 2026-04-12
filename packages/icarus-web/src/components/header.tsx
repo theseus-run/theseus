@@ -10,12 +10,22 @@ interface HeaderProps {
   agent: string;
   iteration: number;
   onReset: () => void;
+  onBack?: (() => void) | undefined;
 }
 
-export function Header({ connected, running, agent, iteration, onReset }: HeaderProps) {
+export function Header({ connected, running, agent, iteration, onReset, onBack }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-zinc-800 px-4 h-9 bg-zinc-950 shrink-0">
       <div className="flex items-center gap-2 text-xs">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-zinc-600 hover:text-zinc-300 transition-colors mr-1"
+          >
+            &larr;
+          </button>
+        )}
         <span className="text-zinc-300 font-semibold">icarus</span>
         <span className="text-zinc-600">|</span>
         {running ? (

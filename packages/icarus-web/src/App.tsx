@@ -1,12 +1,15 @@
 /**
- * App — root component wiring useChat to the UI.
+ * App — root component with dispatch list + chat views.
  */
 
 import { useState, useMemo } from "react";
+import { useWsClient } from "@/hooks/use-ws-client";
 import { useChat } from "@/hooks/use-chat";
+import { useDispatches } from "@/hooks/use-dispatches";
 import type { ChatMessage } from "@/hooks/use-chat";
 import type { DispatchEvent } from "@/lib/ws-client";
 import { Header } from "@/components/header";
+import { DispatchList } from "@/components/dispatch-list";
 import {
   ChatContainer,
   ChatContainerContent,
@@ -65,8 +68,13 @@ function mergeToolEvents(messages: ChatMessage[]): DisplayMessage[] {
 // App
 // ---------------------------------------------------------------------------
 
+type View = { kind: "list" } | { kind: "chat" };
+
 export default function App() {
-  const { messages, connected, running, agent, iteration, sendMessage, reset } = useChat();
+  const { client, connected } = useWsClient();
+  const { messages, running, agent, iteration, sendMessage, reset } = useChat(client);
+  const { dispatches, loading, refresh } = useDispatches(client);
+  const [view, setView] = useState<View>({ kind: "list" });
   const [input, setInput] = useState("");
 
   const displayMessages = useMemo(() => mergeToolEvents(messages), [messages]);
@@ -75,7 +83,55 @@ export default function App() {
     if (!input.trim()) return;
     sendMessage(input.trim());
     setInput("");
+    // Switch to chat view on first message
+    if (view.kind === "list") setView({ kind: "chat" });
   };
+
+  const handleNew = () => {
+    reset();
+    setView({ kind: "chat" });
+  };
+
+  const handleBack = () => {
+    refresh();
+    setView({ kind: "list" });
+  };
+
+  const handleSelectDispatch = (_dispatchId: string) => {
+    // TODO: load dispatch history and show in chat view
+    // For now, just switch to chat
+    setView({ kind: "chat" });
+  };
+
+  if (view.kind === "list") {
+    return (
+      <div className="flex flex-col h-screen">
+        <Header
+          connected={connected}
+          running={running}
+          agent={agent}
+          iteration={iteration}
+          onReset={handleNew}
+          onBack={undefined}
+        />
+        <div className="flex-1 overflow-hidden">
+          <DispatchList
+            dispatches={dispatches}
+            loading={loading}
+            onSelect={handleSelectDispatch}
+            onNew={handleNew}
+          />
+        </div>
+        <PromptInput
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          disabled={!connected}
+          placeholder={connected ? "describe a task..." : "connecting..."}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen">
@@ -84,7 +140,8 @@ export default function App() {
         running={running}
         agent={agent}
         iteration={iteration}
-        onReset={reset}
+        onReset={handleNew}
+        onBack={handleBack}
       />
 
       <ChatContainer className="flex-1 relative">
@@ -119,7 +176,7 @@ export default function App() {
         onChange={setInput}
         onSubmit={handleSubmit}
         disabled={!connected}
-        placeholder={connected ? "Send a message..." : "Connecting..."}
+        placeholder={connected ? "send a message..." : "connecting..."}
       />
     </div>
   );

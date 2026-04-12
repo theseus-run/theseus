@@ -167,7 +167,7 @@ export function useChat(client: WsClient | null) {
         client.inject(session.dispatchId, text);
       }
     },
-    [addMessage],
+    [client, addMessage],
   );
 
   const reset = useCallback(() => {
