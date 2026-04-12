@@ -9,6 +9,8 @@
 import { Data } from "effect";
 import type { AgentResult } from "../agent/index.ts";
 import type { DispatchEvent, DispatchOptions, Injection, Usage } from "../dispatch/types.ts";
+import type { DispatchSummary, EventEntry } from "../dispatch/log.ts";
+import type { CapsuleEvent } from "../capsule/index.ts";
 
 // ---------------------------------------------------------------------------
 // SerializedBlueprint — Blueprint without execute functions
@@ -35,26 +37,32 @@ export interface SerializedBlueprint {
 // ---------------------------------------------------------------------------
 
 export type BridgeRequest =
-  | { readonly _tag: "Dispatch";    readonly id: string; readonly blueprint: SerializedBlueprint; readonly task: string; readonly options?: DispatchOptions }
-  | { readonly _tag: "Inject";      readonly id: string; readonly dispatchId: string; readonly injection: Injection }
-  | { readonly _tag: "Interrupt";   readonly id: string; readonly dispatchId: string }
-  | { readonly _tag: "Subscribe";   readonly id: string; readonly dispatchId: string }
-  | { readonly _tag: "Unsubscribe"; readonly id: string; readonly dispatchId: string }
-  | { readonly _tag: "Status";      readonly id: string }
-  | { readonly _tag: "Shutdown";    readonly id: string; readonly graceful?: boolean }
-  | { readonly _tag: "Ping";        readonly id: string }
+  | { readonly _tag: "Dispatch";          readonly id: string; readonly blueprint: SerializedBlueprint; readonly task: string; readonly options?: DispatchOptions }
+  | { readonly _tag: "Inject";            readonly id: string; readonly dispatchId: string; readonly injection: Injection }
+  | { readonly _tag: "Interrupt";         readonly id: string; readonly dispatchId: string }
+  | { readonly _tag: "Subscribe";         readonly id: string; readonly dispatchId: string }
+  | { readonly _tag: "Unsubscribe";       readonly id: string; readonly dispatchId: string }
+  | { readonly _tag: "Status";            readonly id: string }
+  | { readonly _tag: "Shutdown";          readonly id: string; readonly graceful?: boolean }
+  | { readonly _tag: "Ping";              readonly id: string }
+  | { readonly _tag: "ListDispatches";    readonly id: string; readonly limit?: number }
+  | { readonly _tag: "GetDispatchEvents"; readonly id: string; readonly dispatchId: string }
+  | { readonly _tag: "GetCapsuleEvents";  readonly id: string; readonly capsuleId: string }
 
 // ---------------------------------------------------------------------------
 // BridgeResponse — daemon → client
 // ---------------------------------------------------------------------------
 
 export type BridgeResponse =
-  | { readonly _tag: "Ack";        readonly id: string; readonly dispatchId?: string }
-  | { readonly _tag: "Event";      readonly id: string; readonly dispatchId: string; readonly event: DispatchEvent }
-  | { readonly _tag: "Result";     readonly id: string; readonly dispatchId: string; readonly result: AgentResult }
-  | { readonly _tag: "Error";      readonly id: string; readonly error: BridgeError }
-  | { readonly _tag: "StatusInfo"; readonly id: string; readonly dispatches: ReadonlyArray<DispatchStatusEntry> }
-  | { readonly _tag: "Pong";       readonly id: string }
+  | { readonly _tag: "Ack";                readonly id: string; readonly dispatchId?: string }
+  | { readonly _tag: "Event";              readonly id: string; readonly dispatchId: string; readonly event: DispatchEvent }
+  | { readonly _tag: "Result";             readonly id: string; readonly dispatchId: string; readonly result: AgentResult }
+  | { readonly _tag: "Error";              readonly id: string; readonly error: BridgeError }
+  | { readonly _tag: "StatusInfo";         readonly id: string; readonly dispatches: ReadonlyArray<DispatchStatusEntry> }
+  | { readonly _tag: "Pong";               readonly id: string }
+  | { readonly _tag: "DispatchList";       readonly id: string; readonly dispatches: ReadonlyArray<DispatchSummary> }
+  | { readonly _tag: "DispatchEventsInfo"; readonly id: string; readonly events: ReadonlyArray<EventEntry> }
+  | { readonly _tag: "CapsuleEventsInfo";  readonly id: string; readonly events: ReadonlyArray<CapsuleEvent> }
 
 // ---------------------------------------------------------------------------
 // BridgeError — typed error for protocol-level failures

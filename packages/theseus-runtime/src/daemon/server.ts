@@ -13,9 +13,12 @@ import type * as Agent from "@theseus.run/core/Agent";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
 import * as Daemon from "@theseus.run/core/Daemon";
+import * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Tool from "@theseus.run/core/Tool";
 import { encodeFrame, FrameDecoder, decodeRequest } from "./codec.ts";
 import { DispatchRegistry } from "./registry.ts";
+import { TheseusDb } from "../store/sqlite.ts";
+import { SqliteCapsuleLive } from "../store/sqlite-capsule.ts";
 import { socketPath, writePidfile, cleanupDaemonFiles, removeSocket } from "./lifecycle.ts";
 import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
@@ -88,6 +91,8 @@ export const DaemonServerLive = Effect.gen(function* () {
   const lm = yield* LanguageModel.LanguageModel;
   const ring = yield* Satellite.Ring;
   const log = yield* Dispatch.Log;
+  const theseusDb = yield* TheseusDb;
+  const dbLayer = Layer.succeed(TheseusDb, theseusDb);
   const depsLayer = Layer.mergeAll(
     Layer.succeed(LanguageModel.LanguageModel, lm),
     Layer.succeed(Satellite.Ring, ring),
@@ -141,6 +146,13 @@ export const DaemonServerLive = Effect.gen(function* () {
             return;
           }
 
+          // Create per-dispatch Capsule backed by SQLite
+          const capsuleLayer = Layer.provide(SqliteCapsuleLive(blueprint.name), dbLayer);
+          const capsule = yield* Effect.provide(CapsuleNs.Capsule, capsuleLayer);
+
+          // Log dispatch start to capsule
+          yield* capsule.log({ type: "dispatch.start", by: "runtime", data: { task: r.task, agent: blueprint.name } });
+
           const handle = yield* Effect.provide(
             Dispatch.dispatch(blueprint, r.task, r.options),
             depsLayer,
@@ -149,6 +161,9 @@ export const DaemonServerLive = Effect.gen(function* () {
 
           sendResponse(socket, { _tag: "Ack", id: r.id, dispatchId: handle.dispatchId });
           socket.data.subscriptions.add(handle.dispatchId);
+
+          // Log capsuleId → dispatchId mapping
+          yield* capsule.log({ type: "dispatch.id", by: "runtime", data: { dispatchId: handle.dispatchId, capsuleId: capsule.id } });
 
           // Stream events to client in background
           // Skip deltas over the wire — CLI shows full text from AgentResult.content
@@ -173,7 +188,13 @@ export const DaemonServerLive = Effect.gen(function* () {
               Effect.tap(() =>
                 handle.result.pipe(
                   Effect.tap((result) =>
-                    Effect.sync(() => {
+                    Effect.gen(function* () {
+                      // Log dispatch completion to capsule
+                      yield* capsule.log({
+                        type: "dispatch.done",
+                        by: "runtime",
+                        data: { dispatchId: handle.dispatchId, result: result.result, summary: result.summary },
+                      });
                       sendResponse(socket, { _tag: "Result", id: r.id, dispatchId: handle.dispatchId, result });
                     }),
                   ),
@@ -240,6 +261,44 @@ export const DaemonServerLive = Effect.gen(function* () {
           yield* stop();
         }),
       ),
+
+      Match.when("ListDispatches", () => {
+        const r = req as Extract<Daemon.BridgeRequest, { _tag: "ListDispatches" }>;
+        return log.list({ limit: r.limit }).pipe(
+          Effect.tap((dispatches) =>
+            Effect.sync(() => sendResponse(socket, { _tag: "DispatchList", id: r.id, dispatches })),
+          ),
+          Effect.asVoid,
+        );
+      }),
+
+      Match.when("GetDispatchEvents", () => {
+        const r = req as Extract<Daemon.BridgeRequest, { _tag: "GetDispatchEvents" }>;
+        return log.events(r.dispatchId).pipe(
+          Effect.tap((events) =>
+            Effect.sync(() => sendResponse(socket, { _tag: "DispatchEventsInfo", id: r.id, events })),
+          ),
+          Effect.asVoid,
+        );
+      }),
+
+      Match.when("GetCapsuleEvents", () => {
+        const r = req as Extract<Daemon.BridgeRequest, { _tag: "GetCapsuleEvents" }>;
+        return Effect.gen(function* () {
+          // Create a temporary capsule reader for the given capsuleId
+          // by querying the DB directly
+          const rows = theseusDb.db.prepare(
+            "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
+          ).all(r.capsuleId) as Array<{ type: string; at: string; by: string; data_json: string }>;
+          const events = rows.map((row) => ({
+            type: row.type,
+            at: row.at,
+            by: row.by,
+            data: JSON.parse(row.data_json),
+          }));
+          sendResponse(socket, { _tag: "CapsuleEventsInfo", id: r.id, events });
+        });
+      }),
 
       Match.orElse(() =>
         Effect.sync(() => sendError(socket, (req as any).id ?? "unknown", "INVALID_REQUEST", "Unknown request type")),

@@ -7,11 +7,13 @@
  */
 
 import { Effect, Layer } from "effect";
-import * as Dispatch from "@theseus.run/core/Dispatch";
+import * as Satellite from "@theseus.run/core/Satellite";
 import { allTools } from "@theseus.run/tools";
 import { CopilotLanguageModelLive } from "../providers/copilot-lm.ts";
 import { DaemonServer, DaemonServerLive, ToolRegistry, makeToolRegistry } from "./server.ts";
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
+import { TheseusDbLive, SqliteDispatchLog } from "../store/index.ts";
+import { join } from "node:path";
 
 const workspace = process.argv[2] ?? process.cwd();
 
@@ -20,9 +22,14 @@ const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
 
 const ServerLive = Layer.effect(DaemonServer)(DaemonServerLive);
 
+// SQLite-backed persistence
+const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
+const PersistentLog = Layer.provide(SqliteDispatchLog, DbLive);
+const RingLive = Satellite.DefaultRing;
+
 const AppLayer = Layer.provideMerge(
   ServerLive,
-  Layer.mergeAll(CopilotLanguageModelLive, Dispatch.Defaults, ToolRegistryLive, RegistryLive),
+  Layer.mergeAll(CopilotLanguageModelLive, PersistentLog, RingLive, ToolRegistryLive, RegistryLive, DbLive),
 );
 
 const program = Effect.gen(function* () {

@@ -57,6 +57,7 @@ export {
 export type {
   EventEntry,
   Snapshot,
+  DispatchSummary,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------
