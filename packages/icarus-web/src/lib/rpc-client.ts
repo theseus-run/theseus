@@ -12,7 +12,7 @@
  */
 
 import type { DispatchSummary } from "@theseus.run/core/Dispatch";
-import type { CapsuleEvent } from "@theseus.run/core/Capsule";
+import type { Event as CapsuleEvent } from "@theseus.run/core/Capsule";
 
 // ---------------------------------------------------------------------------
 // Types

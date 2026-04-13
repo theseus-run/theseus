@@ -2,6 +2,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Monospace-web foundation ────────────────────────────────── */
+/* Adapted from https://owickstrom.github.io/the-monospace-web/  */
+/* Dark-first, merged with shadcn tokens.                        */
+
+:root {
+  --lh: 1.35rem;              /* vertical rhythm unit             */
+  --border: 2px;              /* monospace-web border thickness    */
+}
+
 @theme {
   --color-background: #09090b;
   --color-foreground: #fafafa;
@@ -31,7 +40,7 @@
   --color-input: #27272a;
   --color-ring: #d4d4d8;
 
-  --radius: 0.5rem;
+  --radius: 0px;
 
   --color-sidebar-background: #09090b;
   --color-sidebar-foreground: #fafafa;
@@ -43,13 +52,11 @@
   --color-sidebar-ring: #d4d4d8;
 
   /* ── Tool block ─────────────────────────────────────────────── */
-  --tool-radius: 0px;
+  --tool-radius: 0;
   --tool-border: #27272a;
   --tool-header-bg: #111113;
   --tool-body-bg: #0c0c0e;
   --tool-subheader-bg: #18181b;
-
-  /* typography — one size for all tool text */
   --tool-fs: 12px;
   --tool-text: #a1a1aa;
   --tool-text-dim: #52525b;
@@ -59,27 +66,228 @@
   --tool-state-err: #a1a1aa;
 }
 
-/* ── Keyframes ────────────────────────────────────────────────── */
+/* ── Base ────────────────────────────────────────────────────── */
 
-@keyframes collapsible-down {
-  from { height: 0; opacity: 0; }
-  to   { height: var(--radix-collapsible-content-height); opacity: 1; }
-}
-@keyframes collapsible-up {
-  from { height: var(--radix-collapsible-content-height); opacity: 1; }
-  to   { height: 0; opacity: 0; }
-}
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
-}
+* { box-sizing: border-box; }
 
 body {
   font-family:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: var(--lh);
+  font-variant-numeric: tabular-nums lining-nums;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* ── Vertical rhythm ─────────────────────────────────────────── */
+/* Monospace-web: every element gets one line-height of margin    */
+/* above it via the lobotomised owl. We scope it to .rhythm       */
+/* to avoid breaking flex/grid layouts.                           */
+
+.rhythm > * + * {
+  margin-top: var(--lh);
+}
+
+/* ── Horizontal rule (double-line) ───────────────────────────── */
+
+hr {
+  border: none;
+  border-top: calc(var(--border) * 3) double var(--color-border);
+  margin: var(--lh) 0;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  height: var(--lh);
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+
+/* ── Buttons (monospace-web) ─────────────────────────────────── */
+/* Base reset for all buttons — inherit font, no browser chrome  */
+
+button {
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+  text-transform: uppercase;
+  font-weight: 600;
+  line-height: normal;
+}
+button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* .btn — the full monospace-web bordered button                 */
+
+.btn {
+  border: var(--border) solid var(--color-border);
+  padding:
+    calc(var(--lh) / 2 - var(--border))
+    calc(1ch - var(--border));
+  height: calc(var(--lh) * 2);
+  font: inherit;
+  font-size: inherit;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  line-height: normal;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--color-secondary);
+}
+.btn:active {
+  transform: translate(1px, 1px);
+}
+.btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* variant: danger */
+.btn-danger {
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+.btn-danger:hover {
+  background: #1c0a0a;
+}
+
+/* variant: confirm */
+.btn-confirm {
+  border-color: #166534;
+  color: #4ade80;
+}
+.btn-confirm:hover {
+  background: #052e16;
+}
+
+/* ── Inputs (monospace-web) ──────────────────────────────────── */
+/* Base reset for all inputs/textareas                            */
+
+input[type="text"], textarea {
+  font: inherit;
+  font-size: inherit;
+  background: transparent;
+  color: var(--color-foreground);
+  border: none;
+  padding: 0;
+  outline: none;
+  line-height: normal;
+  width: 100%;
+}
+
+/* .input — the full monospace-web bordered input                */
+
+.input {
+  border: var(--border) solid var(--color-border);
+  padding:
+    calc(var(--lh) / 2 - var(--border))
+    calc(1ch - var(--border));
+  height: calc(var(--lh) * 2);
+  background: var(--color-background);
+}
+.input:focus {
+  border-color: var(--color-muted-foreground);
+}
+textarea.input {
+  height: auto;
+  resize: none;
+}
+::placeholder {
+  color: var(--color-muted-foreground);
+  opacity: 0.6;
+}
+
+/* ── Details / collapsible (monospace-web) ────────────────────── */
+
+details {
+  border: var(--border) solid var(--color-border);
+  padding: calc(var(--lh) - var(--border)) 1ch;
+}
+summary {
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: inherit;
+}
+details[open] summary {
+  margin-bottom: var(--lh);
+}
+details ::marker {
+  content: '\25B6\0020';    /* ▶  */
+}
+details[open] ::marker {
+  content: '\25BC\0020';    /* ▼  */
+}
+
+/* ── Tree (monospace-web) ────────────────────────────────────── */
+/* CSS-only tree lines using border-left + border-bottom.        */
+
+.tree, .tree ul {
+  list-style: none;
+  padding-left: 0;
+  line-height: var(--lh);
+}
+.tree ul {
+  margin: 0;
+}
+.tree ul li {
+  position: relative;
+  padding-left: 2ch;
+  margin-left: 1ch;
+  border-left: var(--border) solid var(--color-border);
+}
+.tree ul li::before {
+  position: absolute;
+  display: block;
+  top: calc(var(--lh) / 2);
+  left: 0;
+  content: "";
+  width: 1ch;
+  border-bottom: var(--border) solid var(--color-border);
+}
+.tree ul li:last-child {
+  border-left: none;
+}
+.tree ul li:last-child::after {
+  position: absolute;
+  display: block;
+  top: 0;
+  left: 0;
+  content: "";
+  height: calc(var(--lh) / 2);
+  border-left: var(--border) solid var(--color-border);
+}
+
+/* ── Lists (square markers) ──────────────────────────────────── */
+
+ul { list-style-type: square; }
+
+/* ── Keyframes ────────────────────────────────────────────────── */
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
 /* ── Markdown body ────────────────────────────────────────────── */
@@ -94,16 +302,16 @@ body {
 .markdown-body h4 {
   color: #fafafa;
   font-weight: 600;
-  margin-top: 1.25em;
-  margin-bottom: 0.5em;
-  line-height: 1.3;
+  margin-top: calc(var(--lh) * 2);
+  margin-bottom: var(--lh);
+  text-transform: uppercase;
 }
 .markdown-body h1 { font-size: 1.25em; }
-.markdown-body h2 { font-size: 1.1em; }
+.markdown-body h2 { font-size: 1em; }
 .markdown-body h3 { font-size: 1em; }
 
 .markdown-body p {
-  margin: 0.5em 0;
+  margin: var(--lh) 0;
 }
 
 .markdown-body strong {
@@ -118,21 +326,25 @@ body {
 
 .markdown-body a {
   color: #60a5fa;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-thickness: var(--border);
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 1.5em;
-  margin: 0.5em 0;
+  padding-left: 2ch;
+  margin: var(--lh) 0;
 }
 
-.markdown-body ul { list-style-type: disc; }
-.markdown-body ol { list-style-type: decimal; }
+.markdown-body ul { list-style-type: square; }
+.markdown-body ol { list-style-type: none; counter-reset: item; }
+.markdown-body ol li::before {
+  content: counters(item, ".") ". ";
+  counter-increment: item;
+  font-weight: 600;
+}
 
 .markdown-body li {
-  margin: 0.2em 0;
+  margin: 0;
 }
 
 .markdown-body li::marker {
@@ -142,17 +354,15 @@ body {
 .markdown-body code {
   background: #27272a;
   color: #a78bfa;
-  padding: 0.15em 0.35em;
-  border-radius: 4px;
-  font-size: 0.9em;
+  padding: 0 0.5ch;
+  font-size: 1em;
 }
 
 .markdown-body pre {
   background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 6px;
-  padding: 0.75em 1em;
-  margin: 0.75em 0;
+  border: var(--border) solid #27272a;
+  padding: var(--lh) 1ch;
+  margin: var(--lh) 0;
   overflow-x: auto;
 }
 
@@ -160,33 +370,32 @@ body {
   background: none;
   color: #e4e4e7;
   padding: 0;
-  border-radius: 0;
-  font-size: 0.85em;
+  font-size: 1em;
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid #3f3f46;
-  padding-left: 1em;
+  border-left: calc(var(--border) * 2) solid #3f3f46;
+  padding-left: 1ch;
   color: #a1a1aa;
-  margin: 0.75em 0;
+  margin: var(--lh) 0;
 }
 
 .markdown-body hr {
   border: none;
-  border-top: 1px solid #27272a;
-  margin: 1em 0;
+  border-top: calc(var(--border) * 3) double #27272a;
+  margin: var(--lh) 0;
 }
 
 .markdown-body table {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.75em 0;
+  margin: var(--lh) 0;
 }
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid #27272a;
-  padding: 0.35em 0.75em;
+  border: var(--border) solid #27272a;
+  padding: calc(var(--lh) / 2) 1ch;
   text-align: left;
 }
 
@@ -195,3 +404,4 @@ body {
   color: #fafafa;
   font-weight: 600;
 }
+
