@@ -563,7 +563,7 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
         const req = HttpClientRequest.get(config.copilotAuthUrl).pipe(
           HttpClientRequest.setHeaders({
             Authorization: `Token ${oauthToken}`,
-            "User-Agent": "theseus-runtime/0.0.1",
+            "User-Agent": "theseus-server/0.0.1",
             Accept: "application/json",
           }),
         );
@@ -605,8 +605,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
         const headers = {
           Authorization: `Bearer ${bearer}`,
           "Content-Type": "application/json",
-          "Editor-Version": "theseus-runtime/0.0.1",
-          "Editor-Plugin-Version": "theseus-runtime/0.0.1",
+          "Editor-Version": "theseus-server/0.0.1",
+          "Editor-Plugin-Version": "theseus-server/0.0.1",
           "Copilot-Integration-Id": "vscode-chat",
           Accept: "application/json",
         };

@@ -6,7 +6,7 @@
  * the grunt's output as a string.
  *
  * Built at runtime — closes over LanguageModel + worker Blueprint.
- * Lives in theseus-runtime (not theseus-tools) because it requires LLM access.
+ * Lives in theseus-server (not theseus-tools) because it requires LLM access.
  */
 
 import { Effect, Layer } from "effect";

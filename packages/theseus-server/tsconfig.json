@@ -4,8 +4,6 @@
     "paths": {
       "@theseus.run/core": ["../theseus-core/src/index.ts"],
       "@theseus.run/core/*": ["../theseus-core/src/*"],
-      "@theseus.run/runtime": ["../theseus-runtime/src/index.ts"],
-      "@theseus.run/runtime/*": ["../theseus-runtime/src/*"],
       "@theseus.run/tools": ["../theseus-tools/src/index.ts"],
       "@theseus.run/tools/*": ["../theseus-tools/src/*"]
     }

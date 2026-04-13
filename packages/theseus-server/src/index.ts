@@ -14,7 +14,7 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { allTools } from "@theseus.run/tools";
-import { CopilotLanguageModelLive } from "@theseus.run/runtime";
+import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
 import { ToolRegistry, makeToolRegistry } from "./tool-registry.ts";

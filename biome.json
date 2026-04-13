@@ -99,7 +99,7 @@
   },
   "overrides": [
     {
-      "includes": ["packages/theseus-runtime/bin/**", "packages/theseus-server/**"],
+      "includes": ["packages/theseus-server/**"],
       "linter": {
         "rules": {
           "suspicious": {
