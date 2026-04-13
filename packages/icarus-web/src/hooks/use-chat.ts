@@ -1,10 +1,9 @@
 /**
- * useChat — React hook managing chat state + WS client lifecycle.
+ * useChat — React hook managing chat state + RPC client lifecycle.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { WsClient, ClientEvent } from "../lib/ws-client";
-import type { DispatchEvent, AgentResult } from "../lib/ws-client";
+import { useState, useCallback, useRef } from "react";
+import type { TheseusClient, DispatchEvent } from "../lib/rpc-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,8 +18,6 @@ export interface ChatMessage {
 }
 
 interface Session {
-  dispatchId: string;
-  draining: boolean;
   /** Last completed dispatchId — used for session continuity. */
   lastCompletedId?: string;
 }
@@ -34,14 +31,14 @@ const BLUEPRINT = {
   systemPrompt:
     "You are a helpful coding assistant. Use your tools to explore and modify code. Be concise.",
   tools: [
-    { name: "read_file", description: "", inputSchema: {} },
-    { name: "list_dir", description: "", inputSchema: {} },
-    { name: "glob", description: "", inputSchema: {} },
-    { name: "grep", description: "", inputSchema: {} },
-    { name: "outline", description: "", inputSchema: {} },
-    { name: "search_replace", description: "", inputSchema: {} },
-    { name: "write_file", description: "", inputSchema: {} },
-    { name: "shell", description: "", inputSchema: {} },
+    { name: "read_file" },
+    { name: "list_dir" },
+    { name: "glob" },
+    { name: "grep" },
+    { name: "outline" },
+    { name: "search_replace" },
+    { name: "write_file" },
+    { name: "shell" },
   ],
   maxIterations: 30,
 };
@@ -50,139 +47,124 @@ const BLUEPRINT = {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useChat(client: WsClient | null) {
+export function useChat(client: TheseusClient | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [running, setRunning] = useState(false);
   const [agent, setAgent] = useState("");
   const [iteration, setIteration] = useState(0);
 
-  const sessionRef = useRef<Session | null>(null);
+  const sessionRef = useRef<Session>({});
   const nextId = useRef(0);
 
   const addMessage = useCallback(
     (role: ChatMessage["role"], content: string, event?: DispatchEvent) => {
       setMessages((prev) => [
         ...prev,
-        { id: nextId.current++, role, content, timestamp: Date.now(), ...(event !== undefined ? { event } : {}) },
+        {
+          id: nextId.current++,
+          role,
+          content,
+          timestamp: Date.now(),
+          ...(event !== undefined ? { event } : {}),
+        },
       ]);
     },
     [],
   );
 
-  const handleResult = useCallback(
-    (result: AgentResult) => {
-      if (result.content) {
-        addMessage("assistant", result.content);
-      }
-      setRunning(false);
-      if (sessionRef.current) {
-        sessionRef.current.lastCompletedId = sessionRef.current.dispatchId;
-        sessionRef.current.draining = false;
+  const handleEvent = useCallback(
+    (event: DispatchEvent) => {
+      if (event.agent && !agent) setAgent(event.agent ?? "");
+
+      switch (event._tag) {
+        case "Calling":
+          setIteration(event.iteration ?? 0);
+          setRunning(true);
+          break;
+        case "ToolCalling":
+          addMessage(
+            "event",
+            `[${event.agent}] -> ${event.tool}(${truncate(JSON.stringify(event.args), 80)})`,
+            event,
+          );
+          break;
+        case "ToolResult":
+          addMessage(
+            "event",
+            `[${event.agent}] <- ${event.tool}: ${truncate(event.content ?? "", 120)}`,
+            event,
+          );
+          break;
+        case "ToolError":
+          addMessage(
+            "event",
+            `[${event.agent}] !! ${event.tool}: ${JSON.stringify(event.error)}`,
+            event,
+          );
+          break;
+        case "SatelliteAction":
+          addMessage(
+            "event",
+            `[${event.agent}] * ${event.satellite}: ${event.action}`,
+            event,
+          );
+          break;
+        case "Injected":
+          addMessage(
+            "event",
+            `[${event.agent}] << ${event.injection}${event.detail ? `: ${truncate(event.detail, 80)}` : ""}`,
+            event,
+          );
+          break;
+        case "Done":
+          if (event.result?.content) {
+            addMessage("assistant", event.result.content);
+          }
+          setRunning(false);
+          break;
       }
     },
-    [addMessage],
+    [agent, addMessage],
   );
-
-  // Ref-stable event handler — avoids stale closure in subscriber
-  const handleEventRef = useRef((_event: DispatchEvent) => {});
-  handleEventRef.current = (event: DispatchEvent) => {
-    if (event.agent && !agent) setAgent(event.agent);
-
-    switch (event._tag) {
-      case "Calling":
-        setIteration(event.iteration);
-        setRunning(true);
-        break;
-      case "ToolCalling":
-        addMessage(
-          "event",
-          `[${event.agent}] -> ${event.tool}(${truncate(JSON.stringify(event.args), 80)})`,
-          event,
-        );
-        break;
-      case "ToolResult":
-        addMessage(
-          "event",
-          `[${event.agent}] <- ${event.tool}: ${truncate(event.content, 120)}`,
-          event,
-        );
-        break;
-      case "ToolError":
-        addMessage(
-          "event",
-          `[${event.agent}] !! ${event.tool}: ${event.error._tag}`,
-          event,
-        );
-        break;
-      case "SatelliteAction":
-        addMessage(
-          "event",
-          `[${event.agent}] * ${event.satellite}: ${event.action}`,
-          event,
-        );
-        break;
-      case "Injected":
-        addMessage(
-          "event",
-          `[${event.agent}] << ${event.injection}${event.detail ? `: ${truncate(event.detail, 80)}` : ""}`,
-          event,
-        );
-        break;
-      case "Done":
-        handleResult(event.result);
-        break;
-    }
-  };
-
-  // Subscribe to events from the shared client
-  useEffect(() => {
-    if (!client) return;
-
-    const unsub = client.subscribe((msg: ClientEvent) => {
-      if (msg._tag === "Event") {
-        handleEventRef.current(msg.event);
-      } else if (msg._tag === "Error") {
-        addMessage("system", `Error: ${msg.error.message}`);
-        setRunning(false);
-        sessionRef.current = null;
-      }
-    });
-
-    return unsub;
-  }, [client, addMessage]);
 
   const sendMessage = useCallback(
     async (text: string) => {
       if (!client?.connected) return;
 
       addMessage("user", text);
+      setRunning(true);
 
-      const session = sessionRef.current;
+      const continueFrom = sessionRef.current.lastCompletedId;
 
-      // Start new dispatch or inject into running one
-      if (!session || !session.draining) {
-        setRunning(true);
-        const continueFrom = session?.lastCompletedId;
-        const result = await client.dispatch(BLUEPRINT, text, continueFrom);
-        if (result) {
-          sessionRef.current = {
-            dispatchId: result.dispatchId,
-            draining: true,
-            lastCompletedId: continueFrom,
-          };
-        } else {
-          addMessage("system", "Failed to start dispatch");
-          setRunning(false);
-        }
-      } else {
-        client.inject(session.dispatchId, text);
+      try {
+        // Track the dispatch ID from the Done event
+        let lastDispatchResult: DispatchEvent | undefined;
+
+        await client.dispatch(
+          BLUEPRINT,
+          text,
+          (event) => {
+            handleEvent(event);
+            if (event._tag === "Done") {
+              lastDispatchResult = event;
+            }
+          },
+          continueFrom,
+        );
+
+        // TODO: we don't get the dispatchId from the RPC stream yet.
+        // For now, session continuity works through the server-side
+        // restore logic.
+      } catch (err) {
+        addMessage("system", `Error: ${err instanceof Error ? err.message : String(err)}`);
+        setRunning(false);
       }
     },
-    [client, addMessage],
+    [client, addMessage, handleEvent],
   );
 
   const reset = useCallback(() => {
-    sessionRef.current = null;
+    sessionRef.current = {};
     setMessages([]);
     setRunning(false);
     setAgent("");
@@ -200,11 +182,10 @@ export function useChat(client: WsClient | null) {
       setAgent("");
       setIteration(0);
 
-      // Fetch the snapshot messages (includes full conversation history)
       const msgs = await client.getMessages(dispatchId);
       const chatMsgs: ChatMessage[] = [];
       for (const m of msgs) {
-        if (m.role === "system") continue; // skip system prompt
+        if (m.role === "system") continue;
         chatMsgs.push({
           id: nextId.current++,
           role: m.role === "user" ? "user" : "assistant",
@@ -216,8 +197,6 @@ export function useChat(client: WsClient | null) {
 
       // Set session so follow-up messages continue from this dispatch
       sessionRef.current = {
-        dispatchId,
-        draining: false,
         lastCompletedId: dispatchId,
       };
     },

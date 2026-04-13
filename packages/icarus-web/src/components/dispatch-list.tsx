@@ -3,7 +3,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import type { DispatchSummary } from "@/lib/ws-client";
+import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 
 interface DispatchListProps {
   dispatches: ReadonlyArray<DispatchSummary>;

@@ -13,5 +13,5 @@
       "@theseus.run/core/*": ["../theseus-core/src/*"]
     }
   },
-  "include": ["src/**/*", "server/**/*"]
+  "include": ["src/**/*"]
 }

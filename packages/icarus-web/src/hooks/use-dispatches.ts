@@ -1,11 +1,12 @@
 /**
- * useDispatches — fetches dispatch history from the daemon.
+ * useDispatches — fetches dispatch history from the server.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { WsClient, DispatchSummary } from "../lib/ws-client";
+import type { TheseusClient } from "../lib/rpc-client";
+import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 
-export function useDispatches(client: WsClient | null) {
+export function useDispatches(client: TheseusClient | null) {
   const [dispatches, setDispatches] = useState<ReadonlyArray<DispatchSummary>>([]);
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
@@ -21,13 +22,9 @@ export function useDispatches(client: WsClient | null) {
   // Fetch on connect
   useEffect(() => {
     if (!client) return;
-    const unsub = client.subscribe((msg) => {
-      if (msg._tag === "Connected" && !fetchedRef.current) {
+    const unsub = client.onStateChange((state) => {
+      if (state === "connected" && !fetchedRef.current) {
         fetchedRef.current = true;
-        refresh();
-      }
-      // Refresh when a dispatch completes
-      if (msg._tag === "Result") {
         refresh();
       }
     });

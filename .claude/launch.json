@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "icarus-web-bridge",
+      "name": "theseus-server",
       "runtimeExecutable": "/Users/romandubinin/.bun/bin/bun",
-      "runtimeArgs": ["run", "packages/icarus-web/server/index.ts", "/Users/romandubinin/romanothego/theseus"],
+      "runtimeArgs": ["run", "packages/theseus-server/src/index.ts", "/Users/romandubinin/romanothego/theseus"],
       "port": 4800
     },
     {

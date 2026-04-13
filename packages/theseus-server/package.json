@@ -1,24 +1,23 @@
 {
-  "name": "@theseus.run/icarus-cli",
+  "name": "@theseus.run/server",
   "version": "0.0.1",
-  "description": "Terminal interface for the Theseus runtime",
+  "description": "Theseus server — Effect RPC + HttpServer + SQLite persistence",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "demo": "bun run bin/demo.tsx",
-    "start": "bun run bin/icarus.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.33",
     "@theseus.run/core": "workspace:*",
     "@theseus.run/runtime": "workspace:*",
-    "effect": "4.0.0-beta.33",
-    "ink": "^5.1.0",
-    "react": "^18.3.1"
+    "@theseus.run/tools": "workspace:*",
+    "effect": "4.0.0-beta.33"
   },
   "devDependencies": {
-    "@types/react": "^18.3.1",
     "@types/bun": "^1.3.10",
     "typescript": "^5.9.3"
   },

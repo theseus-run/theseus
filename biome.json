@@ -99,7 +99,7 @@
   },
   "overrides": [
     {
-      "includes": ["packages/icarus-cli/**", "packages/theseus-runtime/bin/**"],
+      "includes": ["packages/theseus-runtime/bin/**", "packages/theseus-server/**"],
       "linter": {
         "rules": {
           "suspicious": {

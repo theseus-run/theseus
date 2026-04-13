@@ -13,7 +13,7 @@
 import { useState } from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
-import type { DispatchEvent } from "@/lib/ws-client";
+import type { DispatchEvent } from "@/lib/rpc-client";
 import type { MergedEvent } from "@/App";
 
 /** Narrowed type for tool-related events (ToolCalling, ToolResult, ToolError). */

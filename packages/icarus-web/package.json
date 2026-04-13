@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "bridge": "bun run server/index.ts",
-    "start": "bun run build && bun run server/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

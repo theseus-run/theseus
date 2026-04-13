@@ -12,8 +12,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/ws": {
-        target: "ws://localhost:4800",
+      "/rpc": {
+        target: "http://localhost:4800",
         ws: true,
       },
     },

@@ -3,11 +3,11 @@
  */
 
 import { useState, useMemo } from "react";
-import { useWsClient } from "@/hooks/use-ws-client";
+import { useTheseusClient } from "@/hooks/use-theseus-client";
 import { useChat } from "@/hooks/use-chat";
 import { useDispatches } from "@/hooks/use-dispatches";
 import type { ChatMessage } from "@/hooks/use-chat";
-import type { DispatchEvent } from "@/lib/ws-client";
+import type { DispatchEvent } from "@/lib/rpc-client";
 import { Header } from "@/components/header";
 import { DispatchList } from "@/components/dispatch-list";
 import {
@@ -71,7 +71,7 @@ function mergeToolEvents(messages: ChatMessage[]): DisplayMessage[] {
 type View = { kind: "list" } | { kind: "chat" };
 
 export default function App() {
-  const { client, connected } = useWsClient();
+  const { client, connected } = useTheseusClient();
   const { messages, running, agent, iteration, sendMessage, reset, loadDispatch } = useChat(client);
   const { dispatches, loading, refresh } = useDispatches(client);
   const [view, setView] = useState<View>({ kind: "list" });

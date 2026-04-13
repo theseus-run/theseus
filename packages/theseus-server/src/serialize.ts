@@ -1,0 +1,33 @@
+/**
+ * Event serialization — handles ToolCallError.cause which may be non-serializable.
+ *
+ * Copied from the old protocol.ts serializeEvent helper.
+ * Returns a plain JSON-safe object matching DispatchEventSchema.
+ */
+
+import type { Event as DispatchEvent } from "@theseus.run/core/Dispatch";
+
+export const serializeEvent = (event: DispatchEvent): any => {
+  if (event._tag === "ToolError") {
+    const { error, ...rest } = event;
+    return {
+      ...rest,
+      error: {
+        _tag: error._tag,
+        callId: error.callId,
+        name: error.name,
+        ...("raw" in error ? { raw: error.raw } : {}),
+        ...("args" in error ? { args: error.args } : {}),
+        ...("cause" in error
+          ? {
+              cause: {
+                _tag: (error.cause as { _tag?: string })?._tag,
+                message: String(error.cause),
+              },
+            }
+          : {}),
+      },
+    };
+  }
+  return event;
+};
