@@ -1,7 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { InlinePrompt, Input, Textarea } from "@/components/ui/input";
+import { Field, FieldHint, FieldLabel } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/input";
+import { LedgerRow, LedgerRowBody } from "@/components/ui/ledger-row";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { PromptField } from "@/components/ui/prompt-field";
+import {
+  QueueItem,
+  QueueItemHeader,
+  QueueItemMeta,
+  QueueItemSummary,
+  QueueItemTitle,
+} from "@/components/ui/queue-item";
+import { Checklist, ChecklistItem } from "@/components/ui/checklist";
+import {
+  SectionHeader,
+  SectionHeaderMeta,
+  SectionHeaderTitle,
+} from "@/components/ui/section-header";
+import {
+  SignalRow,
+  SignalRowLabel,
+  SignalRowSymbol,
+  SignalRowValue,
+} from "@/components/ui/signal-row";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetMeta,
+  SheetOverlay,
+  SheetSection,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { XStack, YStack } from "@/components/ui/stack";
+import { StatBlock, StatBlockLabel, StatBlockValue } from "@/components/ui/stat-block";
+import { StatusMark } from "@/components/ui/status-mark";
+import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
+import { Token } from "@/components/ui/token";
+import {
+  ToolCallRow,
+  ToolCallRowBody,
+  ToolCallRowMeta,
+  ToolCallRowPrefix,
+} from "@/components/ui/tool-call-row";
+import {
+  Transcript,
+  TranscriptRow,
+  TranscriptRowBody,
+  TranscriptRowMeta,
+  TranscriptRowPrefix,
+} from "@/components/ui/transcript";
 
 type MissionStatus = "defining" | "active" | "review" | "paused";
 
@@ -20,6 +70,16 @@ type Mission = {
   queue: number;
   acceptance: string[];
   timeline: Array<{ stamp: string; label: string; detail: string }>;
+};
+
+type ToolCall = {
+  id: string;
+  tool: string;
+  command: string;
+  tone: Tone;
+  summary: string;
+  input: string[];
+  output: string[];
 };
 
 const missions: Mission[] = [
@@ -188,6 +248,58 @@ const signalRows = [
   { symbol: "◦", label: "review", value: "criteria visible", tone: "muted" as const },
 ];
 
+const transcriptRows = [
+  {
+    prefix: ">",
+    tone: "muted" as const,
+    variant: "user" as const,
+    body: "We are continuing the redesign and aiming at a full-width dashboard.",
+    meta: "user · 09:44",
+  },
+  {
+    prefix: "→",
+    tone: "process" as const,
+    variant: "assistant" as const,
+    body: "Three-column control layout selected; queue, workspace, and runtime rails split.",
+    meta: "assistant · 09:45",
+  },
+  {
+    prefix: "◆",
+    tone: "good" as const,
+    variant: "runtime" as const,
+    body: "Socket connected; mission snapshots available.",
+    meta: "runtime · 09:46",
+  },
+  {
+    prefix: "×",
+    tone: "danger" as const,
+    variant: "system" as const,
+    body: "Interrupt action remains isolated until confirmation design is added.",
+    meta: "system · 09:47",
+  },
+];
+
+const toolCalls: ToolCall[] = [
+  {
+    id: "tool-1",
+    tool: "bash",
+    command: "bun run dev",
+    tone: "process",
+    summary: "Development server started for redesign iteration.",
+    input: ["command: bun run dev", "cwd: packages/icarus-web"],
+    output: ["vite dev server listening", "hot reload active"],
+  },
+  {
+    id: "tool-2",
+    tool: "webfetch",
+    command: "https://silkhq.com/",
+    tone: "good",
+    summary: "Fetched detached sheet references for tool details interaction.",
+    input: ["url: https://silkhq.com/", "format: markdown"],
+    output: ["detached sheet", "stacking", "keyboard handling", "unstyled API"],
+  },
+];
+
 const showcaseRows = [
   { label: "good", sample: "◆ runtime stable", tone: "good" as const },
   { label: "process", sample: "→ planner running", tone: "process" as const },
@@ -208,9 +320,23 @@ function toneClass(tone: Tone) {
   }
 }
 
+function statusSymbol(status: MissionStatus) {
+  switch (status) {
+    case "defining":
+      return "·";
+    case "active":
+      return "◆";
+    case "review":
+      return "◦";
+    case "paused":
+      return "×";
+  }
+}
+
 export function RedesignApp() {
   const [page, setPage] = useState<RedesignPage>("dashboard");
   const [selectedMissionId, setSelectedMissionId] = useState(missions[0]!.id);
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState(missions[0]!.title);
   const [draftBrief, setDraftBrief] = useState(missions[0]!.brief);
   const [prompt, setPrompt] = useState("");
@@ -219,6 +345,11 @@ export function RedesignApp() {
   const mission = useMemo(
     () => missions.find((entry) => entry.id === selectedMissionId) ?? missions[0]!,
     [selectedMissionId],
+  );
+
+  const selectedTool = useMemo(
+    () => toolCalls.find((entry) => entry.id === selectedToolId) ?? null,
+    [selectedToolId],
   );
 
   useEffect(() => {
@@ -258,10 +389,78 @@ export function RedesignApp() {
     </div>
   );
 
+  const toolSheet = (
+    <Sheet open={selectedTool !== null}>
+      <SheetOverlay onClick={() => setSelectedToolId(null)} />
+      <SheetContent>
+        <SheetHeader>
+          <div className="rhythm">
+            <SheetTitle>Tool Details</SheetTitle>
+            <SheetMeta>
+              {selectedTool ? (
+                <>
+                  <Token label="tool" value={selectedTool.tool} tone={selectedTool.tone} />
+                  <Token label="id" value={selectedTool.id} />
+                </>
+              ) : null}
+            </SheetMeta>
+          </div>
+          <Button variant="ghost" onClick={() => setSelectedToolId(null)}>
+            close
+          </Button>
+        </SheetHeader>
+        {selectedTool ? (
+          <SheetBody>
+            <SheetSection>
+              <p className="label-text">Summary</p>
+              <p>{selectedTool.summary}</p>
+            </SheetSection>
+            <SheetSection>
+              <p className="label-text">Input</p>
+              <Checklist>
+                {selectedTool.input.map((item) => (
+                  <ChecklistItem key={item}>{item}</ChecklistItem>
+                ))}
+              </Checklist>
+            </SheetSection>
+            <SheetSection>
+              <p className="label-text">Output</p>
+              <Transcript>
+                {selectedTool.output.map((item) => (
+                  <TranscriptRow key={item} variant="assistant">
+                    <TranscriptRowPrefix tone={selectedTool.tone}>→</TranscriptRowPrefix>
+                    <TranscriptRowBody>{item}</TranscriptRowBody>
+                    <TranscriptRowMeta>{selectedTool.tool}</TranscriptRowMeta>
+                  </TranscriptRow>
+                ))}
+              </Transcript>
+            </SheetSection>
+          </SheetBody>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+
   if (page === "showcase") {
     return (
       <main className="page-shell dashboard-shell">
         <div className="dashboard-frame rhythm">
+          {toolSheet}
+          <StatusStrip>
+            <StatusStripItem>icarus</StatusStripItem>
+            <StatusStripItem>
+              <StatusMark symbol="◆" tone="good">
+                connected
+              </StatusMark>
+            </StatusStripItem>
+            <StatusStripItem>
+              <StatusMark symbol={liveFrames[liveFrameIndex]} tone="process">
+                live runtime
+              </StatusMark>
+            </StatusStripItem>
+            <StatusStripItem>/showcase</StatusStripItem>
+          </StatusStrip>
+
           <header className="dashboard-header rhythm border-b-[calc(var(--border)*3)] border-border pb-[var(--lh)]">
             <div className="flex flex-col gap-[var(--lh)] xl:flex-row xl:items-end xl:justify-between">
               <div className="rhythm">
@@ -279,7 +478,7 @@ export function RedesignApp() {
           <section className="showcase-grid">
             <Panel>
               <PanelHeader>
-                <PanelTitle>Typography</PanelTitle>
+                <PanelTitle>Foundations · Typography</PanelTitle>
               </PanelHeader>
               <PanelBody>
                 <p className="label-text">Label text / muted semantic label</p>
@@ -299,73 +498,28 @@ export function RedesignApp() {
                   Mixed content can use <strong>strong</strong>, <em>italic</em>, and inline code
                   like <code>dispatch.queue</code> without changing the base rhythm.
                 </p>
-              </PanelBody>
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitle>Buttons</PanelTitle>
-              </PanelHeader>
-              <PanelBody>
-                <div className="flex flex-wrap gap-[calc(var(--lh)/2)]">
-                  <Button>Default action</Button>
-                  <Button variant="confirm">Confirm action</Button>
-                  <Button variant="danger">Danger action</Button>
-                  <Button variant="ghost">Ghost action</Button>
-                  <Button size="sm">Small action</Button>
-                </div>
-              </PanelBody>
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitle>Inputs</PanelTitle>
-              </PanelHeader>
-              <PanelBody>
                 <div className="rhythm">
-                  <div className="rhythm">
-                    <label htmlFor="showcase-input" className="label-text block">
-                      Input
-                    </label>
-                    <Input id="showcase-input" defaultValue="Mission title" />
-                  </div>
-                  <div className="rhythm">
-                    <label htmlFor="showcase-textarea" className="label-text block">
-                      Textarea
-                    </label>
-                    <Textarea
-                      id="showcase-textarea"
-                      defaultValue="Multi-line definition copy that should still feel terminal-like."
-                    />
-                  </div>
-                  <div className="rhythm">
-                    <label htmlFor="showcase-prompt" className="label-text block">
-                      Prompt row
-                    </label>
-                    <InlinePrompt id="showcase-prompt" defaultValue="Refine acceptance criteria." />
-                  </div>
+                  <p className="underline-dotted">Dotted underline for quiet emphasis.</p>
+                  <p className="underline-dashed">Dashed underline for structural callouts.</p>
+                  <div className="rule-dotted" />
+                  <div className="rule-dashed" />
                 </div>
               </PanelBody>
             </Panel>
 
             <Panel>
               <PanelHeader>
-                <PanelTitle>Tones</PanelTitle>
+                <PanelTitle>Foundations · Tone</PanelTitle>
               </PanelHeader>
               <PanelBody>
                 <div className="rhythm">
                   {showcaseRows.map((row) => (
-                    <div key={row.label} className="dashboard-signal-row">
-                      <span
-                        className={`dashboard-signal-symbol ${toneClass(row.tone)}`}
-                        aria-hidden="true"
-                      >
-                        {row.sample.slice(0, 1)}
-                      </span>
-                      <span className="strong-text">{row.label}</span>
+                    <SignalRow key={row.label}>
+                      <SignalRowSymbol tone={row.tone}>{row.sample.slice(0, 1)}</SignalRowSymbol>
+                      <SignalRowLabel>{row.label}</SignalRowLabel>
                       <span aria-hidden="true">·</span>
-                      <span className={toneClass(row.tone)}>{row.sample}</span>
-                    </div>
+                      <SignalRowValue className={toneClass(row.tone)}>{row.sample}</SignalRowValue>
+                    </SignalRow>
                   ))}
                 </div>
               </PanelBody>
@@ -373,7 +527,99 @@ export function RedesignApp() {
 
             <Panel>
               <PanelHeader>
-                <PanelTitle>Panels And Lists</PanelTitle>
+                <PanelTitle>Primitives · Status</PanelTitle>
+              </PanelHeader>
+              <PanelBody>
+                <YStack gap="sm" align="start">
+                  <XStack gap="md" align="baseline" wrap>
+                    <StatusMark symbol="◆" tone="good">
+                      Active status mark
+                    </StatusMark>
+                    <StatusMark symbol="→" tone="process">
+                      Process status mark
+                    </StatusMark>
+                  </XStack>
+                  <XStack gap="md" align="baseline" wrap>
+                    <StatusMark symbol="×" tone="danger">
+                      Danger status mark
+                    </StatusMark>
+                    <StatusMark symbol="◦" tone="muted">
+                      Muted status mark
+                    </StatusMark>
+                  </XStack>
+                  <XStack gap="sm" wrap>
+                    <Token label="token" value="sample" />
+                    <Token label="mode" value="planning" tone="process" />
+                    <Token label="state" value="connected" tone="good" />
+                    <Token tone="danger">[interrupt]</Token>
+                  </XStack>
+                </YStack>
+                <StatusStrip>
+                  <StatusStripItem>icarus</StatusStripItem>
+                  <StatusStripItem>mode showcase</StatusStripItem>
+                  <StatusStripItem>
+                    <StatusMark symbol="→" tone="process">
+                      planning
+                    </StatusMark>
+                  </StatusStripItem>
+                </StatusStrip>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Primitives · Actions</PanelTitle>
+              </PanelHeader>
+              <PanelBody>
+                <XStack gap="sm" wrap>
+                  <Button>Default action</Button>
+                  <Button variant="confirm">Confirm action</Button>
+                  <Button variant="danger">Danger action</Button>
+                  <Button variant="ghost">Ghost action</Button>
+                  <Button size="sm">Small action</Button>
+                </XStack>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Primitives · Fields</PanelTitle>
+              </PanelHeader>
+              <PanelBody>
+                <YStack gap="md">
+                  <Field>
+                    <FieldLabel>Field label</FieldLabel>
+                    <FieldHint>Field hint / supporting guidance below the control.</FieldHint>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Input</FieldLabel>
+                    <Input id="showcase-input" defaultValue="Mission title" />
+                    <FieldHint>Single-line command or definition label.</FieldHint>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Textarea</FieldLabel>
+                    <Textarea
+                      id="showcase-textarea"
+                      defaultValue="Multi-line definition copy that should still feel terminal-like."
+                    />
+                    <FieldHint>Multi-line text with the same frame language.</FieldHint>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Prompt row</FieldLabel>
+                    <PromptField
+                      id="showcase-prompt"
+                      value="Refine acceptance criteria."
+                      onChange={() => {}}
+                      hint="Prompt lead plus autosizing text entry treatment."
+                    />
+                  </Field>
+                </YStack>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Patterns · Panel And List</PanelTitle>
               </PanelHeader>
               <PanelBody>
                 <article className="dashboard-log-row">
@@ -385,26 +631,28 @@ export function RedesignApp() {
                     Reusable bordered content block for terminal notes.
                   </p>
                 </article>
-                <article className="dashboard-ledger-row">
-                  <div className="flex flex-wrap gap-x-[2ch] gap-y-[calc(var(--lh)/3)]">
+                <LedgerRow>
+                  <LedgerRowBody>
                     <span className="text-foreground">09:53</span>
                     <span aria-hidden="true">·</span>
                     <span className="tone-process">[system]</span>
                     <span aria-hidden="true">→</span>
                     <span>Ledger row sample with symbolic separators.</span>
-                  </div>
-                </article>
-                <ul className="dashboard-checklist">
-                  <li>Checklist marker is passive, not a clickable checkbox.</li>
-                  <li>Spacing should align with panel rhythm.</li>
-                  <li>Everything stays text-first.</li>
-                </ul>
+                  </LedgerRowBody>
+                </LedgerRow>
+                <Checklist>
+                  <ChecklistItem>
+                    Checklist marker is passive, not a clickable checkbox.
+                  </ChecklistItem>
+                  <ChecklistItem>Spacing should align with panel rhythm.</ChecklistItem>
+                  <ChecklistItem>Everything stays text-first.</ChecklistItem>
+                </Checklist>
               </PanelBody>
             </Panel>
 
             <Panel>
               <PanelHeader>
-                <PanelTitle>Status And Signals</PanelTitle>
+                <PanelTitle>Patterns · Signals And Stats</PanelTitle>
               </PanelHeader>
               <PanelBody>
                 <p className="dashboard-live-line text-muted-foreground">
@@ -417,12 +665,73 @@ export function RedesignApp() {
                 </p>
                 <div className="dashboard-stat-grid">
                   {controlRows.map((row) => (
-                    <div key={row.label} className={`dashboard-stat-card ${toneClass(row.tone)}`}>
-                      <span className="label-text">{row.label}</span>
-                      <p>{row.value}</p>
-                    </div>
+                    <StatBlock key={row.label} tone={row.tone} className="interactive-subtle">
+                      <StatBlockLabel>{row.label}</StatBlockLabel>
+                      <StatBlockValue>{row.value}</StatBlockValue>
+                    </StatBlock>
                   ))}
                 </div>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Patterns · Queue Item</PanelTitle>
+              </PanelHeader>
+              <PanelBody>
+                <QueueItem className="interactive-subtle">
+                  <QueueItemHeader>
+                    <div className="rhythm flex-1">
+                      <QueueItemTitle>Redesign icarus-web control room</QueueItemTitle>
+                      <QueueItemSummary>
+                        Move from centered mockup to a full-width control surface with clearer
+                        command structure.
+                      </QueueItemSummary>
+                    </div>
+                    <span className="shrink-0 text-muted-foreground">4m ago</span>
+                  </QueueItemHeader>
+                  <QueueItemMeta>
+                    <StatusMark symbol="·" tone="process">
+                      defining
+                    </StatusMark>
+                    <Token>m-2048</Token>
+                    <Token>3 queued</Token>
+                  </QueueItemMeta>
+                </QueueItem>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Patterns · Transcript</PanelTitle>
+              </PanelHeader>
+              <PanelBody>
+                <YStack gap="sm">
+                  <Transcript>
+                    {transcriptRows.map((row) => (
+                      <TranscriptRow key={`${row.meta}-${row.body}`} variant={row.variant}>
+                        <TranscriptRowPrefix tone={row.tone}>{row.prefix}</TranscriptRowPrefix>
+                        <TranscriptRowBody>{row.body}</TranscriptRowBody>
+                        <TranscriptRowMeta>{row.meta}</TranscriptRowMeta>
+                      </TranscriptRow>
+                    ))}
+                  </Transcript>
+                  {toolCalls.map((tool) => (
+                    <ToolCallRow
+                      key={tool.id}
+                      tone={tool.tone}
+                      onClick={() => setSelectedToolId(tool.id)}
+                    >
+                      <ToolCallRowPrefix>↗</ToolCallRowPrefix>
+                      <ToolCallRowBody>
+                        <span className="strong-text">{tool.tool}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>{tool.command}</span>
+                      </ToolCallRowBody>
+                      <ToolCallRowMeta>open details</ToolCallRowMeta>
+                    </ToolCallRow>
+                  ))}
+                </YStack>
               </PanelBody>
             </Panel>
           </section>
@@ -434,6 +743,22 @@ export function RedesignApp() {
   return (
     <main className="page-shell dashboard-shell">
       <div className="dashboard-frame rhythm">
+        {toolSheet}
+        <StatusStrip>
+          <StatusStripItem>icarus</StatusStripItem>
+          <StatusStripItem>
+            <StatusMark symbol="◆" tone="good">
+              connected
+            </StatusMark>
+          </StatusStripItem>
+          <StatusStripItem>
+            <StatusMark symbol={liveFrames[liveFrameIndex]} tone="process">
+              runtime nominal
+            </StatusMark>
+          </StatusStripItem>
+          <StatusStripItem>{mission.id}</StatusStripItem>
+        </StatusStrip>
+
         <header className="dashboard-header rhythm border-b-[calc(var(--border)*3)] border-border pb-[var(--lh)]">
           <div className="flex flex-col gap-[calc(var(--lh)/2)] xl:flex-row xl:items-end xl:justify-between">
             <div className="rhythm">
@@ -471,9 +796,12 @@ export function RedesignApp() {
                 </div>
                 <div>
                   <span className="eyebrow">status</span>
-                  <p className={toneClass(statusTone[mission.status].tone)}>
-                    {statusTone[mission.status].label}
-                  </p>
+                  <StatusMark
+                    symbol={statusSymbol(mission.status)}
+                    tone={statusTone[mission.status].tone}
+                  >
+                    {statusTone[mission.status].label.slice(2)}
+                  </StatusMark>
                 </div>
               </div>
             </div>
@@ -492,33 +820,33 @@ export function RedesignApp() {
                     const selected = entry.id === mission.id;
 
                     return (
-                      <button
+                      <QueueItem
                         key={entry.id}
-                        type="button"
                         className={[
-                          "dashboard-list-item w-full text-left",
+                          "interactive-subtle w-full text-left",
                           selected ? "dashboard-list-item-active" : "",
                         ].join(" ")}
                         onClick={() => selectMission(entry)}
                       >
-                        <div className="flex items-start justify-between gap-[1ch]">
+                        <QueueItemHeader>
                           <div className="rhythm flex-1">
-                            <p className="strong-text text-foreground">{entry.title}</p>
-                            <p className="text-muted-foreground">{entry.summary}</p>
+                            <QueueItemTitle>{entry.title}</QueueItemTitle>
+                            <QueueItemSummary>{entry.summary}</QueueItemSummary>
                           </div>
                           <span className="shrink-0 text-muted-foreground">{entry.updated}</span>
-                        </div>
+                        </QueueItemHeader>
 
-                        <div className="mt-[calc(var(--lh)/2)] flex flex-wrap gap-x-[2ch] gap-y-[calc(var(--lh)/3)] text-muted-foreground">
-                          <span className={toneClass(statusTone[entry.status].tone)}>
-                            {statusTone[entry.status].label}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>{entry.id}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{entry.queue} queued</span>
-                        </div>
-                      </button>
+                        <QueueItemMeta>
+                          <StatusMark
+                            symbol={statusSymbol(entry.status)}
+                            tone={statusTone[entry.status].tone}
+                          >
+                            {statusTone[entry.status].label.slice(2)}
+                          </StatusMark>
+                          <Token>{entry.id}</Token>
+                          <Token>{entry.queue} queued</Token>
+                        </QueueItemMeta>
+                      </QueueItem>
                     );
                   })}
                 </div>
@@ -528,50 +856,55 @@ export function RedesignApp() {
 
           <section className="dashboard-column dashboard-column-main rhythm">
             <Panel>
-              <PanelHeader className="flex flex-wrap items-center justify-between gap-[var(--lh)]">
-                <PanelTitle>Mission Definition</PanelTitle>
-                <div className="flex flex-wrap gap-[calc(var(--lh)/2)] text-muted-foreground">
-                  <span>{mission.owner}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{mission.updated}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className={toneClass(statusTone[mission.status].tone)}>
-                    {statusTone[mission.status].label}
-                  </span>
-                </div>
+              <PanelHeader>
+                <SectionHeader>
+                  <SectionHeaderTitle>
+                    <PanelTitle>Mission Definition</PanelTitle>
+                  </SectionHeaderTitle>
+                  <SectionHeaderMeta>
+                    <Token>{mission.owner}</Token>
+                    <Token>{mission.updated}</Token>
+                    <StatusMark
+                      symbol={statusSymbol(mission.status)}
+                      tone={statusTone[mission.status].tone}
+                    >
+                      {statusTone[mission.status].label.slice(2)}
+                    </StatusMark>
+                  </SectionHeaderMeta>
+                </SectionHeader>
               </PanelHeader>
               <PanelBody>
-                <div className="rhythm">
-                  <label htmlFor="mission-title" className="label-text block">
-                    Title
-                  </label>
+                <Field>
+                  <FieldLabel>Title</FieldLabel>
                   <Input
                     id="mission-title"
                     value={draftTitle}
                     onChange={(event) => setDraftTitle(event.target.value)}
                   />
-                </div>
+                  <FieldHint>Short operational name for the current workspace.</FieldHint>
+                </Field>
 
-                <div className="rhythm">
-                  <label htmlFor="mission-brief" className="label-text block">
-                    Mission Brief
-                  </label>
+                <Field>
+                  <FieldLabel>Mission Brief</FieldLabel>
                   <Textarea
                     id="mission-brief"
                     value={draftBrief}
                     onChange={(event) => setDraftBrief(event.target.value)}
                     className="min-h-[calc(var(--lh)*10)]"
                   />
-                </div>
+                  <FieldHint>
+                    State the goal, constraints, and what success should look like.
+                  </FieldHint>
+                </Field>
 
                 <div className="dashboard-subgrid">
                   <div className="rhythm">
                     <h3 className="heading-3">Acceptance Criteria</h3>
-                    <ul className="dashboard-checklist">
+                    <Checklist>
                       {mission.acceptance.map((item) => (
-                        <li key={item}>{item}</li>
+                        <ChecklistItem key={item}>{item}</ChecklistItem>
                       ))}
-                    </ul>
+                    </Checklist>
                   </div>
 
                   <div className="rhythm">
@@ -594,22 +927,48 @@ export function RedesignApp() {
 
             <Panel>
               <PanelHeader>
-                <PanelTitle>Activity Ledger</PanelTitle>
+                <PanelTitle>Activity Transcript</PanelTitle>
               </PanelHeader>
               <PanelBody>
-                <div className="rhythm">
-                  {queueRows.map((row) => (
-                    <article key={`${row.at}-${row.text}`} className="dashboard-ledger-row">
-                      <div className="flex flex-wrap gap-x-[2ch] gap-y-[calc(var(--lh)/3)]">
-                        <span className="text-foreground">{row.at}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className={toneClass(row.tone)}>[{row.source}]</span>
-                        <span aria-hidden="true">→</span>
-                        <span>{row.text}</span>
-                      </div>
-                    </article>
+                <YStack gap="sm">
+                  <Transcript>
+                    {queueRows.map((row) => (
+                      <TranscriptRow
+                        key={`${row.at}-${row.text}`}
+                        variant={
+                          row.source === "runtime"
+                            ? "runtime"
+                            : row.source === "review"
+                              ? "system"
+                              : "assistant"
+                        }
+                      >
+                        <TranscriptRowPrefix tone={row.tone}>→</TranscriptRowPrefix>
+                        <TranscriptRowBody>{row.text}</TranscriptRowBody>
+                        <TranscriptRowMeta>
+                          <span>{row.source}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{row.at}</span>
+                        </TranscriptRowMeta>
+                      </TranscriptRow>
+                    ))}
+                  </Transcript>
+                  {toolCalls.map((tool) => (
+                    <ToolCallRow
+                      key={tool.id}
+                      tone={tool.tone}
+                      onClick={() => setSelectedToolId(tool.id)}
+                    >
+                      <ToolCallRowPrefix>↗</ToolCallRowPrefix>
+                      <ToolCallRowBody>
+                        <span className="strong-text">{tool.tool}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>{tool.summary}</span>
+                      </ToolCallRowBody>
+                      <ToolCallRowMeta>{tool.command}</ToolCallRowMeta>
+                    </ToolCallRow>
                   ))}
-                </div>
+                </YStack>
               </PanelBody>
             </Panel>
           </section>
@@ -622,10 +981,10 @@ export function RedesignApp() {
               <PanelBody>
                 <div className="dashboard-stat-grid">
                   {controlRows.map((row) => (
-                    <div key={row.label} className={`dashboard-stat-card ${toneClass(row.tone)}`}>
-                      <span className="label-text">{row.label}</span>
-                      <p>{row.value}</p>
-                    </div>
+                    <StatBlock key={row.label} tone={row.tone} className="interactive-subtle">
+                      <StatBlockLabel>{row.label}</StatBlockLabel>
+                      <StatBlockValue>{row.value}</StatBlockValue>
+                    </StatBlock>
                   ))}
                 </div>
 
@@ -633,17 +992,12 @@ export function RedesignApp() {
                   <h3 className="heading-3">Signals</h3>
                   <div className="rhythm">
                     {signalRows.map((row) => (
-                      <div key={row.label} className="dashboard-signal-row">
-                        <span
-                          className={`dashboard-signal-symbol ${toneClass(row.tone)}`}
-                          aria-hidden="true"
-                        >
-                          {row.symbol}
-                        </span>
-                        <span className="strong-text">{row.label}</span>
+                      <SignalRow key={row.label}>
+                        <SignalRowSymbol tone={row.tone}>{row.symbol}</SignalRowSymbol>
+                        <SignalRowLabel>{row.label}</SignalRowLabel>
                         <span aria-hidden="true">·</span>
-                        <span className="text-muted-foreground">{row.value}</span>
-                      </div>
+                        <SignalRowValue>{row.value}</SignalRowValue>
+                      </SignalRow>
                     ))}
                   </div>
                 </div>
@@ -663,17 +1017,16 @@ export function RedesignApp() {
                   </div>
                 </div>
 
-                <div className="rhythm">
-                  <label htmlFor="operator-prompt" className="label-text block">
-                    Operator Prompt
-                  </label>
-                  <InlinePrompt
+                <Field>
+                  <FieldLabel>Operator Prompt</FieldLabel>
+                  <PromptField
                     id="operator-prompt"
                     value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
+                    onChange={setPrompt}
                     placeholder="Refine the selected mission, inject constraints, or request implementation details..."
+                    hint="Enter sends intent to the active mission surface. Shift+Enter inserts a newline."
                   />
-                </div>
+                </Field>
 
                 <div className="dashboard-note">
                   <h3 className="heading-3">Control Intent</h3>
