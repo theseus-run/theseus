@@ -15,6 +15,7 @@ export function Token({
   label,
   value,
   tone = "muted",
+  variant = "framed",
   className,
   ...props
 }: HTMLAttributes<HTMLSpanElement> & {
@@ -22,17 +23,33 @@ export function Token({
   label?: ReactNode;
   value?: ReactNode;
   tone?: Tone;
+  variant?: "framed" | "plain";
 }) {
+  const content =
+    label !== undefined || value !== undefined ? (
+      <>
+        {label !== undefined ? <span className="token-key">{label}</span> : null}
+        {label !== undefined && value !== undefined ? <span className="token-sep">:</span> : null}
+        {value !== undefined ? <span className="token-value">{value}</span> : null}
+      </>
+    ) : (
+      children
+    );
+
   return (
-    <span className={cn("token", toneClass[tone], className)} {...props}>
-      {label !== undefined || value !== undefined ? (
+    <span className={cn("token", `token-${variant}`, toneClass[tone], className)} {...props}>
+      {variant === "plain" ? (
         <>
-          {label !== undefined ? <span className="token-key">{label}</span> : null}
-          {label !== undefined && value !== undefined ? <span className="token-sep">:</span> : null}
-          {value !== undefined ? <span className="token-value">{value}</span> : null}
+          <span className="token-bracket" aria-hidden="true">
+            [
+          </span>
+          {content}
+          <span className="token-bracket" aria-hidden="true">
+            ]
+          </span>
         </>
       ) : (
-        children
+        content
       )}
     </span>
   );

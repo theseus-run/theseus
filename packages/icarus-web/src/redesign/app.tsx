@@ -24,314 +24,18 @@ import {
   SignalRowSymbol,
   SignalRowValue,
 } from "@/components/ui/signal-row";
-import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetHeader,
-  SheetMeta,
-  SheetOverlay,
-  SheetSection,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { XStack, YStack } from "@/components/ui/stack";
 import { StatBlock, StatBlockLabel, StatBlockValue } from "@/components/ui/stat-block";
 import { StatusMark } from "@/components/ui/status-mark";
 import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
 import { Token } from "@/components/ui/token";
-import {
-  ToolCallRow,
-  ToolCallRowBody,
-  ToolCallRowMeta,
-  ToolCallRowPrefix,
-} from "@/components/ui/tool-call-row";
-import {
-  Transcript,
-  TranscriptRow,
-  TranscriptRowBody,
-  TranscriptRowMeta,
-  TranscriptRowPrefix,
-} from "@/components/ui/transcript";
-
-type MissionStatus = "defining" | "active" | "review" | "paused";
-
-type Tone = "good" | "process" | "danger" | "muted";
-
-type RedesignPage = "dashboard" | "showcase";
-
-type Mission = {
-  id: string;
-  title: string;
-  owner: string;
-  status: MissionStatus;
-  summary: string;
-  brief: string;
-  updated: string;
-  queue: number;
-  acceptance: string[];
-  timeline: Array<{ stamp: string; label: string; detail: string }>;
-};
-
-type ToolCall = {
-  id: string;
-  tool: string;
-  command: string;
-  tone: Tone;
-  summary: string;
-  input: string[];
-  output: string[];
-};
-
-const missions: Mission[] = [
-  {
-    id: "m-2048",
-    title: "Redesign icarus-web control room",
-    owner: "roman",
-    status: "defining",
-    summary:
-      "Move from centered mockup to a full-width control surface with clearer command structure.",
-    brief:
-      "Build a three-column dashboard that feels operational instead of editorial. Left column tracks missions, center column owns the selected mission, right column exposes control state and prompt entry.",
-    updated: "4m ago",
-    queue: 3,
-    acceptance: [
-      "Three columns hold on desktop without collapsing the information hierarchy.",
-      "Mission detail reads as a calm terminal dashboard rather than a marketing page.",
-      "Controls and prompt input stay visible without competing with the main work surface.",
-    ],
-    timeline: [
-      {
-        stamp: "09:12",
-        label: "spec",
-        detail: "Target layout narrowed to missing-control style dashboard.",
-      },
-      {
-        stamp: "09:28",
-        label: "ui",
-        detail: "Monospace-web tokens retained, width constraint removed.",
-      },
-      {
-        stamp: "09:41",
-        label: "next",
-        detail: "Need interactive mission selection and control grouping.",
-      },
-    ],
-  },
-  {
-    id: "m-2041",
-    title: "Calm dispatch activity log",
-    owner: "ops",
-    status: "active",
-    summary: "Reduce ornamental UI and make runtime activity scannable at a glance.",
-    brief:
-      "The event stream should read like a technical ledger: dense, stable, and easy to inspect while prompts continue to arrive.",
-    updated: "18m ago",
-    queue: 8,
-    acceptance: [
-      "System activity remains visible alongside mission drafting.",
-      "Status badges do not rely on color alone.",
-      "Action affordances feel deliberate, not app-store glossy.",
-    ],
-    timeline: [
-      {
-        stamp: "08:55",
-        label: "audit",
-        detail: "Collected current prompt-kit patterns from legacy app.",
-      },
-      {
-        stamp: "09:03",
-        label: "risk",
-        detail: "Single-column chat wastes available landscape width.",
-      },
-      {
-        stamp: "09:19",
-        label: "plan",
-        detail: "Split queue, mission detail, and controls into separate zones.",
-      },
-    ],
-  },
-  {
-    id: "m-2032",
-    title: "Readable acceptance criteria",
-    owner: "systems",
-    status: "review",
-    summary: "Keep high-density requirements legible without losing operational tone.",
-    brief:
-      "Acceptance criteria should stay embedded in the mission rather than hidden behind separate flows.",
-    updated: "1d ago",
-    queue: 1,
-    acceptance: [
-      "Definition copy stays concise and concrete.",
-      "Review state is obvious from layout and controls.",
-    ],
-    timeline: [
-      {
-        stamp: "Yesterday",
-        label: "draft",
-        detail: "Reframed criteria as checklist-like statements.",
-      },
-      { stamp: "Yesterday", label: "handoff", detail: "Waiting on final dashboard treatment." },
-    ],
-  },
-  {
-    id: "m-2027",
-    title: "Interrupt handling",
-    owner: "runtime",
-    status: "paused",
-    summary: "Clarify what operators can stop, resume, or requeue from the dashboard surface.",
-    brief:
-      "Interruption needs a stronger control vocabulary so users understand whether they are stopping execution, editing definition, or replacing the active prompt.",
-    updated: "2d ago",
-    queue: 5,
-    acceptance: [
-      "Pause state is distinct from review state.",
-      "Unsafe actions are visually isolated.",
-    ],
-    timeline: [
-      {
-        stamp: "Mon",
-        label: "open",
-        detail: "Interrupt affordance still too easy to confuse with reset.",
-      },
-      { stamp: "Mon", label: "hold", detail: "Pending broader control panel redesign." },
-    ],
-  },
-];
-
-const statusTone: Record<MissionStatus, { label: string; tone: Tone }> = {
-  defining: { label: "· defining", tone: "process" },
-  active: { label: "◆ active", tone: "good" },
-  review: { label: "◦ review", tone: "muted" },
-  paused: { label: "× paused", tone: "danger" },
-};
-
-const liveFrames = ["⠇", "⠋", "⠙", "⠸", "⠴", "⠦"];
-
-const queueRows = [
-  {
-    at: "09:37",
-    source: "runtime",
-    tone: "good" as const,
-    text: "Socket connected; syncing mission snapshots.",
-  },
-  {
-    at: "09:39",
-    source: "planner",
-    tone: "process" as const,
-    text: "Definition branch updated with 3-column dashboard target.",
-  },
-  {
-    at: "09:40",
-    source: "ui",
-    tone: "process" as const,
-    text: "Prompt surface still missing inline control grouping.",
-  },
-  {
-    at: "09:42",
-    source: "review",
-    tone: "muted" as const,
-    text: "Need stronger distinction between mission metadata and actions.",
-  },
-];
-
-const controlRows = [
-  { label: "runtime", value: "connected", tone: "good" as const },
-  { label: "operator", value: "roman", tone: "muted" as const },
-  { label: "view", value: "dashboard/3col", tone: "process" as const },
-  { label: "theme", value: "dark monospace", tone: "process" as const },
-];
-
-const signalRows = [
-  { symbol: "◆", label: "socket", value: "stable", tone: "good" as const },
-  { symbol: "·", label: "queue", value: "accepting input", tone: "process" as const },
-  { symbol: "→", label: "focus", value: "mission definition", tone: "process" as const },
-  { symbol: "◦", label: "review", value: "criteria visible", tone: "muted" as const },
-];
-
-const transcriptRows = [
-  {
-    prefix: ">",
-    tone: "muted" as const,
-    variant: "user" as const,
-    body: "We are continuing the redesign and aiming at a full-width dashboard.",
-    meta: "user · 09:44",
-  },
-  {
-    prefix: "→",
-    tone: "process" as const,
-    variant: "assistant" as const,
-    body: "Three-column control layout selected; queue, workspace, and runtime rails split.",
-    meta: "assistant · 09:45",
-  },
-  {
-    prefix: "◆",
-    tone: "good" as const,
-    variant: "runtime" as const,
-    body: "Socket connected; mission snapshots available.",
-    meta: "runtime · 09:46",
-  },
-  {
-    prefix: "×",
-    tone: "danger" as const,
-    variant: "system" as const,
-    body: "Interrupt action remains isolated until confirmation design is added.",
-    meta: "system · 09:47",
-  },
-];
-
-const toolCalls: ToolCall[] = [
-  {
-    id: "tool-1",
-    tool: "bash",
-    command: "bun run dev",
-    tone: "process",
-    summary: "Development server started for redesign iteration.",
-    input: ["command: bun run dev", "cwd: packages/icarus-web"],
-    output: ["vite dev server listening", "hot reload active"],
-  },
-  {
-    id: "tool-2",
-    tool: "webfetch",
-    command: "https://silkhq.com/",
-    tone: "good",
-    summary: "Fetched detached sheet references for tool details interaction.",
-    input: ["url: https://silkhq.com/", "format: markdown"],
-    output: ["detached sheet", "stacking", "keyboard handling", "unstyled API"],
-  },
-];
-
-const showcaseRows = [
-  { label: "good", sample: "◆ runtime stable", tone: "good" as const },
-  { label: "process", sample: "→ planner running", tone: "process" as const },
-  { label: "danger", sample: "× destructive action", tone: "danger" as const },
-  { label: "muted", sample: "◦ passive metadata", tone: "muted" as const },
-];
-
-function toneClass(tone: Tone) {
-  switch (tone) {
-    case "good":
-      return "tone-good";
-    case "process":
-      return "tone-process";
-    case "danger":
-      return "tone-danger";
-    case "muted":
-      return "tone-muted";
-  }
-}
-
-function statusSymbol(status: MissionStatus) {
-  switch (status) {
-    case "defining":
-      return "·";
-    case "active":
-      return "◆";
-    case "review":
-      return "◦";
-    case "paused":
-      return "×";
-  }
-}
+import { TranscriptFixturePanel, RuntimeTranscriptPanel } from "./transcript-panel";
+import { toolCalls, transcriptRows, showcaseRows } from "./fixtures/transcript";
+import { controlRows, liveFrames, queueRows, signalRows, statusTone } from "./fixtures/runtime";
+import { missions } from "./fixtures/missions";
+import { toneClass, statusSymbol } from "./helpers";
+import { ToolDetailsSheet } from "./tool-details-sheet";
+import type { Mission, RedesignPage } from "./types";
 
 export function RedesignApp() {
   const [page, setPage] = useState<RedesignPage>("dashboard");
@@ -389,63 +93,11 @@ export function RedesignApp() {
     </div>
   );
 
-  const toolSheet = (
-    <Sheet open={selectedTool !== null}>
-      <SheetOverlay onClick={() => setSelectedToolId(null)} />
-      <SheetContent>
-        <SheetHeader>
-          <div className="rhythm">
-            <SheetTitle>Tool Details</SheetTitle>
-            <SheetMeta>
-              {selectedTool ? (
-                <>
-                  <Token label="tool" value={selectedTool.tool} tone={selectedTool.tone} />
-                  <Token label="id" value={selectedTool.id} />
-                </>
-              ) : null}
-            </SheetMeta>
-          </div>
-          <Button variant="ghost" onClick={() => setSelectedToolId(null)}>
-            close
-          </Button>
-        </SheetHeader>
-        {selectedTool ? (
-          <SheetBody>
-            <SheetSection>
-              <p className="label-text">Summary</p>
-              <p>{selectedTool.summary}</p>
-            </SheetSection>
-            <SheetSection>
-              <p className="label-text">Input</p>
-              <Checklist>
-                {selectedTool.input.map((item) => (
-                  <ChecklistItem key={item}>{item}</ChecklistItem>
-                ))}
-              </Checklist>
-            </SheetSection>
-            <SheetSection>
-              <p className="label-text">Output</p>
-              <Transcript>
-                {selectedTool.output.map((item) => (
-                  <TranscriptRow key={item} variant="assistant">
-                    <TranscriptRowPrefix tone={selectedTool.tone}>→</TranscriptRowPrefix>
-                    <TranscriptRowBody>{item}</TranscriptRowBody>
-                    <TranscriptRowMeta>{selectedTool.tool}</TranscriptRowMeta>
-                  </TranscriptRow>
-                ))}
-              </Transcript>
-            </SheetSection>
-          </SheetBody>
-        ) : null}
-      </SheetContent>
-    </Sheet>
-  );
-
   if (page === "showcase") {
     return (
       <main className="page-shell dashboard-shell">
         <div className="dashboard-frame rhythm">
-          {toolSheet}
+          <ToolDetailsSheet tool={selectedTool} onClose={() => setSelectedToolId(null)} />
           <StatusStrip>
             <StatusStripItem>icarus</StatusStripItem>
             <StatusStripItem>
@@ -694,8 +346,8 @@ export function RedesignApp() {
                     <StatusMark symbol="·" tone="process">
                       defining
                     </StatusMark>
-                    <Token>m-2048</Token>
-                    <Token>3 queued</Token>
+                    <Token variant="plain">m-2048</Token>
+                    <Token variant="plain">3 queued</Token>
                   </QueueItemMeta>
                 </QueueItem>
               </PanelBody>
@@ -706,32 +358,11 @@ export function RedesignApp() {
                 <PanelTitle>Patterns · Transcript</PanelTitle>
               </PanelHeader>
               <PanelBody>
-                <YStack gap="sm">
-                  <Transcript>
-                    {transcriptRows.map((row) => (
-                      <TranscriptRow key={`${row.meta}-${row.body}`} variant={row.variant}>
-                        <TranscriptRowPrefix tone={row.tone}>{row.prefix}</TranscriptRowPrefix>
-                        <TranscriptRowBody>{row.body}</TranscriptRowBody>
-                        <TranscriptRowMeta>{row.meta}</TranscriptRowMeta>
-                      </TranscriptRow>
-                    ))}
-                  </Transcript>
-                  {toolCalls.map((tool) => (
-                    <ToolCallRow
-                      key={tool.id}
-                      tone={tool.tone}
-                      onClick={() => setSelectedToolId(tool.id)}
-                    >
-                      <ToolCallRowPrefix>↗</ToolCallRowPrefix>
-                      <ToolCallRowBody>
-                        <span className="strong-text">{tool.tool}</span>
-                        <span aria-hidden="true"> · </span>
-                        <span>{tool.command}</span>
-                      </ToolCallRowBody>
-                      <ToolCallRowMeta>open details</ToolCallRowMeta>
-                    </ToolCallRow>
-                  ))}
-                </YStack>
+                <TranscriptFixturePanel
+                  rows={transcriptRows}
+                  toolCalls={toolCalls}
+                  onSelectTool={setSelectedToolId}
+                />
               </PanelBody>
             </Panel>
           </section>
@@ -743,7 +374,7 @@ export function RedesignApp() {
   return (
     <main className="page-shell dashboard-shell">
       <div className="dashboard-frame rhythm">
-        {toolSheet}
+        <ToolDetailsSheet tool={selectedTool} onClose={() => setSelectedToolId(null)} />
         <StatusStrip>
           <StatusStripItem>icarus</StatusStripItem>
           <StatusStripItem>
@@ -843,8 +474,8 @@ export function RedesignApp() {
                           >
                             {statusTone[entry.status].label.slice(2)}
                           </StatusMark>
-                          <Token>{entry.id}</Token>
-                          <Token>{entry.queue} queued</Token>
+                          <Token variant="plain">{entry.id}</Token>
+                          <Token variant="plain">{entry.queue} queued</Token>
                         </QueueItemMeta>
                       </QueueItem>
                     );
@@ -930,45 +561,11 @@ export function RedesignApp() {
                 <PanelTitle>Activity Transcript</PanelTitle>
               </PanelHeader>
               <PanelBody>
-                <YStack gap="sm">
-                  <Transcript>
-                    {queueRows.map((row) => (
-                      <TranscriptRow
-                        key={`${row.at}-${row.text}`}
-                        variant={
-                          row.source === "runtime"
-                            ? "runtime"
-                            : row.source === "review"
-                              ? "system"
-                              : "assistant"
-                        }
-                      >
-                        <TranscriptRowPrefix tone={row.tone}>→</TranscriptRowPrefix>
-                        <TranscriptRowBody>{row.text}</TranscriptRowBody>
-                        <TranscriptRowMeta>
-                          <span>{row.source}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{row.at}</span>
-                        </TranscriptRowMeta>
-                      </TranscriptRow>
-                    ))}
-                  </Transcript>
-                  {toolCalls.map((tool) => (
-                    <ToolCallRow
-                      key={tool.id}
-                      tone={tool.tone}
-                      onClick={() => setSelectedToolId(tool.id)}
-                    >
-                      <ToolCallRowPrefix>↗</ToolCallRowPrefix>
-                      <ToolCallRowBody>
-                        <span className="strong-text">{tool.tool}</span>
-                        <span aria-hidden="true"> · </span>
-                        <span>{tool.summary}</span>
-                      </ToolCallRowBody>
-                      <ToolCallRowMeta>{tool.command}</ToolCallRowMeta>
-                    </ToolCallRow>
-                  ))}
-                </YStack>
+                <RuntimeTranscriptPanel
+                  rows={queueRows}
+                  toolCalls={toolCalls}
+                  onSelectTool={setSelectedToolId}
+                />
               </PanelBody>
             </Panel>
           </section>

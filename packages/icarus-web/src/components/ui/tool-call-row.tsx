@@ -39,13 +39,3 @@ export function ToolCallRowBody({
 }) {
   return <div className={cn("tool-call-row-body", className)}>{children}</div>;
 }
-
-export function ToolCallRowMeta({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return <div className={cn("tool-call-row-meta", className)}>{children}</div>;
-}
