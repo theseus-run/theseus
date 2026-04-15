@@ -10,7 +10,7 @@ export function PanelHeader({ className, ...props }: HTMLAttributes<HTMLDivEleme
 }
 
 export function PanelBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("panel-body rhythm", className)} {...props} />;
+  return <div className={cn("panel-body", className)} {...props} />;
 }
 
 export function PanelTitle({ children, className }: { children: ReactNode; className?: string }) {

@@ -8,11 +8,23 @@
 
 :root {
   --lh: 1.35rem; /* vertical rhythm unit             */
-  --border: 1px; /* lighter border without layout shift */
+  --border: 1px; /* default border token             */
   --page-max: 110ch;
   --dashboard-max: 100%;
   --page-pad: 2ch;
-  --panel-gap: var(--lh);
+  --panel-gap: calc(var(--lh) / 2);
+}
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+  :root {
+    --border: 0.5px;
+  }
+}
+
+@media (-webkit-min-device-pixel-ratio: 3), (min-resolution: 3dppx) {
+  :root {
+    --border: 0.333333px;
+  }
 }
 
 @theme {
@@ -116,7 +128,7 @@ body {
 .dashboard-frame {
   width: min(100%, var(--dashboard-max));
   margin: 0 auto;
-  padding: calc(var(--lh) * 1.5) var(--page-pad) calc(var(--lh) * 2.5);
+  padding: var(--lh) var(--page-pad) calc(var(--lh) * 1.5);
 }
 
 .dashboard-header {
@@ -164,7 +176,7 @@ body {
 .dashboard-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: calc(var(--lh) / 2);
+  gap: 0;
   min-width: min(100%, 42ch);
 }
 
@@ -183,7 +195,7 @@ body {
 
 .showcase-grid {
   display: grid;
-  gap: var(--panel-gap);
+  gap: 0;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -207,7 +219,7 @@ body {
 
 .dashboard-subgrid {
   display: grid;
-  gap: var(--panel-gap);
+  gap: 0;
 }
 
 @media (min-width: 900px) {
@@ -285,7 +297,7 @@ body {
 
 .dashboard-stat-grid {
   display: grid;
-  gap: calc(var(--lh) / 2);
+  gap: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -388,7 +400,7 @@ body {
 }
 
 .panel-header {
-  padding: calc(var(--lh) * 0.52) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.38) calc(1.5ch - var(--border));
   border-bottom: var(--border) solid var(--color-border);
   font-weight: 600;
   color: var(--color-muted-foreground);
@@ -397,7 +409,7 @@ body {
 }
 
 .panel-body {
-  padding: calc(var(--lh) * 0.62) calc(1.7ch - var(--border));
+  padding: 0;
 }
 
 .eyebrow {
@@ -416,6 +428,11 @@ body {
 
 .field-hint {
   color: var(--color-muted-foreground);
+}
+
+.field,
+.stack-item {
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
 }
 
 .rule-dotted {
@@ -602,7 +619,7 @@ body {
 .queue-item {
   display: block;
   border: var(--border) solid var(--color-border);
-  padding: calc(var(--lh) * 0.58) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
   background: transparent;
   text-transform: none;
   font-weight: 400;
@@ -646,7 +663,11 @@ body {
   align-items: baseline;
   gap: 1ch;
   border-bottom: var(--border) solid var(--color-border);
-  padding-bottom: calc(var(--lh) / 3);
+  padding: calc(var(--lh) / 3) calc(1.5ch - var(--border));
+}
+
+.signal-row:first-child {
+  padding-top: 0;
 }
 
 .signal-row:last-child {
@@ -662,7 +683,10 @@ body {
 
 .checklist {
   list-style: none;
-  padding-left: 0;
+  padding-left: calc(1.5ch - var(--border));
+  padding-right: calc(1.5ch - var(--border));
+  padding-top: calc(var(--lh) * 0.42);
+  padding-bottom: calc(var(--lh) * 0.42);
   margin: 0;
 }
 
@@ -692,7 +716,7 @@ body {
 
 .stat-block {
   border: var(--border) solid var(--color-border);
-  padding: calc(var(--lh) * 0.5) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
   background: #0c0c0e;
   display: flex;
   flex-direction: column;
@@ -723,7 +747,7 @@ body {
   gap: 1ch;
   border: var(--border) solid var(--color-border);
   background: var(--color-background);
-  padding: calc(var(--lh) * 0.32) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.32) calc(1.5ch - var(--border));
 }
 
 .prompt-field-glyph {
@@ -759,7 +783,7 @@ body {
   border: none;
   border-bottom: var(--border) solid #232326;
   background: transparent;
-  padding: calc(var(--lh) * 0.42) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
   transition: background-color 120ms ease;
 }
 
@@ -816,7 +840,7 @@ body {
   border: none;
   border-bottom: var(--border) solid #232326;
   background: transparent;
-  padding: calc(var(--lh) * 0.42) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
   text-align: left;
 }
 
@@ -960,7 +984,7 @@ body {
 /* to avoid breaking flex/grid layouts.                           */
 
 .rhythm > * + * {
-  margin-top: var(--lh);
+  margin-top: calc(var(--lh) / 2);
 }
 
 /* ── Horizontal rule (double-line) ───────────────────────────── */
@@ -968,7 +992,7 @@ body {
 hr {
   border: none;
   border-top: calc(var(--border) * 3) double var(--color-border);
-  margin: var(--lh) 0;
+  margin: calc(var(--lh) / 2) 0;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */

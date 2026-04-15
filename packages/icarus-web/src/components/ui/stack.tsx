@@ -1,11 +1,12 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-type StackGap = "xs" | "sm" | "md" | "lg";
+type StackGap = "none" | "xs" | "sm" | "md" | "lg";
 type StackAlign = "start" | "center" | "end" | "stretch" | "baseline";
 type StackJustify = "start" | "center" | "end" | "between";
 
 const gapValue: Record<StackGap, string> = {
+  none: "0",
   xs: "calc(var(--lh) / 4)",
   sm: "calc(var(--lh) / 2)",
   md: "var(--lh)",
@@ -29,7 +30,7 @@ const justifyClass: Record<StackJustify, string> = {
 
 export function XStack({
   className,
-  gap = "sm",
+  gap = "none",
   align = "center",
   justify = "start",
   wrap = false,
@@ -58,7 +59,7 @@ export function XStack({
 
 export function YStack({
   className,
-  gap = "sm",
+  gap = "none",
   align = "stretch",
   justify = "start",
   style,
