@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [jsx-md, jsx-md-beautiful-mermaid]
+        package: [theseus-core, jsx-md, jsx-md-beautiful-mermaid]
     steps:
       - uses: actions/checkout@v6.0.2
       - uses: oven-sh/setup-bun@v2.2.0
