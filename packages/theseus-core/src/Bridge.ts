@@ -7,16 +7,24 @@
  * Usage:
  *   import * as Bridge from "@theseus.run/core/Bridge"
  *
- *   const toolkit = Bridge.toolsToToolkit(tools)
- *   const aiTool = Bridge.toolToAiTool(myTool)
+ *   const aiToolkit = Bridge.toAiToolkit(toolkit)
+ *   const aiTool    = Bridge.toAiTool(myTool)
+ *   const defs      = Bridge.toToolDefinitions(toolkit)  // for raw provider SDKs
  */
 
 // ---------------------------------------------------------------------------
-// Functions (drop "theseus" prefix — namespace provides it)
+// Types
+// ---------------------------------------------------------------------------
+
+export type { ToolDefinition } from "./bridge/to-ai-tools.ts";
+
+// ---------------------------------------------------------------------------
+// Conversions
 // ---------------------------------------------------------------------------
 
 export {
-  extractToolDefs,
-  theseusToolsToToolkit as toolsToToolkit,
-  theseusToolToAiTool as toolToAiTool,
+  toAiTool,
+  toAiToolkit,
+  toolsArrayToAiToolkit,
+  toToolDefinitions,
 } from "./bridge/to-ai-tools.ts";

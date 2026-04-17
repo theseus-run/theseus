@@ -8,12 +8,12 @@
  * They compose via the Layer.
  */
 
-import { Effect, ServiceMap } from "effect";
+import { Context, Effect } from "effect";
 import type { Mission } from "./index.ts";
 import type { MissionErrorInvalidTransition } from "./index.ts";
 import type { MissionStatus } from "./status.ts";
 
-export class MissionContext extends ServiceMap.Service<
+export class MissionContext extends Context.Service<
   MissionContext,
   {
     /** Read the current mission record (status may have changed). */

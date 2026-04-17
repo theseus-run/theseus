@@ -19,10 +19,31 @@ import type { AgentResult, AgentError, Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
+import { textPresentation } from "../tool/index.ts";
+import type { Presentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
-import { runToolCall, stepStream, tryParseArgs } from "./step.ts";
-import type { ToolCallError } from "./types.ts";
+import { presentationToText, runToolCall, stepStream, tryParseArgs } from "./step.ts";
+import type { ToolCallError, ToolCallResult } from "./types.ts";
 import type { DispatchEvent, DispatchHandle, DispatchOptions, Injection, Usage } from "./types.ts";
+
+// Build a synthetic ToolCallResult from a plain text string (used by satellites).
+const syntheticResult = (
+  tc: { id: string; name: string },
+  args: unknown,
+  content: string,
+  isError = false,
+): ToolCallResult => {
+  const presentation: Presentation = isError
+    ? textPresentation(content, { isError: true })
+    : textPresentation(content);
+  return {
+    callId: tc.id,
+    name: tc.name,
+    args,
+    presentation,
+    textContent: presentationToText(presentation),
+  };
+};
 
 // ---------------------------------------------------------------------------
 // addUsage — accumulate token counts
@@ -225,7 +246,7 @@ export const dispatch = (
               );
 
               if (beforeAction._tag === "BlockTool") {
-                return { callId: tc.id, name: tc.name, args: undefined as unknown, content: beforeAction.content };
+                return syntheticResult(tc, undefined, beforeAction.content);
               }
 
               const effectiveTc = beforeAction._tag === "ModifyArgs"
@@ -233,7 +254,7 @@ export const dispatch = (
                 : tc;
 
               // Execute tool
-              const callResult = yield* runToolCall(blueprint.tools, effectiveTc).pipe(
+              const callResult: ToolCallResult = yield* runToolCall(blueprint.tools, effectiveTc).pipe(
                 Effect.catch((err: ToolCallError) =>
                   emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
                     Effect.flatMap(() =>
@@ -257,7 +278,7 @@ export const dispatch = (
               );
 
               return afterAction._tag === "ReplaceResult"
-                ? { ...callResult, content: afterAction.content }
+                ? syntheticResult(tc, callResult.args, afterAction.content, callResult.presentation.isError ?? false)
                 : callResult;
             }).pipe(Effect.withSpan("tool-call", { attributes: { "tool.name": tc.name, "tool.id": tc.id } })),
           ),
@@ -269,7 +290,8 @@ export const dispatch = (
           agent: blueprint.name,
           iteration: iterations,
           tool: c.name,
-          content: c.content,
+          content: c.textContent,
+          isError: c.presentation.isError ?? false,
         }));
 
         // Build messages for next iteration (native Prompt.MessageEncoded format)
@@ -279,8 +301,8 @@ export const dispatch = (
             type: "tool-result" as const,
             id: r.callId,
             name: r.name,
-            isFailure: false,
-            result: r.content,
+            isFailure: r.presentation.isError ?? false,
+            result: r.textContent,
           }],
         }));
 

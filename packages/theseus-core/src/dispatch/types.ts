@@ -7,9 +7,9 @@
 import { Data } from "effect";
 import type { Effect, Stream } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { AgentError } from "../agent/index.ts";
-import type { AgentResult } from "../agent/index.ts";
-import type { ToolErrors } from "../tool/index.ts";
+import type { AgentError, AgentResult } from "../agent/index.ts";
+import type { Presentation } from "../tool/index.ts";
+import type { ToolDefect, ToolInputError } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Usage — simple token counts for accumulation across iterations
@@ -32,41 +32,49 @@ export interface ToolCall {
 
 // ---------------------------------------------------------------------------
 // ToolCallResult — parsed result of a single tool call execution
+//
+// `presentation` carries the full typed Presentation (multimodal content,
+// isError flag, optional structured payload). `textContent` is a text-only
+// projection for UI events and message round-tripping.
 // ---------------------------------------------------------------------------
 
 export interface ToolCallResult {
   readonly callId: string;
   readonly name: string;
   readonly args: unknown;
-  readonly content: string;
+  readonly presentation: Presentation;
+  readonly textContent: string;
 }
 
 // ---------------------------------------------------------------------------
-// ToolCallError — typed failure from tool execution
+// ToolCallError — typed failures during tool dispatch (not covered by Presentation)
 // ---------------------------------------------------------------------------
 
-/** Tool not found in the blueprint's tools array. */
+/** Tool not found in the blueprint's toolkit. */
 export class ToolCallUnknown extends Data.TaggedError("ToolCallUnknown")<{
   readonly callId: string;
   readonly name: string;
 }> {}
 
-/** Arguments failed JSON.parse. */
+/** Arguments failed JSON.parse — model produced malformed tool-call args. */
 export class ToolCallBadArgs extends Data.TaggedError("ToolCallBadArgs")<{
   readonly callId: string;
   readonly name: string;
   readonly raw: string;
 }> {}
 
-/** Tool execution failed (wraps ToolError | ToolErrorInput | ToolErrorOutput from callTool). */
+/**
+ * Tool dispatch failed with a runtime error (bad input schema or defect).
+ * Tool-author failures (F) are folded into the Presentation and do not surface here.
+ */
 export class ToolCallFailed extends Data.TaggedError("ToolCallFailed")<{
   readonly callId: string;
   readonly name: string;
   readonly args: unknown;
-  readonly cause: ToolErrors;
+  readonly cause: ToolInputError | ToolDefect;
 }> {}
 
-/** Union of all tool call errors. */
+/** Union of all tool-dispatch errors. */
 export type ToolCallError = ToolCallUnknown | ToolCallBadArgs | ToolCallFailed;
 
 // ---------------------------------------------------------------------------
@@ -99,7 +107,7 @@ export type DispatchEvent =
   | { readonly _tag: "ThinkingDelta";    readonly agent: string; readonly iteration: number; readonly content: string }
   | { readonly _tag: "Thinking";         readonly agent: string; readonly iteration: number; readonly content: string }
   | { readonly _tag: "ToolCalling";      readonly agent: string; readonly iteration: number; readonly tool: string; readonly args: unknown }
-  | { readonly _tag: "ToolResult";       readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string }
+  | { readonly _tag: "ToolResult";       readonly agent: string; readonly iteration: number; readonly tool: string; readonly content: string; readonly isError: boolean }
   | { readonly _tag: "ToolError";        readonly agent: string; readonly iteration: number; readonly tool: string; readonly error: ToolCallError }
   | { readonly _tag: "SatelliteAction";  readonly agent: string; readonly iteration: number; readonly satellite: string; readonly phase: string; readonly action: string }
   | { readonly _tag: "Injected";         readonly agent: string; readonly iteration: number; readonly injection: string; readonly detail?: string }

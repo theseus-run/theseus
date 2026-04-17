@@ -10,7 +10,7 @@
  * Ship metaphor: the black box. Append-only. Survives the crash.
  */
 
-import { Data, Effect, ServiceMap } from "effect";
+import { Context, Data, Effect } from "effect";
 
 // ---------------------------------------------------------------------------
 // CapsuleId — branded string
@@ -53,7 +53,7 @@ export type CapsuleEventInput = Omit<CapsuleEvent, "at">;
 // Capsule — the Effect service
 // ---------------------------------------------------------------------------
 
-export class Capsule extends ServiceMap.Service<
+export class Capsule extends Context.Service<
   Capsule,
   {
     /** Capsule identifier. */

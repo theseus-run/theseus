@@ -2,31 +2,30 @@
  * grep — Regex search across file contents.
  *
  * Uses ripgrep via Bun.$ with --json for structured output.
- * ripgrep-not-found is retriable (agent can retry or fallback).
  * Exit codes: 0 = matches, 1 = no matches, 2 = error.
  */
 
 import { $ } from "bun";
-import { Effect } from "effect";
+import { Effect, Schema, Schedule } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const MAX_MATCHES = 100;
 
-const inputSchema = z.object({
-  pattern: z.string().min(1),
-  path: z.string().min(1).optional().describe("Root directory or file to search (default: cwd)"),
-  glob: z.string().optional().describe("File filter pattern (e.g. *.ts)"),
-  context_lines: z
-    .number()
-    .int()
-    .min(0)
-    .max(10)
-    .optional()
-    .describe("Lines of context around each match"),
+const Input = Schema.Struct({
+  pattern: Schema.String,
+  path: Schema.optional(
+    Schema.String.annotate({ description: "Root directory or file to search (default: cwd)" }),
+  ),
+  glob: Schema.optional(
+    Schema.String.annotate({ description: "File filter pattern (e.g. *.ts)" }),
+  ),
+  context_lines: Schema.optional(
+    Schema.Int.annotate({ description: "Lines of context around each match (0-10)" }),
+  ),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
 interface GrepMatch {
   readonly file: string;
@@ -80,14 +79,16 @@ const formatMatches = (matches: GrepMatch[], total: number): string => {
   return parts.join("\n");
 };
 
-export const grep = Tool.define<Input, string>({
+export const grep = Tool.define<Input, string, ToolFailure>({
   name: "grep",
   description:
     "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "readonly",
-  capabilities: ["fs.read"],
-  execute: ({ pattern, path, glob: globPattern, context_lines }, { fail, retriable }) => {
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read", "shell.exec"] }),
+  // Retry transient ripgrep-not-found once (binary may have been installed concurrently).
+  retry: Schedule.recurs(1) as unknown as Schedule.Schedule<unknown>,
+  execute: ({ pattern, path, glob: globPattern, context_lines }) => {
     // Build ripgrep args
     const args = ["rg", "--json", "--max-count", "10", "--sort", "modified"];
 
@@ -101,14 +102,8 @@ export const grep = Tool.define<Input, string>({
     // Run ripgrep
     const run = Effect.tryPromise({
       try: () => $`${args}`.nothrow().quiet(),
-      catch: (e) => {
-        const msg = String(e);
-        // ripgrep not installed or not on PATH — retriable so runtime can retry
-        if (msg.includes("not found") || msg.includes("ENOENT")) {
-          return retriable("ripgrep (rg) not found on PATH. Install with: brew install ripgrep");
-        }
-        return fail(`Grep failed: ${e}`);
-      },
+      catch: (e) =>
+        new ToolFailure({ message: `Grep failed: ${e}` }),
     });
 
     return run.pipe(
@@ -118,7 +113,7 @@ export const grep = Tool.define<Input, string>({
         // Exit code 2 = ripgrep error (bad regex, permission denied, etc.)
         if (exitCode === 2) {
           const stderr = result.stderr.toString().trim();
-          return Effect.fail(fail(`ripgrep error: ${stderr}`));
+          return Effect.fail(new ToolFailure({ message: `ripgrep error: ${stderr}` }));
         }
 
         // Exit code 1 = no matches (not an error)
@@ -131,5 +126,4 @@ export const grep = Tool.define<Input, string>({
       }),
     );
   },
-  encode: (s) => s,
 });

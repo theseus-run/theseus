@@ -8,9 +8,8 @@
  * Languages: TypeScript, TSX, JavaScript, Python, Go, Rust (extensible).
  */
 
-import { Effect, Match } from "effect";
+import { Effect, Match, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
 import { extname } from "node:path";
 
 import { parse } from "./tree-sitter.ts";
@@ -19,6 +18,7 @@ import { extractSymbolsTS } from "./lang-ts.ts";
 import { extractSymbolsPython } from "./lang-python.ts";
 import { extractSymbolsGo } from "./lang-go.ts";
 import { extractSymbolsRust } from "./lang-rust.ts";
+import { ToolFailure } from "../failure.ts";
 
 import type { TreeSitterNode } from "./tree-sitter.ts";
 import type { Symbol } from "./symbol.ts";
@@ -62,35 +62,39 @@ const extractSymbols = (root: TreeSitterNode, grammar: string): Symbol[] =>
 // Tool definition
 // ---------------------------------------------------------------------------
 
-const inputSchema = z.object({
-  path: z.string().min(1),
+const Input = Schema.Struct({
+  path: Schema.String,
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
-export const outline = Tool.define<Input, string>({
+export const outline = Tool.define<Input, string, ToolFailure>({
   name: "outline",
   description:
     "Extract symbol outline (functions, classes, types, imports) from a source file. Prefer over read_file for structural understanding. Supports: .ts .tsx .js .jsx .py .go .rs",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "readonly",
-  capabilities: ["fs.read"],
-  execute: ({ path }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  execute: ({ path }) =>
     Effect.gen(function* () {
       const file = Bun.file(path);
 
       // Existence check
       const exists = yield* Effect.tryPromise({
         try: () => file.exists(),
-        catch: (e) => fail(`Cannot access ${path}: ${e}`),
+        catch: (e) => new ToolFailure({ message: `Cannot access ${path}: ${e}` }),
       });
-      if (!exists) return yield* Effect.fail(fail(`File not found: ${path}`));
+      if (!exists) {
+        return yield* Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
+      }
 
       // Extension check
       const ext = extname(path).toLowerCase();
       if (!SUPPORTED_EXTS.has(ext)) {
         return yield* Effect.fail(
-          fail(`Unsupported file type: ${ext}. Supported: ${[...SUPPORTED_EXTS].join(", ")}`),
+          new ToolFailure({
+            message: `Unsupported file type: ${ext}. Supported: ${[...SUPPORTED_EXTS].join(", ")}`,
+          }),
         );
       }
 
@@ -108,19 +112,18 @@ export const outline = Tool.define<Input, string>({
       // Read content
       const content = yield* Effect.tryPromise({
         try: () => file.text(),
-        catch: (e) => fail(`Cannot read ${path}: ${e}`),
+        catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
       });
 
       if (content.trim().length === 0) return "Empty file";
 
       // Parse with tree-sitter
       const grammarName = EXT_TO_GRAMMAR[ext]!;
-      const tree = yield* parse(content, grammarName, fail);
+      const tree = yield* parse(content, grammarName);
 
       const symbols = extractSymbols(tree.rootNode, grammarName);
       return formatSymbols(symbols);
     }),
-  encode: (s) => s,
 });
 
 // Re-export types for consumers

@@ -1,52 +1,95 @@
 /**
- * Bridge: Tool<I,O>[] → effect/unstable/ai Tool.Any[] and Toolkit
+ * Bridge: Theseus `Tool` / `Toolkit` → `@effect/ai` `Tool` / `Toolkit`.
  *
- * Wraps our Theseus tools for consumption by LanguageModel.
- * Uses AiTool.dynamic which accepts any params — our dispatch loop
- * handles decoding/execution via callTool, not the ai framework.
+ * Used with `disableToolCallResolution: true` on `LanguageModel.generateText`
+ * / `streamText`: the AI framework sees tool definitions (name, description,
+ * schemas) and passes them to the model, but never invokes the handlers —
+ * Theseus's dispatch loop owns execution via `callTool`.
+ *
+ * Because both libraries use `effect/Schema`, the conversion is direct:
+ *   AiTool.make(name, { description, parameters, success, failure })
+ *
+ * No JSON-schema hack, no `dynamic` sentinel, no `(x as any).jsonSchema = …`.
  */
 
+import { Schema } from "effect";
 import * as AiTool from "effect/unstable/ai/Tool";
-import * as Toolkit from "effect/unstable/ai/Toolkit";
-import type { ToolAny } from "../tool/index.ts";
+import * as AiToolkit from "effect/unstable/ai/Toolkit";
+import type { Tool, ToolAny } from "../tool/index.ts";
+import type { Toolkit } from "../tool/toolkit.ts";
+
+// ---------------------------------------------------------------------------
+// Single-tool conversion
+// ---------------------------------------------------------------------------
 
 /**
- * Convert a single Theseus Tool<I,O> to an @effect/ai dynamic Tool.
+ * Convert one Theseus tool to an `@effect/ai` tool, with all schemas wired.
  *
- * Dynamic tools accept any parameters without schema validation,
- * which is what we need since we handle validation ourselves via callTool.
+ * The handler is never invoked when used with `disableToolCallResolution: true`.
+ * Theseus's dispatch loop calls `callTool` directly.
  */
-export const theseusToolToAiTool = (tool: ToolAny): AiTool.Any => {
-  const aiTool = AiTool.dynamic(tool.name, { description: tool.description });
-  // Attach inputSchema so providers can read it directly (getJsonSchema doesn't work for dynamic tools)
-  (aiTool as any).inputSchema = tool.inputSchema;
-  return aiTool;
+export const toAiTool = <I, O, F, R>(
+  tool: Tool<I, O, F, R>,
+): AiTool.Any =>
+  AiTool.make(tool.name, {
+    description: tool.description,
+    // biome-ignore lint/suspicious/noExplicitAny: Schema.Schema<T> widens to Schema.Top at the call site
+    parameters: tool.input as unknown as Schema.Schema<any>,
+    // biome-ignore lint/suspicious/noExplicitAny: same
+    success: tool.output as unknown as Schema.Schema<any>,
+    // biome-ignore lint/suspicious/noExplicitAny: same
+    failure: tool.failure as unknown as Schema.Schema<any>,
+  }) as unknown as AiTool.Any;
+
+// ---------------------------------------------------------------------------
+// Toolkit conversion
+// ---------------------------------------------------------------------------
+
+/** Convert a Theseus Toolkit to an `@effect/ai` Toolkit (definitions only). */
+export const toAiToolkit = (
+  toolkit: Toolkit<unknown>,
+): AiToolkit.Toolkit<Record<string, AiTool.Any>> =>
+  toolsArrayToAiToolkit(toolkit.tools);
+
+/** Convert a raw array of Theseus tools. Prefer `toAiToolkit` with a `Toolkit`. */
+export const toolsArrayToAiToolkit = (
+  tools: ReadonlyArray<ToolAny>,
+): AiToolkit.Toolkit<Record<string, AiTool.Any>> => {
+  if (tools.length === 0) {
+    return AiToolkit.empty as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
+  }
+  const aiTools = tools.map(toAiTool);
+  return AiToolkit.make(
+    ...(aiTools as [AiTool.Any, ...AiTool.Any[]]),
+  ) as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
 };
 
-/**
- * Build an @effect/ai Toolkit from an array of Theseus tools.
- *
- * Used with disableToolCallResolution: true — the toolkit provides
- * tool definitions to the LLM but handlers are never invoked by
- * the framework (our dispatch loop handles execution).
- */
-export const theseusToolsToToolkit = (
-  tools: ReadonlyArray<ToolAny>,
-): Toolkit.Toolkit<Record<string, AiTool.Any>> => {
-  if (tools.length === 0) return Toolkit.empty as any;
-  const aiTools = tools.map(theseusToolToAiTool);
-  return Toolkit.make(...(aiTools as [AiTool.Any, ...AiTool.Any[]])) as any;
-};
+// ---------------------------------------------------------------------------
+// Plain tool definitions — for provider SDKs that don't use `@effect/ai`
+// ---------------------------------------------------------------------------
+
+export interface ToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Record<string, unknown>;
+}
 
 /**
- * Extract plain tool definitions (name + description + JSON schema)
- * from Theseus tools.
+ * Extract plain `{ name, description, inputSchema }` definitions — for raw
+ * provider APIs (Anthropic, OpenAI, Gemini) that take JSON Schema directly.
  */
-export const extractToolDefs = (
-  tools: ReadonlyArray<ToolAny>,
-): ReadonlyArray<{ name: string; description: string; inputSchema: Record<string, unknown> }> =>
-  tools.map((t) => ({
+export const toToolDefinitions = (
+  toolkit: Toolkit<unknown>,
+): ReadonlyArray<ToolDefinition> =>
+  toolkit.tools.map((t) => ({
     name: t.name,
     description: t.description,
-    inputSchema: t.inputSchema,
+    // biome-ignore lint/suspicious/noExplicitAny: Schema.toJsonSchemaDocument accepts Top
+    inputSchema: jsonSchemaOf(t.input as any),
   }));
+
+// biome-ignore lint/suspicious/noExplicitAny: Schema.Top is the widest; we accept it opaquely
+const jsonSchemaOf = (schema: any): Record<string, unknown> => {
+  const doc = Schema.toJsonSchemaDocument(schema);
+  return doc.schema as Record<string, unknown>;
+};

@@ -8,9 +8,9 @@
  * Distinct errors: not-found (fail), binary (succeed with info), read error (fail).
  */
 
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const MAX_LINES = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -18,31 +18,37 @@ const MAX_LINE_LENGTH = 2000;
 /** MIME types we treat as text even though they don't start with "text/" */
 const TEXT_MIMES = ["json", "xml", "javascript", "typescript", "ecmascript"];
 
-const inputSchema = z.object({
-  path: z.string().min(1),
-  offset: z.number().int().min(1).optional().describe("Start at this line number (1-indexed)"),
-  limit: z.number().int().min(1).optional().describe("Max lines to return (default 2000)"),
+const Input = Schema.Struct({
+  path: Schema.String,
+  offset: Schema.optional(
+    Schema.Int.annotate({ description: "Start at this line number (1-indexed)" }),
+  ),
+  limit: Schema.optional(
+    Schema.Int.annotate({ description: "Max lines to return (default 2000)" }),
+  ),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
-export const readFile = Tool.define<Input, string>({
+export const readFile = Tool.define<Input, string, ToolFailure>({
   name: "read_file",
   description:
     "Read a file. Returns line-numbered text. Binary files return a type indicator. Use offset/limit for large files.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "readonly",
-  capabilities: ["fs.read"],
-  execute: ({ path, offset, limit }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  execute: ({ path, offset, limit }) =>
     Effect.gen(function* () {
       const file = Bun.file(path);
 
       // Step 1: existence check
       const exists = yield* Effect.tryPromise({
         try: () => file.exists(),
-        catch: (e) => fail(`Cannot access ${path}: ${e}`),
+        catch: (e) => new ToolFailure({ message: `Cannot access ${path}: ${e}` }),
       });
-      if (!exists) return yield* Effect.fail(fail(`File not found: ${path}`));
+      if (!exists) {
+        return yield* Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
+      }
 
       // Step 2: binary detection via MIME type
       const mime = file.type;
@@ -53,7 +59,7 @@ export const readFile = Tool.define<Input, string>({
       // Step 3: read content
       const content = yield* Effect.tryPromise({
         try: () => file.text(),
-        catch: (e) => fail(`Cannot read ${path}: ${e}`),
+        catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
       });
 
       // Step 4: slice and format
@@ -80,5 +86,4 @@ export const readFile = Tool.define<Input, string>({
       }
       return formatted;
     }),
-  encode: (s) => s,
 });

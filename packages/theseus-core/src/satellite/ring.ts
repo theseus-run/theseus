@@ -11,8 +11,7 @@
  *   // provide to dispatch
  */
 
-import { Effect, Layer, Match, Ref } from "effect";
-import * as ServiceMap from "effect/ServiceMap";
+import { Context, Effect, Layer, Match, Ref } from "effect";
 import type { Phase, SatelliteAny, SatelliteContext } from "./types.ts";
 import { type Action, Pass } from "./types.ts";
 import type { SatelliteAbort } from "./types.ts";
@@ -29,7 +28,7 @@ export type SatelliteActionCallback = (
   action: string,
 ) => Effect.Effect<void>;
 
-export class SatelliteRing extends ServiceMap.Service<
+export class SatelliteRing extends Context.Service<
   SatelliteRing,
   {
     /** Run all satellites for a phase, returning the final action. */

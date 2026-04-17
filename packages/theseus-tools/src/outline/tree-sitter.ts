@@ -5,7 +5,7 @@
  */
 
 import { Effect } from "effect";
-import type * as Tool from "@theseus.run/core/Tool";
+import { ToolFailure } from "../failure.ts";
 
 // ---------------------------------------------------------------------------
 // Types for web-tree-sitter (CJS module)
@@ -47,9 +47,10 @@ const languageCache = new Map<string, TreeSitterLanguageInstance>();
 // ---------------------------------------------------------------------------
 
 /** Lazily init tree-sitter WASM runtime (cached after first call). */
-export const initTreeSitter = (
-  fail: (msg: string) => Tool.ToolError,
-): Effect.Effect<{ Parser: TreeSitterParser; Language: TreeSitterLanguageStatic }, Tool.ToolError> =>
+export const initTreeSitter = (): Effect.Effect<
+  { Parser: TreeSitterParser; Language: TreeSitterLanguageStatic },
+  ToolFailure
+> =>
   Effect.tryPromise({
     try: () => {
       if (!parserPromise) {
@@ -64,23 +65,22 @@ export const initTreeSitter = (
       }
       return parserPromise;
     },
-    catch: (e) => fail(`Failed to initialize tree-sitter: ${e}`),
+    catch: (e) => new ToolFailure({ message: `Failed to initialize tree-sitter: ${e}` }),
   });
 
 /** Load (and cache) a tree-sitter grammar by name. */
 export const loadLanguage = (
   grammarName: string,
-  fail: (msg: string) => Tool.ToolError,
-): Effect.Effect<TreeSitterLanguageInstance, Tool.ToolError> =>
+): Effect.Effect<TreeSitterLanguageInstance, ToolFailure> =>
   Effect.gen(function* () {
     const cached = languageCache.get(grammarName);
     if (cached) return cached;
 
-    const { Language } = yield* initTreeSitter(fail);
+    const { Language } = yield* initTreeSitter();
     const wasmPath = require.resolve(`tree-sitter-wasms/out/${grammarName}.wasm`);
     const lang = yield* Effect.tryPromise({
       try: () => Language.load(wasmPath),
-      catch: (e) => fail(`Failed to load grammar ${grammarName}: ${e}`),
+      catch: (e) => new ToolFailure({ message: `Failed to load grammar ${grammarName}: ${e}` }),
     });
     languageCache.set(grammarName, lang);
     return lang;
@@ -90,11 +90,10 @@ export const loadLanguage = (
 export const parse = (
   content: string,
   grammarName: string,
-  fail: (msg: string) => Tool.ToolError,
-): Effect.Effect<TreeSitterTree, Tool.ToolError> =>
+): Effect.Effect<TreeSitterTree, ToolFailure> =>
   Effect.gen(function* () {
-    const { Parser: ParserClass } = yield* initTreeSitter(fail);
-    const lang = yield* loadLanguage(grammarName, fail);
+    const { Parser: ParserClass } = yield* initTreeSitter();
+    const lang = yield* loadLanguage(grammarName);
     const parser = new ParserClass();
     parser.setLanguage(lang);
     return parser.parse(content);

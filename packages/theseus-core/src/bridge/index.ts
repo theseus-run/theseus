@@ -4,4 +4,10 @@
  * Only tools need bridging. Messages use Prompt.MessageEncoded natively.
  */
 
-export { theseusToolToAiTool, theseusToolsToToolkit, extractToolDefs } from "./to-ai-tools.ts";
+export type { ToolDefinition } from "./to-ai-tools.ts";
+export {
+  toAiTool,
+  toAiToolkit,
+  toolsArrayToAiToolkit,
+  toToolDefinitions,
+} from "./to-ai-tools.ts";

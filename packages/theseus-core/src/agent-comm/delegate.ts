@@ -5,16 +5,14 @@
  * to avoid cross-package jsx-dev-runtime resolution issues in bun workspaces.
  */
 
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { render, H2, P, Bold, Ul, Li, Hr, Md, Code } from "@theseus.run/jsx-md";
-import { defineTool, type ToolAny } from "../tool/index.ts";
-import { fromZod } from "../tool/zod.ts";
+import { defineTool, meta, type Tool } from "../tool/index.ts";
 import type { Blueprint } from "../agent/index.ts";
 import { gruntAwait } from "../grunt/index.ts";
 import { DispatchDefaults } from "../dispatch/defaults.ts";
 import { Capsule } from "../capsule/index.ts";
-import { z } from "zod";
 import { report } from "./report.ts";
 import type { DelegateInput } from "./types.ts";
 
@@ -47,11 +45,25 @@ const renderWorkerPrompt = (basePrompt: string, briefing: DelegateInput): string
     ]}),
   ]);
 
-const delegateSchema = z.object({
-  task: z.string().min(1).describe("What the worker should accomplish. Be specific."),
-  criteria: z.array(z.string()).describe("How we know the task is done."),
-  context: z.string().optional().describe("File paths, inline data, or references."),
+const DelegateInputSchema = Schema.Struct({
+  task: Schema.String.annotate({
+    description: "What the worker should accomplish. Be specific.",
+  }),
+  criteria: Schema.Array(Schema.String).annotate({
+    description: "How we know the task is done.",
+  }),
+  context: Schema.optional(
+    Schema.String.annotate({
+      description: "File paths, inline data, or references.",
+    }),
+  ),
 });
+
+/** Typed failure for delegate — worker didn't complete successfully. */
+export class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()(
+  "DelegateFailed",
+  { reason: Schema.String },
+) {}
 
 /**
  * Create a theseus_delegate tool for dispatching workers.
@@ -61,22 +73,26 @@ const delegateSchema = z.object({
  */
 export const makeDelegate = (
   workerBlueprint: Blueprint,
-): Effect.Effect<ToolAny, never, LanguageModel.LanguageModel | Capsule> =>
+): Effect.Effect<
+  Tool<DelegateInput, string, DelegateFailed, never>,
+  never,
+  LanguageModel.LanguageModel | Capsule
+> =>
   Effect.gen(function* () {
     const lm = yield* LanguageModel.LanguageModel;
     const capsule = yield* Capsule;
 
-    return defineTool<DelegateInput, string>({
+    return defineTool<DelegateInput, string, DelegateFailed>({
       name: "theseus_delegate",
       description:
         `Delegate a task to worker "${workerBlueprint.name}". ` +
         "Provide a clear task, measurable criteria, and relevant context. " +
         "The worker has its own tools and fresh context. " +
         "Returns the worker's structured result.",
-      inputSchema: fromZod(delegateSchema),
-      safety: "write",
-      capabilities: ["dispatch"],
-      execute: (input, { fail }) =>
+      input: DelegateInputSchema as unknown as Schema.Schema<DelegateInput>,
+      failure: DelegateFailed as unknown as Schema.Schema<DelegateFailed>,
+      meta: meta({ mutation: "write", capabilities: ["agent.dispatch"] }),
+      execute: (input) =>
         Effect.gen(function* () {
           const briefingMd = renderWorkerPrompt(workerBlueprint.systemPrompt, input);
 
@@ -100,9 +116,12 @@ export const makeDelegate = (
               DispatchDefaults,
             )),
             Effect.catchTags({
-              AgentInterrupted: (e) => Effect.fail(fail(`Worker interrupted: ${e.reason ?? "unknown"}`)),
-              AgentCycleExceeded: (e) => Effect.fail(fail(`Worker exceeded cycle cap (${e.max} iterations)`)),
-              AgentLLMError: (e) => Effect.fail(fail(`Worker LLM failed: ${e.message}`)),
+              AgentInterrupted: (e) =>
+                Effect.fail(new DelegateFailed({ reason: `Worker interrupted: ${e.reason ?? "unknown"}` })),
+              AgentCycleExceeded: (e) =>
+                Effect.fail(new DelegateFailed({ reason: `Worker exceeded cycle cap (${e.max} iterations)` })),
+              AgentLLMError: (e) =>
+                Effect.fail(new DelegateFailed({ reason: `Worker LLM failed: ${e.message}` })),
             }),
           );
 
@@ -114,6 +133,5 @@ export const makeDelegate = (
 
           return `[${agentResult.result}] ${agentResult.summary}\n\n${agentResult.content}`;
         }),
-      encode: (s) => s,
     });
   });

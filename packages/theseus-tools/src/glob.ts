@@ -5,27 +5,31 @@
  */
 
 import { Glob } from "bun";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const MAX_RESULTS = 100;
 
-const inputSchema = z.object({
-  pattern: z.string().min(1),
-  path: z.string().min(1).optional().describe("Root directory to scan (default: cwd)"),
+const Input = Schema.Struct({
+  pattern: Schema.String,
+  path: Schema.optional(
+    Schema.String.annotate({
+      description: "Root directory to scan (default: cwd)",
+    }),
+  ),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
-export const glob = Tool.define<Input, string>({
+export const glob = Tool.define<Input, string, ToolFailure>({
   name: "glob",
   description:
     "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns ≤100 paths. Skips node_modules, .git, dist, coverage.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "readonly",
-  capabilities: ["fs.read"],
-  execute: ({ pattern, path }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  execute: ({ pattern, path }) =>
     Effect.tryPromise({
       try: async () => {
         const g = new Glob(pattern);
@@ -54,7 +58,6 @@ export const glob = Tool.define<Input, string>({
         }
         return output;
       },
-      catch: (e) => fail(`Glob failed for "${pattern}": ${e}`),
+      catch: (e) => new ToolFailure({ message: `Glob failed for "${pattern}": ${e}` }),
     }),
-  encode: (s) => s,
 });

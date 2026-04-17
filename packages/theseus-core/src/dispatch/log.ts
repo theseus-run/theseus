@@ -9,8 +9,7 @@
  * DispatchLog is the raw internal audit trail.
  */
 
-import { Effect, Layer, Ref } from "effect";
-import * as ServiceMap from "effect/ServiceMap";
+import { Context, Effect, Layer, Ref } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { DispatchEvent, DispatchOptions, Usage } from "./types.ts";
 
@@ -46,7 +45,7 @@ export interface DispatchSummary {
 // DispatchLog — service definition
 // ---------------------------------------------------------------------------
 
-export class DispatchLog extends ServiceMap.Service<
+export class DispatchLog extends Context.Service<
   DispatchLog,
   {
     /** Record a dispatch event. */

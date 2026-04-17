@@ -3,29 +3,24 @@
  *
  * Uses Bun.$ (Zig-backed shell). Injection-safe by default.
  * Timeout via Effect.timeout, output cap, exit code reporting.
- * Timeouts are retriable (auto-retried 3x by callTool).
  */
 
 import { $ } from "bun";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Schedule, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_BYTES = 8192;
 
-const inputSchema = z.object({
-  command: z.string().min(1),
-  timeout_ms: z
-    .number()
-    .int()
-    .min(1000)
-    .max(600_000)
-    .optional()
-    .describe("Timeout (default 30000, max 600000)"),
+const Input = Schema.Struct({
+  command: Schema.String,
+  timeout_ms: Schema.optional(
+    Schema.Int.annotate({ description: "Timeout (default 30000, max 600000)" }),
+  ),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
 const truncateOutput = (output: string, maxBytes: number): string => {
   if (Buffer.byteLength(output) <= maxBytes) return output;
@@ -41,26 +36,29 @@ const truncateOutput = (output: string, maxBytes: number): string => {
   return `${head}\n\n[... ${elided} bytes truncated ...]\n\n${tail}`;
 };
 
-export const shell = Tool.define<Input, string>({
+export const shell = Tool.define<Input, string, ToolFailure>({
   name: "shell",
   description:
     "Run a shell command. Returns stdout, stderr, exit code. Default timeout 30s (max 600s). Output capped at 8KB.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "destructive",
-  capabilities: ["shell.exec"],
-  execute: ({ command, timeout_ms }, { fail, retriable }) => {
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "write", capabilities: ["shell.exec"] }),
+  // Retry transient failures (e.g. timeouts, EBUSY) up to 3 times.
+  retry: Schedule.recurs(3) as unknown as Schedule.Schedule<unknown>,
+  execute: ({ command, timeout_ms }) => {
     const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
     const run = Effect.tryPromise({
       try: () => $`bash -c ${command}`.nothrow().quiet(),
-      catch: (e) => fail(`Shell failed: ${e}`),
+      catch: (e) => new ToolFailure({ message: `Shell failed: ${e}` }),
     });
 
     return run.pipe(
-      // Effect.timeout adds TimeoutError to error channel — catch and convert
       Effect.timeout(Duration.millis(timeout)),
       Effect.catchTag("TimeoutError", () =>
-        Effect.fail(retriable(`Command timed out after ${timeout}ms: ${command}`)),
+        Effect.fail(
+          new ToolFailure({ message: `Command timed out after ${timeout}ms: ${command}` }),
+        ),
       ),
       Effect.flatMap((result) => {
         const stdout = truncateOutput(result.stdout.toString(), MAX_OUTPUT_BYTES);
@@ -76,5 +74,4 @@ export const shell = Tool.define<Input, string>({
       }),
     );
   },
-  encode: (s) => s,
 });

@@ -20,10 +20,10 @@ import type * as Response from "effect/unstable/ai/Response";
 import * as AiError from "effect/unstable/ai/AiError";
 import { AgentLLMError } from "../agent/index.ts";
 import type { AgentError } from "../agent/index.ts";
-import type { ToolAny } from "../tool/index.ts";
+import type { Content, Presentation, ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
-import { theseusToolsToToolkit } from "../bridge/to-ai-tools.ts";
-import { ToolCallUnknown, ToolCallBadArgs, ToolCallFailed } from "./types.ts";
+import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
+import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -92,14 +92,32 @@ export const tryParseArgs = (tc: ToolCall): unknown => {
 };
 
 // ---------------------------------------------------------------------------
+// presentationToText — extract a text-only view of a Presentation.
+// Non-text content is summarized so UI events always have a stringy preview.
+// ---------------------------------------------------------------------------
+
+const contentToText = (c: Content): string => {
+  switch (c._tag) {
+    case "text":     return c.text;
+    case "image":    return `[image:${c.mime}]`;
+    case "audio":    return `[audio:${c.mime}]`;
+    case "resource": return c.text ?? `[resource:${c.uri}]`;
+  }
+};
+
+export const presentationToText = (p: Presentation): string =>
+  p.content.map(contentToText).join("");
+
+// ---------------------------------------------------------------------------
 // runToolCall — execute a single tool call.
 // Fails with typed ToolCallError — caller decides how to handle.
+// Tool-author failures (F) are folded into the Presentation's isError flag.
 // ---------------------------------------------------------------------------
 
 export const runToolCall = (
   tools: ReadonlyArray<ToolAny>,
   tc: ToolCall,
-): Effect.Effect<ToolCallResult, ToolCallError> => {
+): Effect.Effect<ToolCallResult, ToolCallError, any> => {
   const tool = tools.find((t) => t.name === tc.name);
   if (!tool)
     return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
@@ -109,11 +127,12 @@ export const runToolCall = (
     return Effect.fail(new ToolCallBadArgs({ callId: tc.id, name: tc.name, raw: tc.arguments }));
 
   return callTool(tool, parsed).pipe(
-    Effect.map((r) => ({
+    Effect.map((presentation): ToolCallResult => ({
       callId: tc.id,
       name: tc.name,
       args: parsed,
-      content: r.llmContent,
+      presentation,
+      textContent: presentationToText(presentation),
     })),
     Effect.mapError((cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause })),
   );
@@ -158,7 +177,6 @@ export type StreamDelta =
  * Streaming LLM call via LanguageModel.streamText with disableToolCallResolution.
  *
  * Emits text/thinking deltas via onChunk callback. Returns StepResult when done.
- * Falls back to non-streaming generateText if streaming yields no result.
  */
 export const stepStream = (
   messages: ReadonlyArray<Prompt.MessageEncoded>,
@@ -168,7 +186,7 @@ export const stepStream = (
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     const prompt = Prompt.make(messages);
-    const toolkit = theseusToolsToToolkit(tools);
+    const toolkit = toolsArrayToAiToolkit(tools);
 
     // Collect all parts from the stream
     const allParts: Response.StreamPartEncoded[] = [];
@@ -210,7 +228,7 @@ export const step = (
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     const prompt = Prompt.make(messages);
-    const toolkit = theseusToolsToToolkit(tools);
+    const toolkit = toolsArrayToAiToolkit(tools);
 
     const response = yield* mapAiErrors(
       agentName,

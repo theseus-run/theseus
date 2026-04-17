@@ -5,19 +5,19 @@
  * Returns context around the edit site.
  */
 
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const CONTEXT_LINES = 4;
 
-const inputSchema = z.object({
-  path: z.string().min(1),
-  old: z.string().min(1).describe("Text to find — must match exactly once"),
-  new: z.string().describe("Replacement text (empty string to delete)"),
+const Input = Schema.Struct({
+  path: Schema.String,
+  old: Schema.String.annotate({ description: "Text to find — must match exactly once" }),
+  new: Schema.String.annotate({ description: "Replacement text (empty string to delete)" }),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
 /** Find the position of `needle` in `haystack` using whitespace-normalized comparison. */
 const fuzzyFind = (haystack: string, needle: string): { start: number; end: number } | null => {
@@ -35,11 +35,9 @@ const fuzzyFind = (haystack: string, needle: string): { start: number; end: numb
       }
     }
     if (match) {
-      // Calculate character positions
       const start = haystackLines.slice(0, i).join("\n").length + (i > 0 ? 1 : 0);
       const end =
         haystackLines.slice(0, i + needleLines.length).join("\n").length + (i > 0 ? 1 : 0);
-      // Adjust: we want to use original line positions
       const matchedText = haystackLines.slice(i, i + needleLines.length).join("\n");
       const startPos = haystack.indexOf(matchedText);
       if (startPos !== -1) {
@@ -51,14 +49,14 @@ const fuzzyFind = (haystack: string, needle: string): { start: number; end: numb
   return null;
 };
 
-export const searchReplace = Tool.define<Input, string>({
+export const searchReplace = Tool.define<Input, string, ToolFailure>({
   name: "search_replace",
   description:
     "Replace text in a file. Exact match first, whitespace-normalized fallback. Errors if old text matches in multiple places.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "write",
-  capabilities: ["fs.write"],
-  execute: ({ path, old: oldText, new: newText }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "write", capabilities: ["fs.write"] }),
+  execute: ({ path, old: oldText, new: newText }) =>
     Effect.tryPromise({
       try: async () => {
         const file = Bun.file(path);
@@ -69,10 +67,8 @@ export const searchReplace = Tool.define<Input, string>({
         let result: string;
         let matchType: string;
 
-        // Try exact match first
         const idx = content.indexOf(oldText);
         if (idx !== -1) {
-          // Ensure unique match
           const secondIdx = content.indexOf(oldText, idx + 1);
           if (secondIdx !== -1) {
             throw new Error(
@@ -82,7 +78,6 @@ export const searchReplace = Tool.define<Input, string>({
           result = content.slice(0, idx) + newText + content.slice(idx + oldText.length);
           matchType = "exact";
         } else {
-          // Try whitespace-normalized fallback
           const fuzzy = fuzzyFind(content, oldText);
           if (!fuzzy) {
             throw new Error(
@@ -95,7 +90,6 @@ export const searchReplace = Tool.define<Input, string>({
 
         await Bun.write(path, result);
 
-        // Build context around edit site
         const lines = result.split("\n");
         const editStart = result.indexOf(newText);
         const editLine = editStart === -1 ? 0 : result.slice(0, editStart).split("\n").length - 1;
@@ -114,7 +108,6 @@ export const searchReplace = Tool.define<Input, string>({
 
         return `Replaced 1 occurrence (${matchType}) in ${path}\n\n${context}`;
       },
-      catch: (e) => fail(`${e}`),
+      catch: (e) => new ToolFailure({ message: `${e}` }),
     }),
-  encode: (s) => s,
 });

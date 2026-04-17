@@ -1,51 +1,83 @@
 /**
- * Tool execution pipeline — decode, execute, retry, validate, encode.
+ * callTool — the standard tool execution pipeline.
  *
- * callTool: the standard pipeline for calling a tool from the runtime.
- *   1. Decode raw LLM args via tool.decode
- *   2. Execute the tool
- *   3. Retry ToolErrorRetriable (3x, exponential backoff, jittered)
- *   4. Convert exhausted ToolErrorRetriable → ToolError
- *   5. Validate output via tool.validate (if provided)
- *   6. Encode output to string via tool.encode
- *   7. Wrap in ToolResult { llmContent }
+ *   1. Decode raw LLM args via `tool.input` (Effect Schema)
+ *   2. Apply `tool.retry` schedule (if configured) around execution
+ *   3. Run `tool.execute`
+ *   4. On success → `tool.present(output)` (or default text presentation)
+ *   5. On known failure (`F`) → build an error Presentation (isError: true)
+ *   6. On defect (unexpected throw) → fail with `ToolDefect`
+ *
+ * The returned Effect's error channel contains only runtime errors:
+ *   - `ToolInputError`  — schema decode failed (LLM sent bad args)
+ *   - `ToolDefect`      — tool crashed unexpectedly
+ *
+ * Typed failures (`F`) are absorbed into the Presentation (`isError: true`,
+ * `structured` carries the encoded failure) because the LLM needs to see them
+ * as tool-result content, not exceptions. Callers who need F in the error
+ * channel can match on `result.isError` or pre-compose around `callTool`.
  */
 
-import { Effect, Schedule } from "effect";
-import type { Tool, ToolResult } from "./index.ts";
-import { ToolError, type ToolErrorInput, type ToolErrorOutput, type ToolErrorRetriable } from "./index.ts";
+import { Effect, Schema } from "effect";
+import { textPresentation, type Presentation } from "./content.ts";
+import { ToolDefect, ToolInputError } from "./errors.ts";
+import type { Tool } from "./index.ts";
 
 // ---------------------------------------------------------------------------
-// Default retry schedule — 3 attempts, exponential backoff, jittered
+// Default presenters
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_RETRY_SCHEDULE = Schedule.both(
-  Schedule.exponential("200 millis").pipe(Schedule.jittered),
-  Schedule.recurs(3),
-);
+/** Stringify a value for LLM consumption. Strings pass through; other shapes are JSON. */
+const stringify = (v: unknown): string =>
+  typeof v === "string" ? v : JSON.stringify(v);
+
+/** Default success presentation: text content built from the output value. */
+const defaultPresent = <O>(output: O): Presentation =>
+  textPresentation(stringify(output), { structured: output });
+
+/** Default failure presentation: error-flagged text with the failure value as structured data. */
+const defaultPresentFailure = <F>(failure: F): Presentation =>
+  textPresentation(stringify(failure), { isError: true, structured: failure });
 
 // ---------------------------------------------------------------------------
-// callTool — the standard tool execution pipeline
+// callTool
 // ---------------------------------------------------------------------------
 
-/** Call a tool: decode → execute → retry retriable → validate → encode → ToolResult. */
-export const callTool = <I, O>(
-  tool: Tool<I, O>,
+/**
+ * Call a tool: decode → retry-wrapped execute → present.
+ * Typed failures are folded into an error `Presentation`; defects propagate.
+ */
+export const callTool = <I, O, F, R>(
+  tool: Tool<I, O, F, R>,
   raw: unknown,
-): Effect.Effect<ToolResult, ToolError | ToolErrorInput | ToolErrorOutput> =>
-  tool.decode(raw).pipe(
+): Effect.Effect<Presentation, ToolInputError | ToolDefect, R> => {
+  const present = tool.present ?? (defaultPresent as (o: O) => Presentation);
+
+  // Schema.Schema<I> has unconstrained decoding services at the type level;
+  // we cast to keep callTool's R channel clean. In practice the schema is pure.
+  // biome-ignore lint/suspicious/noExplicitAny: Schema decoding-service type erasure
+  const decodeStep: Effect.Effect<I, ToolInputError, never> = (
+    Schema.decodeUnknownEffect(tool.input as any)(raw) as Effect.Effect<I, Schema.SchemaError, never>
+  ).pipe(
+    Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })),
+  );
+
+  const executeStep = (input: I): Effect.Effect<O, F, R> => {
+    const run = tool.execute(input);
+    return tool.retry ? Effect.retry(run, tool.retry) : run;
+  };
+
+  return decodeStep.pipe(
     Effect.flatMap((input) =>
-      Effect.suspend(() => tool.execute(input)).pipe(
-        Effect.retry({
-          while: (e): e is ToolErrorRetriable => e._tag === "ToolErrorRetriable",
-          schedule: DEFAULT_RETRY_SCHEDULE,
+      executeStep(input).pipe(
+        Effect.matchEffect({
+          onSuccess: (output) => Effect.succeed(present(output)),
+          onFailure: (failure) => Effect.succeed(defaultPresentFailure<F>(failure)),
         }),
-        Effect.catchTag("ToolErrorRetriable", (e) =>
-          Effect.fail(new ToolError({ tool: e.tool, message: e.message, cause: e })),
-        ),
       ),
     ),
-    Effect.flatMap((output) => (tool.validate ? tool.validate(output) : Effect.succeed(output))),
-    Effect.flatMap(tool.encode),
-    Effect.map((llmContent) => ({ llmContent })),
+    Effect.catchDefect((cause) =>
+      Effect.fail(new ToolDefect({ tool: tool.name, cause })),
+    ),
   );
+};

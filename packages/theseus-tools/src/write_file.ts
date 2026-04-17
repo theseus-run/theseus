@@ -7,35 +7,32 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
-const inputSchema = z.object({
-  path: z.string().min(1),
-  content: z.string(),
+const Input = Schema.Struct({
+  path: Schema.String,
+  content: Schema.String,
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
-export const writeFile = Tool.define<Input, string>({
+export const writeFile = Tool.define<Input, string, ToolFailure>({
   name: "write_file",
   description: "Create or overwrite a file. Creates parent directories automatically.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "write",
-  capabilities: ["fs.write"],
-  execute: ({ path, content }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "write", capabilities: ["fs.write"] }),
+  execute: ({ path, content }) =>
     Effect.tryPromise({
       try: async () => {
-        // Create parent directories
         const dir = dirname(path);
         await mkdir(dir, { recursive: true });
-
         await Bun.write(path, content);
         const lineCount = content.split("\n").length;
         return `Wrote ${lineCount} lines to ${path}`;
       },
-      catch: (e) => fail(`Cannot write ${path}: ${e}`),
+      catch: (e) => new ToolFailure({ message: `Cannot write ${path}: ${e}` }),
     }),
-  encode: (s) => s,
 });

@@ -6,9 +6,9 @@
  */
 
 import { readdir } from "node:fs/promises";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
-import { z } from "zod";
+import { ToolFailure } from "./failure.ts";
 
 const NOISE = new Set([
   "node_modules",
@@ -26,20 +26,20 @@ const NOISE = new Set([
   ".DS_Store",
 ]);
 
-const inputSchema = z.object({
-  path: z.string().min(1),
+const Input = Schema.Struct({
+  path: Schema.String,
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
 
-export const listDir = Tool.define<Input, string>({
+export const listDir = Tool.define<Input, string, ToolFailure>({
   name: "list_dir",
   description:
     "List directory contents. Dirs end with /, symlinks with @. Skips node_modules, .git, dist, build, coverage.",
-  inputSchema: Tool.fromZod(inputSchema),
-  safety: "readonly",
-  capabilities: ["fs.read"],
-  execute: ({ path }, { fail }) =>
+  input: Input as unknown as Schema.Schema<Input>,
+  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  execute: ({ path }) =>
     Effect.tryPromise({
       try: async () => {
         const entries = await readdir(path, { withFileTypes: true });
@@ -61,7 +61,6 @@ export const listDir = Tool.define<Input, string>({
           })
           .join("\n");
       },
-      catch: (e) => fail(`Cannot list ${path}: ${e}`),
+      catch: (e) => new ToolFailure({ message: `Cannot list ${path}: ${e}` }),
     }),
-  encode: (s) => s,
 });
