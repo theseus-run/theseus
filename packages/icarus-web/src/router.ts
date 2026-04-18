@@ -4,7 +4,7 @@
  * Manual route tree — routes reference their parent explicitly.
  */
 
-import { createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
 // ---------------------------------------------------------------------------
 // Root

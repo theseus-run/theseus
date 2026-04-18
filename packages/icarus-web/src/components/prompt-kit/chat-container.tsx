@@ -2,7 +2,7 @@
  * ChatContainer — auto-scrolling chat wrapper using use-stick-to-bottom.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { cn } from "@/lib/utils";
 

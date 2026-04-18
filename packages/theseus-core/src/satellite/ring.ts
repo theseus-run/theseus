@@ -12,10 +12,9 @@
  */
 
 import { Context, Effect, Layer, Match, Ref } from "effect";
-import type { Phase, SatelliteAny, SatelliteContext } from "./types.ts";
-import { type Action, Pass } from "./types.ts";
-import type { SatelliteAbort } from "./types.ts";
 import { toolRecovery } from "./tool-recovery.ts";
+import type { Phase, SatelliteAbort, SatelliteAny, SatelliteContext } from "./types.ts";
+import { type Action, Pass } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // SatelliteRing — service definition
@@ -60,7 +59,9 @@ const applyActionToPhase = (phase: Phase, action: Action): Phase =>
     ),
     Match.tag("BlockTool", () => phase),
     Match.tag("ReplaceResult", (a) =>
-      phase._tag === "AfterTool" ? { ...phase, result: { ...phase.result, content: a.content } } : phase,
+      phase._tag === "AfterTool"
+        ? { ...phase, result: { ...phase.result, content: a.content } }
+        : phase,
     ),
     Match.tag("RecoverToolError", () => phase),
     Match.exhaustive,
@@ -80,15 +81,21 @@ const isTerminalAction = (action: Action): boolean =>
 export const makeSatelliteRing = (
   satellites: ReadonlyArray<SatelliteAny>,
 ): Effect.Effect<{
-  readonly run: (phase: Phase, ctx: SatelliteContext, onAction?: SatelliteActionCallback) => Effect.Effect<Action, SatelliteAbort>;
+  readonly run: (
+    phase: Phase,
+    ctx: SatelliteContext,
+    onAction?: SatelliteActionCallback,
+  ) => Effect.Effect<Action, SatelliteAbort>;
 }> =>
   Effect.gen(function* () {
     // Each satellite gets its own Ref for state persistence across iterations
-    const stateRefs = yield* Effect.all(
-      satellites.map((s) => Ref.make(s.initial)),
-    );
+    const stateRefs = yield* Effect.all(satellites.map((s) => Ref.make(s.initial)));
 
-    const run = (phase: Phase, ctx: SatelliteContext, onAction?: SatelliteActionCallback): Effect.Effect<Action, SatelliteAbort> =>
+    const run = (
+      phase: Phase,
+      ctx: SatelliteContext,
+      onAction?: SatelliteActionCallback,
+    ): Effect.Effect<Action, SatelliteAbort> =>
       Effect.gen(function* () {
         let currentPhase = phase;
         let lastAction: Action = Pass;
@@ -98,11 +105,7 @@ export const makeSatelliteRing = (
           const ref = stateRefs[i]!;
           const state = yield* Ref.get(ref);
 
-          const { action, state: nextState } = yield* satellite.handle(
-            currentPhase,
-            ctx,
-            state,
-          );
+          const { action, state: nextState } = yield* satellite.handle(currentPhase, ctx, state);
 
           yield* Ref.set(ref, nextState);
 
@@ -125,14 +128,10 @@ export const makeSatelliteRing = (
 // ---------------------------------------------------------------------------
 
 /** Default ring — includes tool error recovery. */
-export const DefaultSatelliteRing = Layer.effect(SatelliteRing)(
-  makeSatelliteRing([toolRecovery]),
-);
+export const DefaultSatelliteRing = Layer.effect(SatelliteRing)(makeSatelliteRing([toolRecovery]));
 
 /** Build a ring Layer from a list of satellites. Appends toolRecovery as fallback. */
 export const SatelliteRingLive = (
   satellites: ReadonlyArray<SatelliteAny>,
 ): Layer.Layer<SatelliteRing> =>
-  Layer.effect(SatelliteRing)(
-    makeSatelliteRing([...satellites, toolRecovery]),
-  );
+  Layer.effect(SatelliteRing)(makeSatelliteRing([...satellites, toolRecovery]));

@@ -2,7 +2,7 @@
  * useTheseusClient — creates and manages a shared RPC client connection.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TheseusClient } from "../lib/rpc-client";
 
 export function useTheseusClient() {

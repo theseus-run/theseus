@@ -2,22 +2,18 @@
  * Root layout shell.
  */
 
-import { Outlet, Link } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 import { useSyncExternalStore } from "react";
 import { connection } from "@/lib/queries";
 import type { ConnectionState } from "@/lib/rpc-client";
 
 function useConnectionState(): ConnectionState {
-  return useSyncExternalStore(
-    connection.subscribe,
-    connection.getState,
-  );
+  return useSyncExternalStore(connection.subscribe, connection.getState);
 }
 
 function ConnectionStatus() {
   const state = useConnectionState();
-  const label =
-    state === "connected" ? "ok" : state === "connecting" ? ".." : "xx";
+  const label = state === "connected" ? "ok" : state === "connecting" ? ".." : "xx";
   const color =
     state === "connected"
       ? "text-green-500"

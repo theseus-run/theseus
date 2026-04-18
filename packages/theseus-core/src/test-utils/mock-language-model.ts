@@ -9,8 +9,8 @@
  */
 
 import { Effect, Layer, Ref, Stream } from "effect";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as AiError from "effect/unstable/ai/AiError";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Response from "effect/unstable/ai/Response";
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,12 @@ export const textParts = (
   outputTokens = 5,
 ): Response.PartEncoded[] => [
   { type: "text", text: content } as Response.TextPartEncoded,
-  { type: "finish", reason: "stop", usage: makeUsage(inputTokens, outputTokens), response: undefined } as any,
+  {
+    type: "finish",
+    reason: "stop",
+    usage: makeUsage(inputTokens, outputTokens),
+    response: undefined,
+  } as any,
 ];
 
 export const toolCallParts = (
@@ -42,10 +47,19 @@ export const toolCallParts = (
 ): Response.PartEncoded[] => [
   ...calls.map((tc) => {
     let params: unknown;
-    try { params = JSON.parse(tc.arguments); } catch { params = {}; }
+    try {
+      params = JSON.parse(tc.arguments);
+    } catch {
+      params = {};
+    }
     return { type: "tool-call", id: tc.id, name: tc.name, params } as Response.ToolCallPartEncoded;
   }),
-  { type: "finish", reason: "tool-calls", usage: makeUsage(inputTokens, outputTokens), response: undefined } as any,
+  {
+    type: "finish",
+    reason: "tool-calls",
+    usage: makeUsage(inputTokens, outputTokens),
+    response: undefined,
+  } as any,
 ];
 
 // ---------------------------------------------------------------------------
@@ -89,7 +103,9 @@ export type MockResponse = Response.PartEncoded[] | AiError.AiError;
 // Mock LanguageModel Layer
 // ---------------------------------------------------------------------------
 
-export const makeMockLanguageModel = (responses: MockResponse[]): Layer.Layer<LanguageModel.LanguageModel> =>
+export const makeMockLanguageModel = (
+  responses: MockResponse[],
+): Layer.Layer<LanguageModel.LanguageModel> =>
   Layer.effect(LanguageModel.LanguageModel)(
     Effect.gen(function* () {
       const ref = yield* Ref.make(0);
@@ -97,9 +113,14 @@ export const makeMockLanguageModel = (responses: MockResponse[]): Layer.Layer<La
       const getNext = Effect.gen(function* () {
         const i = yield* Ref.getAndUpdate(ref, (n) => n + 1);
         const r = responses[i];
-        if (!r) return yield* Effect.fail(
-          AiError.make({ module: "MockLLM", method: "call", reason: new AiError.UnknownError({ description: "unexpected call" }) }),
-        );
+        if (!r)
+          return yield* Effect.fail(
+            AiError.make({
+              module: "MockLLM",
+              method: "call",
+              reason: new AiError.UnknownError({ description: "unexpected call" }),
+            }),
+          );
         if (r instanceof AiError.AiError) return yield* Effect.fail(r);
         return r;
       });
@@ -110,9 +131,7 @@ export const makeMockLanguageModel = (responses: MockResponse[]): Layer.Layer<La
         streamText: () =>
           Stream.unwrap(
             getNext.pipe(
-              Effect.map((parts) =>
-                Stream.fromIterable(partEncodedToStreamParts(parts)),
-              ),
+              Effect.map((parts) => Stream.fromIterable(partEncodedToStreamParts(parts))),
             ),
           ),
       });

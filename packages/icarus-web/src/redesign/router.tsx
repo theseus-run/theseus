@@ -1,21 +1,21 @@
 import {
-  Outlet,
-  RouterProvider,
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
+  Outlet,
+  RouterProvider,
 } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
-import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
 import { StatusMark } from "@/components/ui/status-mark";
-import { ToolDetailsSheet } from "./tool-details-sheet";
-import { useRedesignState } from "./state";
+import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
 import { DashboardPage } from "./routes/dashboard-page";
-import { ShowcaseIndexPage } from "./routes/showcase-index-page";
-import { ShowcaseTypographyPage } from "./routes/showcase-typography-page";
-import { ShowcaseStatusPage } from "./routes/showcase-status-page";
 import { ShowcaseFieldsPage } from "./routes/showcase-fields-page";
+import { ShowcaseIndexPage } from "./routes/showcase-index-page";
 import { ShowcasePatternsPage } from "./routes/showcase-patterns-page";
+import { ShowcaseStatusPage } from "./routes/showcase-status-page";
+import { ShowcaseTypographyPage } from "./routes/showcase-typography-page";
+import { useRedesignState } from "./state";
+import { ToolDetailsSheet } from "./tool-details-sheet";
 
 function RedesignLayout() {
   const { selectedTool, closeTool, liveFrame } = useRedesignState();

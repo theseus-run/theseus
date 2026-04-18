@@ -11,10 +11,10 @@
  * Requires LanguageModel from effect/unstable/ai.
  */
 
-import { Effect, Stream } from "effect";
+import { Effect, type Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
-import { dispatch, type DispatchEvent, type DispatchOptions } from "../dispatch/index.ts";
+import { type DispatchEvent, type DispatchOptions, dispatch } from "../dispatch/index.ts";
 import type { DispatchLog } from "../dispatch/log.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
 
@@ -51,5 +51,8 @@ export const gruntAwait = (
   blueprint: Blueprint,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-  grunt(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));
+): Effect.Effect<
+  AgentResult,
+  AgentError,
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+> => grunt(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

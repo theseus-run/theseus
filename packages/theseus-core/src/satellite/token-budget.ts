@@ -13,7 +13,12 @@ export const tokenBudget = (maxTokens: number): Satellite<number> => ({
     if (phase._tag !== "AfterCall") return Effect.succeed({ action: Pass, state: used });
     const next = used + phase.stepResult.usage.inputTokens + phase.stepResult.usage.outputTokens;
     return next > maxTokens
-      ? Effect.fail(new SatelliteAbort({ satellite: "token-budget", reason: `${next}/${maxTokens} tokens used` }))
+      ? Effect.fail(
+          new SatelliteAbort({
+            satellite: "token-budget",
+            reason: `${next}/${maxTokens} tokens used`,
+          }),
+        )
       : Effect.succeed({ action: Pass, state: next });
   },
 });

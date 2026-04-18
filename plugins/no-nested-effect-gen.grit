@@ -2,6 +2,6 @@ engine biome(1.0)
 language js
 
 `Effect.gen($fn)` as $outer where {
-  $fn <: contains `Effect.gen($inner)`,
-  register_diagnostic(message="Avoid nested Effect.gen. Flatten into a single generator per function — nested generators hide sequencing.", severity="warning")
+  $fn <: contains `Effect.gen($inner)` as $innerCall,
+  register_diagnostic(span=$innerCall, message="Avoid nested Effect.gen. Flatten into a single generator per function — nested generators hide sequencing.", severity="warning")
 }

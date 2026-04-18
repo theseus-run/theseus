@@ -5,20 +5,17 @@
  * DispatchRegistry) and returns typed results matching the RPC schemas.
  */
 
+import * as CapsuleNs from "@theseus.run/core/Capsule";
+import * as Dispatch from "@theseus.run/core/Dispatch";
+import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
+import * as Satellite from "@theseus.run/core/Satellite";
 import { Effect, Layer, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as Dispatch from "@theseus.run/core/Dispatch";
-import * as Satellite from "@theseus.run/core/Satellite";
-import * as CapsuleNs from "@theseus.run/core/Capsule";
-import {
-  TheseusRpc,
-  RpcError,
-} from "@theseus.run/core/Rpc";
 import { DispatchRegistry } from "./registry.ts";
-import { ToolRegistry, resolveBlueprint } from "./tool-registry.ts";
+import { serializeEvent } from "./serialize.ts";
 import { TheseusDb } from "./store/sqlite.ts";
 import { SqliteCapsuleLive } from "./store/sqlite-capsule.ts";
-import { serializeEvent } from "./serialize.ts";
+import { resolveBlueprint, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
 // Tags to skip over the wire (deltas are large + noisy)
@@ -86,10 +83,7 @@ export const HandlersLive = TheseusRpc.toLayer({
         Layer.succeed(Dispatch.Log, log),
       );
 
-      const handle = yield* Effect.provide(
-        Dispatch.dispatch(blueprint, task, options),
-        depsLayer,
-      );
+      const handle = yield* Effect.provide(Dispatch.dispatch(blueprint, task, options), depsLayer);
       yield* registry.register(handle, blueprint.name);
 
       // Return the event stream — RPC framework handles serialization + backpressure
@@ -112,7 +106,11 @@ export const HandlersLive = TheseusRpc.toLayer({
                   yield* capsule.log({
                     type: "dispatch.done",
                     by: "runtime",
-                    data: { dispatchId: handle.dispatchId, result: e.result.result, summary: e.result.summary },
+                    data: {
+                      dispatchId: handle.dispatchId,
+                      result: e.result.result,
+                      summary: e.result.summary,
+                    },
                   });
                   yield* registry.updateStatus(handle.dispatchId, { state: "done" });
                 })
@@ -191,7 +189,9 @@ export const HandlersLive = TheseusRpc.toLayer({
     Effect.gen(function* () {
       const { db } = yield* TheseusDb;
       const rows = db
-        .prepare("SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id")
+        .prepare(
+          "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
+        )
         .all(capsuleId) as Array<{ type: string; at: string; by: string; data_json: string }>;
       return rows.map((row) => ({
         type: row.type,

@@ -6,8 +6,8 @@
  */
 
 import { Effect, Match } from "effect";
-import { textPresentation } from "../tool/index.ts";
 import type { ToolCallResult } from "../dispatch/types.ts";
+import { textPresentation } from "../tool/index.ts";
 import type { Satellite } from "./types.ts";
 import { Pass, RecoverToolError } from "./types.ts";
 

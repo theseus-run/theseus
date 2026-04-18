@@ -105,12 +105,14 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
           // Look for parent link in events
           const entries = yield* Ref.get(eventsRef);
           const parentLink = entries.find(
-            (e) => e.dispatchId === dispatchId
-              && e.event._tag === "Injected"
-              && e.event.injection === "ParentLink",
+            (e) =>
+              e.dispatchId === dispatchId &&
+              e.event._tag === "Injected" &&
+              e.event.injection === "ParentLink",
           );
 
-          const parentId = parentLink?.event._tag === "Injected" ? parentLink.event.detail : undefined;
+          const parentId =
+            parentLink?.event._tag === "Injected" ? parentLink.event.detail : undefined;
           const opts: DispatchOptions = {
             dispatchId,
             messages: latest.messages,
@@ -141,7 +143,10 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
                 startedAt: first.timestamp,
                 completedAt: done ? done.timestamp : null,
                 status: done ? "done" : last.event._tag === "Done" ? "done" : "running",
-                usage: done?.event._tag === "Done" ? done.event.result.usage : { inputTokens: 0, outputTokens: 0 },
+                usage:
+                  done?.event._tag === "Done"
+                    ? done.event.result.usage
+                    : { inputTokens: 0, outputTokens: 0 },
               });
             }
             summaries.sort((a, b) => b.startedAt - a.startedAt);

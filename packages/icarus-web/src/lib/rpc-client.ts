@@ -11,8 +11,8 @@
  * For non-streaming RPCs, the result comes in the Exit message.
  */
 
-import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 import type { Event as CapsuleEvent } from "@theseus.run/core/Capsule";
+import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 
 // ---------------------------------------------------------------------------
 // Types

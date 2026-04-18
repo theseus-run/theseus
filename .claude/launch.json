@@ -4,7 +4,11 @@
     {
       "name": "theseus-server",
       "runtimeExecutable": "/Users/romandubinin/.bun/bin/bun",
-      "runtimeArgs": ["run", "packages/theseus-server/src/index.ts", "/Users/romandubinin/romanothego/theseus"],
+      "runtimeArgs": [
+        "run",
+        "packages/theseus-server/src/index.ts",
+        "/Users/romandubinin/romanothego/theseus"
+      ],
       "port": 4800
     },
     {

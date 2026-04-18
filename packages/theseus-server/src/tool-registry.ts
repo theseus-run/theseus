@@ -5,15 +5,15 @@
  * The server looks up actual Tool implementations by name.
  */
 
-import * as ServiceMap from "effect/ServiceMap";
-import type * as Tool from "@theseus.run/core/Tool";
 import type * as Agent from "@theseus.run/core/Agent";
+import type * as Tool from "@theseus.run/core/Tool";
+import { Context } from "effect";
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-export class ToolRegistry extends ServiceMap.Service<
+export class ToolRegistry extends Context.Service<
   ToolRegistry,
   {
     readonly resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.Any>;

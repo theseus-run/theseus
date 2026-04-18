@@ -17,12 +17,12 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
+  AgentResultSchema,
   BlueprintSchema,
+  CapsuleEventSchema,
   DispatchEventSchema,
   DispatchSummarySchema,
   MessageSchema,
-  AgentResultSchema,
-  CapsuleEventSchema,
   UsageSchema,
 } from "./schemas.ts";
 
@@ -30,13 +30,10 @@ import {
 // Error schema
 // ---------------------------------------------------------------------------
 
-export class RpcError extends Schema.TaggedErrorClass<RpcError>()(
-  "RpcError",
-  {
-    code: Schema.String,
-    message: Schema.String,
-  },
-) {}
+export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
+  code: Schema.String,
+  message: Schema.String,
+}) {}
 
 // ---------------------------------------------------------------------------
 // Procedures

@@ -8,9 +8,8 @@
  * They compose via the Layer.
  */
 
-import { Context, Effect } from "effect";
-import type { Mission } from "./index.ts";
-import type { MissionErrorInvalidTransition } from "./index.ts";
+import { Context, type Effect } from "effect";
+import type { Mission, MissionErrorInvalidTransition } from "./index.ts";
 import type { MissionStatus } from "./status.ts";
 
 export class MissionContext extends Context.Service<

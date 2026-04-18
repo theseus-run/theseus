@@ -1,9 +1,9 @@
+import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { XStack, YStack } from "@/components/ui/stack";
+import { StackItem } from "@/components/ui/stack-item";
 import { StatusMark } from "@/components/ui/status-mark";
 import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
 import { Token } from "@/components/ui/token";
-import { XStack, YStack } from "@/components/ui/stack";
-import { StackItem } from "@/components/ui/stack-item";
-import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
 export function ShowcaseStatusPage() {
   return (

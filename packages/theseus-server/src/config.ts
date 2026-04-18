@@ -12,13 +12,13 @@
  *   THESEUS_COPILOT_API_URL  — Copilot API base URL
  */
 
-import { Layer, ServiceMap } from "effect";
+import { Context, Layer } from "effect";
 
 // ---------------------------------------------------------------------------
 // RuntimeConfig — Effect service for configuration
 // ---------------------------------------------------------------------------
 
-export class RuntimeConfig extends ServiceMap.Service<
+export class RuntimeConfig extends Context.Service<
   RuntimeConfig,
   {
     readonly model: string;
@@ -51,8 +51,6 @@ export const RuntimeConfigLive = Layer.succeed(RuntimeConfig, {
   maxTokens: envInt("THESEUS_MAX_TOKENS", 4096),
   shellMaxOutput: envInt("THESEUS_SHELL_MAX_OUTPUT", 8192),
   copilotAuthUrl:
-    env("THESEUS_COPILOT_AUTH_URL") ??
-    "https://api.github.com/copilot_internal/v2/token",
-  copilotApiUrl:
-    env("THESEUS_COPILOT_API_URL") ?? "https://api.githubcopilot.com",
+    env("THESEUS_COPILOT_AUTH_URL") ?? "https://api.github.com/copilot_internal/v2/token",
+  copilotApiUrl: env("THESEUS_COPILOT_API_URL") ?? "https://api.githubcopilot.com",
 });

@@ -36,7 +36,9 @@ export class MissionError extends Data.TaggedError("MissionError")<{
 }> {}
 
 /** Invalid state transition (e.g. done → running). */
-export class MissionErrorInvalidTransition extends Data.TaggedError("MissionErrorInvalidTransition")<{
+export class MissionErrorInvalidTransition extends Data.TaggedError(
+  "MissionErrorInvalidTransition",
+)<{
   readonly mission: string;
   readonly from: MissionStatus;
   readonly to: MissionStatus;
@@ -46,4 +48,4 @@ export class MissionErrorInvalidTransition extends Data.TaggedError("MissionErro
 export type { MissionId } from "./id.ts";
 export { makeMissionId } from "./id.ts";
 export type { MissionStatus } from "./status.ts";
-export { isValidTransition, deriveStatus } from "./status.ts";
+export { deriveStatus, isValidTransition } from "./status.ts";

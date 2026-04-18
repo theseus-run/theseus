@@ -4,9 +4,9 @@
  * Uses Bun.Glob (native Zig-backed scanner). Caps at 100 results.
  */
 
+import * as Tool from "@theseus.run/core/Tool";
 import { Glob } from "bun";
 import { Effect, Schema } from "effect";
-import * as Tool from "@theseus.run/core/Tool";
 import { ToolFailure } from "./failure.ts";
 
 const MAX_RESULTS = 100;

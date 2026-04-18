@@ -12,14 +12,13 @@
  */
 
 import { Database } from "bun:sqlite";
-import { Effect, Layer } from "effect";
-import * as ServiceMap from "effect/ServiceMap";
+import { Context, Effect, Layer } from "effect";
 
 // ---------------------------------------------------------------------------
 // TheseusDb — shared service for the SQLite connection
 // ---------------------------------------------------------------------------
 
-export class TheseusDb extends ServiceMap.Service<
+export class TheseusDb extends Context.Service<
   TheseusDb,
   {
     readonly db: Database;

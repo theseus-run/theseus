@@ -3,10 +3,10 @@
  */
 
 import { Match } from "effect";
-import type { TreeSitterNode } from "./tree-sitter.ts";
+import { children, truncate } from "./ast.ts";
 import type { Symbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
-import { children, truncate } from "./ast.ts";
+import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Python AST root. */
 export const extractSymbolsPython = (root: TreeSitterNode): Symbol[] =>
@@ -24,7 +24,14 @@ export const extractSymbolsPython = (root: TreeSitterNode): Symbol[] =>
           for (const member of children(body)) {
             if (member.type === "function_definition") {
               const mName = member.childForFieldName("name")?.text ?? "";
-              symbols.push(sym(member, "method", `${name}.${mName}`, member.childForFieldName("parameters")?.text ?? ""));
+              symbols.push(
+                sym(
+                  member,
+                  "method",
+                  `${name}.${mName}`,
+                  member.childForFieldName("parameters")?.text ?? "",
+                ),
+              );
             }
           }
         }

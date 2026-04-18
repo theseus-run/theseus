@@ -10,8 +10,8 @@
  * @jsxImportSource @theseus.run/jsx-md
  */
 
-import { Bold, Code, H2, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
 import type { VNode } from "@theseus.run/jsx-md";
+import { Bold, Code, H2, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
 import type { DelegateInput } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -22,18 +22,26 @@ export function Briefing({ task, criteria, context }: DelegateInput): VNode {
   return (
     <>
       <H2>Briefing</H2>
-      <P><Bold>Task:</Bold> {task}</P>
+      <P>
+        <Bold>Task:</Bold> {task}
+      </P>
       {criteria.length > 0 && (
         <>
-          <P><Bold>Done when:</Bold></P>
+          <P>
+            <Bold>Done when:</Bold>
+          </P>
           <Ul>
-            {criteria.map((c) => <Li>{c}</Li>)}
+            {criteria.map((c) => (
+              <Li>{c}</Li>
+            ))}
           </Ul>
         </>
       )}
       {context && (
         <>
-          <P><Bold>Context:</Bold></P>
+          <P>
+            <Bold>Context:</Bold>
+          </P>
           <P>{context}</P>
         </>
       )}
@@ -45,7 +53,10 @@ export function Briefing({ task, criteria, context }: DelegateInput): VNode {
 // <WorkerPrompt> — full system prompt for a briefed worker
 // ---------------------------------------------------------------------------
 
-export function WorkerPrompt({ basePrompt, briefing }: {
+export function WorkerPrompt({
+  basePrompt,
+  briefing,
+}: {
   readonly basePrompt: string;
   readonly briefing: DelegateInput;
 }): VNode {
@@ -59,9 +70,15 @@ export function WorkerPrompt({ basePrompt, briefing }: {
         When done, call the <Code>theseus.report</Code> tool:
       </P>
       <Ul>
-        <Li><Bold>success</Bold> — task completed, content is the deliverable</Li>
-        <Li><Bold>error</Bold> — not completed but you found actionable information</Li>
-        <Li><Bold>defect</Bold> — infrastructure broken, tools not working</Li>
+        <Li>
+          <Bold>success</Bold> — task completed, content is the deliverable
+        </Li>
+        <Li>
+          <Bold>error</Bold> — not completed but you found actionable information
+        </Li>
+        <Li>
+          <Bold>defect</Bold> — infrastructure broken, tools not working
+        </Li>
       </Ul>
     </>
   );

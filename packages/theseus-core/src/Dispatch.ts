@@ -47,17 +47,16 @@ export type {
 // Log (audit / replay / restore)
 // ---------------------------------------------------------------------------
 
+export type {
+  DispatchSummary,
+  EventEntry,
+  Snapshot,
+} from "./dispatch/index.ts";
 export {
+  DispatchDefaults as Defaults,
   DispatchLog as Log,
   InMemoryDispatchLog as InMemoryLog,
   NoopDispatchLog as NoopLog,
-  DispatchDefaults as Defaults,
-} from "./dispatch/index.ts";
-
-export type {
-  EventEntry,
-  Snapshot,
-  DispatchSummary,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------

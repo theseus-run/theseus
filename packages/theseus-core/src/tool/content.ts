@@ -44,11 +44,7 @@ export interface ResourceContent {
 }
 
 /** Multimodal content block. */
-export type Content =
-  | TextContent
-  | ImageContent
-  | AudioContent
-  | ResourceContent;
+export type Content = TextContent | ImageContent | AudioContent | ResourceContent;
 
 // ---------------------------------------------------------------------------
 // Presentation — the full response shape returned by callTool

@@ -41,8 +41,8 @@ export const makeCapsuleId = (slug: string): Effect.Effect<CapsuleId> =>
  */
 export interface CapsuleEvent {
   readonly type: string;
-  readonly at: string;   // ISO timestamp — auto-set by log()
-  readonly by: string;   // "runtime" | agent slug
+  readonly at: string; // ISO timestamp — auto-set by log()
+  readonly by: string; // "runtime" | agent slug
   readonly data: unknown;
 }
 

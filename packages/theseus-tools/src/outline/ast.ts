@@ -25,8 +25,10 @@ export const hasKeyword = (node: TreeSitterNode, keyword: string): boolean =>
 /** Extract a concise signature from a node (params + return type, no body). */
 export const extractSignature = (node: TreeSitterNode): string => {
   const params = node.childForFieldName("parameters");
-  const returnType = node.childForFieldName("return_type") ?? findChildByType(node, "type_annotation");
-  const typeParams = node.childForFieldName("type_parameters") ?? findChildByType(node, "type_parameters");
+  const returnType =
+    node.childForFieldName("return_type") ?? findChildByType(node, "type_annotation");
+  const typeParams =
+    node.childForFieldName("type_parameters") ?? findChildByType(node, "type_parameters");
 
   let sig = "";
   if (typeParams) sig += typeParams.text;
@@ -48,6 +50,11 @@ export const extractTypeValue = (node: TreeSitterNode): string => {
 /** Extract superclass / implements from a class declaration. */
 export const extractClassExtends = (node: TreeSitterNode): string =>
   children(node)
-    .filter((c) => c.type === "extends_clause" || c.type === "implements_clause" || c.type === "class_heritage")
+    .filter(
+      (c) =>
+        c.type === "extends_clause" ||
+        c.type === "implements_clause" ||
+        c.type === "class_heritage",
+    )
     .map((c) => c.text)
     .join(" ");

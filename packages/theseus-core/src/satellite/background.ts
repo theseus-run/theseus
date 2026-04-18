@@ -21,8 +21,7 @@
  */
 
 import { Deferred, Effect, Option } from "effect";
-import type { SatelliteAbort } from "./types.ts";
-import type { Phase, SatelliteContext, Action, Satellite } from "./types.ts";
+import type { Action, Phase, Satellite, SatelliteAbort, SatelliteContext } from "./types.ts";
 import { Pass } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -36,10 +35,7 @@ export interface BackgroundSatelliteConfig<I, O> {
    * Inspect the current phase. Return non-null to kick off background work.
    * Only called when no work is already in-flight.
    */
-  readonly shouldStart: (
-    phase: Phase,
-    ctx: SatelliteContext,
-  ) => I | null;
+  readonly shouldStart: (phase: Phase, ctx: SatelliteContext) => I | null;
   /**
    * The async work. Runs as a forked detached fiber — may take arbitrarily long.
    * Errors are silently dropped (deferred resets to idle).
@@ -70,10 +66,11 @@ export const backgroundSatellite = <I, O>(
 ): Satellite<BgState<O>> => ({
   name: config.name,
   initial: { deferred: null },
-  handle: (phase: Phase, ctx: SatelliteContext, state: BgState<O>): Effect.Effect<
-    { readonly action: Action; readonly state: BgState<O> },
-    SatelliteAbort
-  > =>
+  handle: (
+    phase: Phase,
+    ctx: SatelliteContext,
+    state: BgState<O>,
+  ): Effect.Effect<{ readonly action: Action; readonly state: BgState<O> }, SatelliteAbort> =>
     Effect.gen(function* () {
       // 1. Poll: did previous work complete?
       if (state.deferred !== null) {
@@ -81,15 +78,21 @@ export const backgroundSatellite = <I, O>(
         if (Option.isSome(poll)) {
           // poll.value is an Effect<O, E> — run it to get the result
           const result = yield* poll.value.pipe(
-            Effect.map((value) => ({
-              action: config.toAction(value, phase),
-              state: { deferred: null },
-            }) as const),
+            Effect.map(
+              (value) =>
+                ({
+                  action: config.toAction(value, phase),
+                  state: { deferred: null },
+                }) as const,
+            ),
             Effect.sandbox,
-            Effect.orElseSucceed(() => ({
-              action: Pass,
-              state: { deferred: null },
-            }) as const),
+            Effect.orElseSucceed(
+              () =>
+                ({
+                  action: Pass,
+                  state: { deferred: null },
+                }) as const,
+            ),
           );
           return result;
         }

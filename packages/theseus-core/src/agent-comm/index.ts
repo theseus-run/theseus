@@ -11,10 +11,9 @@
  * Import <Briefing>, <WorkerPrompt> from "@theseus.run/core/agent-comm/briefing.tsx"
  */
 
-// Types (pure, no jsx)
-export type { DelegateInput, ReportInput } from "./types.ts";
-
+export { makeLogTool, makeReadCapsuleTool } from "./capsule-tools.ts";
+export { makeDelegate } from "./delegate.ts";
 // Tools
 export { report } from "./report.ts";
-export { makeDelegate } from "./delegate.ts";
-export { makeLogTool, makeReadCapsuleTool } from "./capsule-tools.ts";
+// Types (pure, no jsx)
+export type { DelegateInput, ReportInput } from "./types.ts";

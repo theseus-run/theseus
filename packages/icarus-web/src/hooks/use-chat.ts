@@ -2,8 +2,8 @@
  * useChat — React hook managing chat state + RPC client lifecycle.
  */
 
-import { useState, useCallback, useRef } from "react";
-import type { TheseusClient, DispatchEvent } from "../lib/rpc-client";
+import { useCallback, useRef, useState } from "react";
+import type { DispatchEvent, TheseusClient } from "../lib/rpc-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,11 +103,7 @@ export function useChat(client: TheseusClient | null) {
           );
           break;
         case "SatelliteAction":
-          addMessage(
-            "event",
-            `[${event.agent}] * ${event.satellite}: ${event.action}`,
-            event,
-          );
+          addMessage("event", `[${event.agent}] * ${event.satellite}: ${event.action}`, event);
           break;
         case "Injected":
           addMessage(
@@ -214,5 +210,4 @@ export function useChat(client: TheseusClient | null) {
   };
 }
 
-const truncate = (s: string, max: number) =>
-  s.length > max ? `${s.slice(0, max - 1)}...` : s;
+const truncate = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}...` : s);

@@ -12,19 +12,26 @@
  */
 
 import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Stream } from "effect";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import { AgentInterrupted, AgentCycleExceeded } from "../agent/index.ts";
-import type { AgentResult, AgentError, Blueprint } from "../agent/index.ts";
+import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
+import { AgentCycleExceeded, AgentInterrupted } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
-import { textPresentation } from "../tool/index.ts";
 import type { Presentation } from "../tool/index.ts";
+import { textPresentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, stepStream, tryParseArgs } from "./step.ts";
-import type { ToolCallError, ToolCallResult } from "./types.ts";
-import type { DispatchEvent, DispatchHandle, DispatchOptions, Injection, Usage } from "./types.ts";
+import type {
+  DispatchEvent,
+  DispatchHandle,
+  DispatchOptions,
+  Injection,
+  ToolCallError,
+  ToolCallResult,
+  Usage,
+} from "./types.ts";
 
 // Build a synthetic ToolCallResult from a plain text string (used by satellites).
 const syntheticResult = (
@@ -96,7 +103,11 @@ export const dispatch = (
   blueprint: Blueprint,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<DispatchHandle, never, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
+): Effect.Effect<
+  DispatchHandle,
+  never,
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+> =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -115,7 +126,10 @@ export const dispatch = (
       );
 
     const emitAll = <T>(items: ReadonlyArray<T>, toEvent: (item: T) => DispatchEvent) =>
-      Effect.all(items.map((i) => emit(toEvent(i))), { concurrency: "unbounded" });
+      Effect.all(
+        items.map((i) => emit(toEvent(i))),
+        { concurrency: "unbounded" },
+      );
 
     // -----------------------------------------------------------------------
     // loop — the dispatch loop, runs as a forked fiber
@@ -125,202 +139,277 @@ export const dispatch = (
       messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
       iterations: number,
-    ): Effect.Effect<AgentResult, AgentError | SatelliteAbort, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-      Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(Effect.gen(function* () {
-        yield* Effect.yieldNow;
+    ): Effect.Effect<
+      AgentResult,
+      AgentError | SatelliteAbort,
+      LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+    > =>
+      Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(
+        Effect.gen(function* () {
+          yield* Effect.yieldNow;
 
-        const logInjection = (injection: Injection): Effect.Effect<void> => {
-          const detail = injection._tag === "Redirect" ? injection.task
-            : injection._tag === "Interrupt" ? injection.reason
-            : undefined;
-          const base = { _tag: "Injected" as const, agent: blueprint.name, iteration: iterations, injection: injection._tag };
-          return emit(detail !== undefined ? { ...base, detail } : base);
-        };
-
-        const next = yield* drainInjections(injectionQueue, messages, logInjection);
-        if (next === null)
-          return yield* Effect.fail(
-            new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
-          );
-
-        if (iterations >= maxIter)
-          return yield* Effect.fail(
-            new AgentCycleExceeded({ agent: blueprint.name, max: maxIter, usage }),
-          );
-
-        yield* Ref.set(messagesRef, next);
-        yield* log.snapshot(dispatchId, iterations, next, usage);
-
-        const ring = yield* SatelliteRing;
-        const satCtx = { agent: blueprint.name, iteration: iterations };
-        const onSatAction = (satellite: string, phase: string, action: string) =>
-          emit({ _tag: "SatelliteAction", agent: blueprint.name, iteration: iterations, satellite, phase, action });
-
-        // --- Phase: BeforeCall ---
-        const beforeCallAction = yield* ring.run(
-          { _tag: "BeforeCall", messages: next },
-          satCtx,
-          onSatAction,
-        );
-        const callMessages = beforeCallAction._tag === "TransformMessages"
-          ? beforeCallAction.messages
-          : next;
-
-        yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
-
-        const rawResult = yield* stepStream(callMessages, blueprint.tools, blueprint.name, (chunk) =>
-          Match.value(chunk.type).pipe(
-            Match.when("text-delta", () =>
-              emit({ _tag: "TextDelta", agent: blueprint.name, iteration: iterations, content: chunk.delta }),
-            ),
-            Match.when("reasoning-delta", () =>
-              emit({ _tag: "ThinkingDelta", agent: blueprint.name, iteration: iterations, content: chunk.delta }),
-            ),
-            Match.orElse(() => Effect.void),
-          ),
-        ).pipe(Effect.withSpan("llm-call", { attributes: { "llm.agent": blueprint.name, "llm.iteration": iterations } }));
-        const totalUsage = addUsage(usage, rawResult.usage);
-
-        if (rawResult.thinking) {
-          yield* emit({ _tag: "Thinking", agent: blueprint.name, iteration: iterations, content: rawResult.thinking });
-        }
-
-        // --- Phase: AfterCall ---
-        const afterCallAction = yield* ring.run(
-          { _tag: "AfterCall", stepResult: rawResult },
-          satCtx,
-          onSatAction,
-        );
-        const result = afterCallAction._tag === "TransformStepResult"
-          ? afterCallAction.stepResult
-          : rawResult;
-
-        if (result._tag === "text") return {
-          result: "unstructured" as const,
-          summary: "",
-          content: result.content,
-          usage: totalUsage,
-        };
-
-        // Check for theseus.report — terminates the loop with structured data
-        const reportCall = result.toolCalls.find((tc) => tc.name === report.name);
-        if (reportCall) {
-          const args = tryParseArgs(reportCall) as {
-            result?: string;
-            summary?: string;
-            content?: string;
+          const logInjection = (injection: Injection): Effect.Effect<void> => {
+            const detail =
+              injection._tag === "Redirect"
+                ? injection.task
+                : injection._tag === "Interrupt"
+                  ? injection.reason
+                  : undefined;
+            const base = {
+              _tag: "Injected" as const,
+              agent: blueprint.name,
+              iteration: iterations,
+              injection: injection._tag,
+            };
+            return emit(detail !== undefined ? { ...base, detail } : base);
           };
-          yield* emit({
-            _tag: "ToolCalling",
+
+          const next = yield* drainInjections(injectionQueue, messages, logInjection);
+          if (next === null)
+            return yield* Effect.fail(
+              new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
+            );
+
+          if (iterations >= maxIter)
+            return yield* Effect.fail(
+              new AgentCycleExceeded({ agent: blueprint.name, max: maxIter, usage }),
+            );
+
+          yield* Ref.set(messagesRef, next);
+          yield* log.snapshot(dispatchId, iterations, next, usage);
+
+          const ring = yield* SatelliteRing;
+          const satCtx = { agent: blueprint.name, iteration: iterations };
+          const onSatAction = (satellite: string, phase: string, action: string) =>
+            emit({
+              _tag: "SatelliteAction",
+              agent: blueprint.name,
+              iteration: iterations,
+              satellite,
+              phase,
+              action,
+            });
+
+          // --- Phase: BeforeCall ---
+          const beforeCallAction = yield* ring.run(
+            { _tag: "BeforeCall", messages: next },
+            satCtx,
+            onSatAction,
+          );
+          const callMessages =
+            beforeCallAction._tag === "TransformMessages" ? beforeCallAction.messages : next;
+
+          yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
+
+          const rawResult = yield* stepStream(
+            callMessages,
+            blueprint.tools,
+            blueprint.name,
+            (chunk) =>
+              Match.value(chunk.type).pipe(
+                Match.when("text-delta", () =>
+                  emit({
+                    _tag: "TextDelta",
+                    agent: blueprint.name,
+                    iteration: iterations,
+                    content: chunk.delta,
+                  }),
+                ),
+                Match.when("reasoning-delta", () =>
+                  emit({
+                    _tag: "ThinkingDelta",
+                    agent: blueprint.name,
+                    iteration: iterations,
+                    content: chunk.delta,
+                  }),
+                ),
+                Match.orElse(() => Effect.void),
+              ),
+          ).pipe(
+            Effect.withSpan("llm-call", {
+              attributes: { "llm.agent": blueprint.name, "llm.iteration": iterations },
+            }),
+          );
+          const totalUsage = addUsage(usage, rawResult.usage);
+
+          if (rawResult.thinking) {
+            yield* emit({
+              _tag: "Thinking",
+              agent: blueprint.name,
+              iteration: iterations,
+              content: rawResult.thinking,
+            });
+          }
+
+          // --- Phase: AfterCall ---
+          const afterCallAction = yield* ring.run(
+            { _tag: "AfterCall", stepResult: rawResult },
+            satCtx,
+            onSatAction,
+          );
+          const result =
+            afterCallAction._tag === "TransformStepResult" ? afterCallAction.stepResult : rawResult;
+
+          if (result._tag === "text")
+            return {
+              result: "unstructured" as const,
+              summary: "",
+              content: result.content,
+              usage: totalUsage,
+            };
+
+          // Check for theseus.report — terminates the loop with structured data
+          const reportCall = result.toolCalls.find((tc) => tc.name === report.name);
+          if (reportCall) {
+            const args = tryParseArgs(reportCall) as {
+              result?: string;
+              summary?: string;
+              content?: string;
+            };
+            yield* emit({
+              _tag: "ToolCalling",
+              agent: blueprint.name,
+              iteration: iterations,
+              tool: report.name,
+              args,
+            });
+            return {
+              result: (args.result ?? "unstructured") as AgentResult["result"],
+              summary: args.summary ?? "",
+              content: args.content ?? "",
+              usage: totalUsage,
+            };
+          }
+
+          // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
+          yield* emitAll(result.toolCalls, (tc) => ({
+            _tag: "ToolCalling" as const,
             agent: blueprint.name,
             iteration: iterations,
-            tool: report.name,
-            args,
-          });
-          return {
-            result: (args.result ?? "unstructured") as AgentResult["result"],
-            summary: args.summary ?? "",
-            content: args.content ?? "",
-            usage: totalUsage,
-          };
-        }
+            tool: tc.name,
+            args: tryParseArgs(tc),
+          }));
 
-        // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
-        yield* emitAll(result.toolCalls, (tc) => ({
-          _tag: "ToolCalling" as const,
-          agent: blueprint.name,
-          iteration: iterations,
-          tool: tc.name,
-          args: tryParseArgs(tc),
-        }));
+          // --- Phase: BeforeTool + execute + ToolError + AfterTool (per tool) ---
+          const calls = yield* Effect.all(
+            result.toolCalls.map((tc) =>
+              Effect.gen(function* () {
+                // BeforeTool
+                const beforeAction = yield* ring.run(
+                  { _tag: "BeforeTool", tool: tc },
+                  satCtx,
+                  onSatAction,
+                );
 
-        // --- Phase: BeforeTool + execute + ToolError + AfterTool (per tool) ---
-        const calls = yield* Effect.all(
-          result.toolCalls.map((tc) =>
-            Effect.gen(function* () {
-              // BeforeTool
-              const beforeAction = yield* ring.run(
-                { _tag: "BeforeTool", tool: tc },
-                satCtx,
-                onSatAction,
-              );
+                if (beforeAction._tag === "BlockTool") {
+                  return syntheticResult(tc, undefined, beforeAction.content);
+                }
 
-              if (beforeAction._tag === "BlockTool") {
-                return syntheticResult(tc, undefined, beforeAction.content);
-              }
+                const effectiveTc =
+                  beforeAction._tag === "ModifyArgs"
+                    ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
+                    : tc;
 
-              const effectiveTc = beforeAction._tag === "ModifyArgs"
-                ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
-                : tc;
-
-              // Execute tool
-              const callResult: ToolCallResult = yield* runToolCall(blueprint.tools, effectiveTc).pipe(
-                Effect.catch((err: ToolCallError) =>
-                  emit({ _tag: "ToolError", agent: blueprint.name, iteration: iterations, tool: tc.name, error: err }).pipe(
-                    Effect.flatMap(() =>
-                      ring.run({ _tag: "ToolError", tool: tc, error: err }, satCtx, onSatAction).pipe(
-                        Effect.flatMap((action) =>
-                          action._tag === "RecoverToolError"
-                            ? Effect.succeed(action.result)
-                            : Effect.fail(new AgentInterrupted({ agent: blueprint.name, reason: `Unrecovered tool error: ${tc.name}` })),
-                        ),
+                // Execute tool
+                const callResult: ToolCallResult = yield* runToolCall(
+                  blueprint.tools,
+                  effectiveTc,
+                ).pipe(
+                  Effect.catch((err: ToolCallError) =>
+                    emit({
+                      _tag: "ToolError",
+                      agent: blueprint.name,
+                      iteration: iterations,
+                      tool: tc.name,
+                      error: err,
+                    }).pipe(
+                      Effect.flatMap(() =>
+                        ring
+                          .run({ _tag: "ToolError", tool: tc, error: err }, satCtx, onSatAction)
+                          .pipe(
+                            Effect.flatMap((action) =>
+                              action._tag === "RecoverToolError"
+                                ? Effect.succeed(action.result)
+                                : Effect.fail(
+                                    new AgentInterrupted({
+                                      agent: blueprint.name,
+                                      reason: `Unrecovered tool error: ${tc.name}`,
+                                    }),
+                                  ),
+                            ),
+                          ),
                       ),
                     ),
                   ),
-                ),
-              );
+                );
 
-              // AfterTool
-              const afterAction = yield* ring.run(
-                { _tag: "AfterTool", tool: tc, result: callResult },
-                satCtx,
-                onSatAction,
-              );
+                // AfterTool
+                const afterAction = yield* ring.run(
+                  { _tag: "AfterTool", tool: tc, result: callResult },
+                  satCtx,
+                  onSatAction,
+                );
 
-              return afterAction._tag === "ReplaceResult"
-                ? syntheticResult(tc, callResult.args, afterAction.content, callResult.presentation.isError ?? false)
-                : callResult;
-            }).pipe(Effect.withSpan("tool-call", { attributes: { "tool.name": tc.name, "tool.id": tc.id } })),
-          ),
-          { concurrency: "unbounded" },
-        );
+                return afterAction._tag === "ReplaceResult"
+                  ? syntheticResult(
+                      tc,
+                      callResult.args,
+                      afterAction.content,
+                      callResult.presentation.isError ?? false,
+                    )
+                  : callResult;
+              }).pipe(
+                Effect.withSpan("tool-call", {
+                  attributes: { "tool.name": tc.name, "tool.id": tc.id },
+                }),
+              ),
+            ),
+            { concurrency: "unbounded" },
+          );
 
-        yield* emitAll(calls, (c) => ({
-          _tag: "ToolResult" as const,
-          agent: blueprint.name,
-          iteration: iterations,
-          tool: c.name,
-          content: c.textContent,
-          isError: c.presentation.isError ?? false,
-        }));
+          yield* emitAll(calls, (c) => ({
+            _tag: "ToolResult" as const,
+            agent: blueprint.name,
+            iteration: iterations,
+            tool: c.name,
+            content: c.textContent,
+            isError: c.presentation.isError ?? false,
+          }));
 
-        // Build messages for next iteration (native Prompt.MessageEncoded format)
-        const toolMessages: ReadonlyArray<Prompt.MessageEncoded> = calls.map((r) => ({
-          role: "tool" as const,
-          content: [{
-            type: "tool-result" as const,
-            id: r.callId,
-            name: r.name,
-            isFailure: r.presentation.isError ?? false,
-            result: r.textContent,
-          }],
-        }));
+          // Build messages for next iteration (native Prompt.MessageEncoded format)
+          const toolMessages: ReadonlyArray<Prompt.MessageEncoded> = calls.map((r) => ({
+            role: "tool" as const,
+            content: [
+              {
+                type: "tool-result" as const,
+                id: r.callId,
+                name: r.name,
+                isFailure: r.presentation.isError ?? false,
+                result: r.textContent,
+              },
+            ],
+          }));
 
-        const assistantMsg: Prompt.MessageEncoded = {
-          role: "assistant" as const,
-          content: result.toolCalls.map((tc) => {
-            let params: unknown;
-            try { params = JSON.parse(tc.arguments); } catch { params = {}; }
-            return { type: "tool-call" as const, id: tc.id, name: tc.name, params };
-          }),
-        };
+          const assistantMsg: Prompt.MessageEncoded = {
+            role: "assistant" as const,
+            content: result.toolCalls.map((tc) => {
+              let params: unknown;
+              try {
+                params = JSON.parse(tc.arguments);
+              } catch {
+                params = {};
+              }
+              return { type: "tool-call" as const, id: tc.id, name: tc.name, params };
+            }),
+          };
 
-        return yield* loop(
-          [...callMessages, assistantMsg, ...toolMessages],
-          totalUsage,
-          iterations + 1,
-        );
-      }));
+          return yield* loop(
+            [...callMessages, assistantMsg, ...toolMessages],
+            totalUsage,
+            iterations + 1,
+          );
+        }),
+      );
 
     const initialMessages: ReadonlyArray<Prompt.MessageEncoded> = options?.messages ?? [
       { role: "system", content: blueprint.systemPrompt },
@@ -345,24 +434,30 @@ export const dispatch = (
         // Convert SatelliteAbort to AgentInterrupted for the outer error channel
         Effect.mapError((err) =>
           err._tag === "SatelliteAbort"
-            ? new AgentInterrupted({ agent: blueprint.name, reason: `Satellite "${err.satellite}": ${err.reason}` })
+            ? new AgentInterrupted({
+                agent: blueprint.name,
+                reason: `Satellite "${err.satellite}": ${err.reason}`,
+              })
             : err,
         ),
-        Effect.tap((result) =>
-          emit({ _tag: "Done", agent: blueprint.name, result }),
-        ),
+        Effect.tap((result) => emit({ _tag: "Done", agent: blueprint.name, result })),
         Effect.onExit((exit) =>
           Exit.match(exit, {
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
             onFailure: (cause) =>
               Cause.hasInterruptsOnly(cause)
-                ? Deferred.fail(resultDeferred, new AgentInterrupted({ agent: blueprint.name, reason: "Fiber interrupted" }))
+                ? Deferred.fail(
+                    resultDeferred,
+                    new AgentInterrupted({ agent: blueprint.name, reason: "Fiber interrupted" }),
+                  )
                 : Deferred.failCause(resultDeferred, cause),
           }),
         ),
         Effect.ensuring(Queue.end(eventQueue)),
         // OTEL: dispatch span — auto parent-child when nested dispatches use withSpan
-        Effect.withSpan("dispatch", { attributes: { "dispatch.id": dispatchId, "dispatch.agent": blueprint.name } }),
+        Effect.withSpan("dispatch", {
+          attributes: { "dispatch.id": dispatchId, "dispatch.agent": blueprint.name },
+        }),
         Effect.annotateLogs("dispatchId", dispatchId),
         Effect.annotateLogs("agent", blueprint.name),
       ),
@@ -388,5 +483,8 @@ export const dispatchAwait = (
   blueprint: Blueprint,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<AgentResult, AgentError, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
-  dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));
+): Effect.Effect<
+  AgentResult,
+  AgentError,
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+> => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

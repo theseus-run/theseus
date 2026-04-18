@@ -5,9 +5,8 @@
  * no dependency on Daemon protocol types — uses plain status entries.
  */
 
-import { Effect, Ref } from "effect";
-import * as ServiceMap from "effect/ServiceMap";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
+import { Context, Effect, Ref } from "effect";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,7 +33,7 @@ export interface StatusEntry {
 // DispatchRegistry — service definition
 // ---------------------------------------------------------------------------
 
-export class DispatchRegistry extends ServiceMap.Service<
+export class DispatchRegistry extends Context.Service<
   DispatchRegistry,
   {
     readonly register: (handle: Dispatch.Handle, agent: string) => Effect.Effect<void>;

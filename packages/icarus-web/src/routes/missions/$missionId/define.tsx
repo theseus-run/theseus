@@ -5,11 +5,11 @@
  * Right: mission definition building up (goal, criteria, artifacts)
  */
 
-import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
-import { missions } from "@/lib/queries";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 import type { Mission } from "@/lib/queries";
+import { missions } from "@/lib/queries";
 
 // ---------------------------------------------------------------------------
 // Definition panel (right sidebar — same side as mission control)
@@ -20,9 +20,7 @@ function DefinitionPanel({ mission }: { mission: Mission }) {
     <div className="h-full overflow-y-auto p-4 border-l border-border">
       {/* Goal */}
       <div className="mb-6">
-        <h3 className="text-muted-foreground uppercase tracking-wider mb-1 font-semibold">
-          goal
-        </h3>
+        <h3 className="text-muted-foreground uppercase tracking-wider mb-1 font-semibold">goal</h3>
         {mission.goal ? (
           <p className="text-foreground">{mission.goal}</p>
         ) : (
@@ -70,9 +68,7 @@ function DefinitionPanel({ mission }: { mission: Mission }) {
           <ul className="space-y-1">
             {mission.artifacts.map((a, i) => (
               <li key={i}>
-                <span className="text-zinc-600">
-                  [{a.direction === "input" ? "in" : "out"}]
-                </span>{" "}
+                <span className="text-zinc-600">[{a.direction === "input" ? "in" : "out"}]</span>{" "}
                 <span className="text-muted-foreground">{a.source}:</span>{" "}
                 <span className="text-foreground">{a.title || a.ref}</span>
               </li>
@@ -130,11 +126,7 @@ function DefineChat({
         <div className="space-y-2">
           {messages.map((msg) => (
             <div key={msg.id} className="leading-relaxed">
-              <span
-                className={`mr-1 ${
-                  msg.role === "user" ? "text-foreground" : "text-blue-400"
-                }`}
-              >
+              <span className={`mr-1 ${msg.role === "user" ? "text-foreground" : "text-blue-400"}`}>
                 {msg.role === "user" ? "you>" : "theseus>"}
               </span>
               <span className={msg.role === "user" ? "text-foreground" : "text-muted-foreground"}>
@@ -186,10 +178,7 @@ export function DefinePage() {
   ]);
 
   const handleSend = useCallback((text: string) => {
-    setChatMessages((prev) => [
-      ...prev,
-      { id: String(Date.now()), role: "user", content: text },
-    ]);
+    setChatMessages((prev) => [...prev, { id: String(Date.now()), role: "user", content: text }]);
   }, []);
 
   const handleLock = useCallback(() => {

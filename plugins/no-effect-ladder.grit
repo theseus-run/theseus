@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`Effect.$outer(Effect.$inner($args))` where {
-  register_diagnostic(message="Avoid nested Effect combinators (Effect ladder). Build context once, then use a single flat pipeline.", severity="warning")
+`Effect.$outer(Effect.$inner($args))` as $m where {
+  register_diagnostic(span=$m, message="Avoid nested Effect combinators (Effect ladder). Build context once, then use a single flat pipeline.", severity="warning")
 }

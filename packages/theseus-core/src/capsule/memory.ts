@@ -8,7 +8,13 @@
  */
 
 import { Effect, Layer, Ref } from "effect";
-import { Capsule, CapsuleError, makeCapsuleId, type CapsuleEvent, type CapsuleEventInput } from "./index.ts";
+import {
+  Capsule,
+  CapsuleError,
+  type CapsuleEvent,
+  type CapsuleEventInput,
+  makeCapsuleId,
+} from "./index.ts";
 
 /**
  * Create an in-memory Capsule Layer.

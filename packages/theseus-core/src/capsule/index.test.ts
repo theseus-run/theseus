@@ -21,13 +21,21 @@ describe("Capsule.log + read", () => {
         const capsule = yield* Capsule;
         yield* capsule.log({ type: "mission.create", by: "runtime", data: { goal: "test" } });
         yield* capsule.log({ type: "mission.plan", by: "theseus", data: { path: "plan.md" } });
-        yield* capsule.log({ type: "mission.friction", by: "forge", data: { reason: "unclear spec" } });
+        yield* capsule.log({
+          type: "mission.friction",
+          by: "forge",
+          data: { reason: "unclear spec" },
+        });
         return yield* capsule.read();
       }),
     );
 
     expect(events).toHaveLength(3);
-    expect(events.map((e) => e.type)).toEqual(["mission.create", "mission.plan", "mission.friction"]);
+    expect(events.map((e) => e.type)).toEqual([
+      "mission.create",
+      "mission.plan",
+      "mission.friction",
+    ]);
     expect(events.map((e) => e.by)).toEqual(["runtime", "theseus", "forge"]);
     // All events have auto-set timestamps
     events.forEach((e) => expect(e.at).toBeTruthy());

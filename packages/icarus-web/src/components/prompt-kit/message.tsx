@@ -2,11 +2,11 @@
  * Message — chat message display component.
  */
 
-import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/hooks/use-chat";
-import { ToolEvent } from "./tool-event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { ChatMessage } from "@/hooks/use-chat";
+import { cn } from "@/lib/utils";
+import { ToolEvent } from "./tool-event";
 
 export function Message({ message, className }: { message: ChatMessage; className?: string }) {
   switch (message.role) {

@@ -7,11 +7,11 @@
  *   Right:   criteria progress + artifacts (sidebar)
  */
 
-import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
-import { missions } from "@/lib/queries";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 import type { Mission } from "@/lib/queries";
+import { missions } from "@/lib/queries";
 
 // ---------------------------------------------------------------------------
 // Criteria sidebar (right)
@@ -30,9 +30,7 @@ function CriteriaSidebar({ mission }: { mission: Mission }) {
             <span className="text-muted-foreground">
               [{met}/{total}]
             </span>
-            <span className="text-muted-foreground">
-              {Math.round((met / total) * 100)}%
-            </span>
+            <span className="text-muted-foreground">{Math.round((met / total) * 100)}%</span>
           </div>
           <div className="h-px bg-secondary overflow-hidden relative">
             <div
@@ -85,9 +83,7 @@ function CriteriaSidebar({ mission }: { mission: Mission }) {
           <ul className="space-y-1">
             {mission.artifacts.map((a, i) => (
               <li key={i}>
-                <span className="text-zinc-600">
-                  [{a.direction === "input" ? "in" : "out"}]
-                </span>{" "}
+                <span className="text-zinc-600">[{a.direction === "input" ? "in" : "out"}]</span>{" "}
                 <span className="text-muted-foreground">{a.source}:</span>{" "}
                 <span className="text-foreground">{a.title || a.ref}</span>
               </li>
@@ -113,22 +109,134 @@ interface ActivityEntry {
 }
 
 const STUB_ACTIVITY: ActivityEntry[] = [
-  { id: "1", agent: "theseus", action: "dispatch", detail: "[atlas] plan the OAuth2 migration", timestamp: "10:05", kind: "dispatch" },
-  { id: "2", agent: "atlas", action: "grep", detail: "session|cookie|auth", timestamp: "10:05", kind: "tool" },
-  { id: "3", agent: "atlas", action: "read_file", detail: "src/auth/session.ts", timestamp: "10:05", kind: "tool" },
-  { id: "4", agent: "atlas", action: "read_file", detail: "src/auth/middleware.ts", timestamp: "10:06", kind: "tool" },
-  { id: "5", agent: "atlas", action: "outline", detail: "src/auth/", timestamp: "10:06", kind: "tool" },
-  { id: "6", agent: "atlas", action: "done", detail: "plan ready: 4 phases, 12 files", timestamp: "10:07", kind: "status" },
-  { id: "7", agent: "theseus", action: "dispatch", detail: "[forge-1] implement Google OAuth handler", timestamp: "10:07", kind: "dispatch" },
-  { id: "8", agent: "forge-1", action: "write_file", detail: "src/auth/oauth-google.ts", timestamp: "10:08", kind: "tool" },
-  { id: "9", agent: "forge-1", action: "search_replace", detail: "src/auth/router.ts", timestamp: "10:08", kind: "tool" },
-  { id: "10", agent: "forge-1", action: "shell", detail: "bun test src/auth/", timestamp: "10:09", kind: "tool" },
-  { id: "11", agent: "theseus", action: "criterion", detail: "[met] OAuth2 login flow works for Google", timestamp: "10:09", kind: "status" },
-  { id: "12", agent: "theseus", action: "dispatch", detail: "[forge-1] implement GitHub OAuth handler", timestamp: "10:10", kind: "dispatch" },
-  { id: "13", agent: "forge-1", action: "write_file", detail: "src/auth/oauth-github.ts", timestamp: "10:10", kind: "tool" },
-  { id: "14", agent: "forge-1", action: "shell", detail: "bun test src/auth/", timestamp: "10:11", kind: "tool" },
-  { id: "15", agent: "theseus", action: "criterion", detail: "[met] OAuth2 login flow works for GitHub", timestamp: "10:11", kind: "status" },
-  { id: "16", agent: "forge-1", action: "search_replace", detail: "src/auth/session.ts", timestamp: "10:12", kind: "tool" },
+  {
+    id: "1",
+    agent: "theseus",
+    action: "dispatch",
+    detail: "[atlas] plan the OAuth2 migration",
+    timestamp: "10:05",
+    kind: "dispatch",
+  },
+  {
+    id: "2",
+    agent: "atlas",
+    action: "grep",
+    detail: "session|cookie|auth",
+    timestamp: "10:05",
+    kind: "tool",
+  },
+  {
+    id: "3",
+    agent: "atlas",
+    action: "read_file",
+    detail: "src/auth/session.ts",
+    timestamp: "10:05",
+    kind: "tool",
+  },
+  {
+    id: "4",
+    agent: "atlas",
+    action: "read_file",
+    detail: "src/auth/middleware.ts",
+    timestamp: "10:06",
+    kind: "tool",
+  },
+  {
+    id: "5",
+    agent: "atlas",
+    action: "outline",
+    detail: "src/auth/",
+    timestamp: "10:06",
+    kind: "tool",
+  },
+  {
+    id: "6",
+    agent: "atlas",
+    action: "done",
+    detail: "plan ready: 4 phases, 12 files",
+    timestamp: "10:07",
+    kind: "status",
+  },
+  {
+    id: "7",
+    agent: "theseus",
+    action: "dispatch",
+    detail: "[forge-1] implement Google OAuth handler",
+    timestamp: "10:07",
+    kind: "dispatch",
+  },
+  {
+    id: "8",
+    agent: "forge-1",
+    action: "write_file",
+    detail: "src/auth/oauth-google.ts",
+    timestamp: "10:08",
+    kind: "tool",
+  },
+  {
+    id: "9",
+    agent: "forge-1",
+    action: "search_replace",
+    detail: "src/auth/router.ts",
+    timestamp: "10:08",
+    kind: "tool",
+  },
+  {
+    id: "10",
+    agent: "forge-1",
+    action: "shell",
+    detail: "bun test src/auth/",
+    timestamp: "10:09",
+    kind: "tool",
+  },
+  {
+    id: "11",
+    agent: "theseus",
+    action: "criterion",
+    detail: "[met] OAuth2 login flow works for Google",
+    timestamp: "10:09",
+    kind: "status",
+  },
+  {
+    id: "12",
+    agent: "theseus",
+    action: "dispatch",
+    detail: "[forge-1] implement GitHub OAuth handler",
+    timestamp: "10:10",
+    kind: "dispatch",
+  },
+  {
+    id: "13",
+    agent: "forge-1",
+    action: "write_file",
+    detail: "src/auth/oauth-github.ts",
+    timestamp: "10:10",
+    kind: "tool",
+  },
+  {
+    id: "14",
+    agent: "forge-1",
+    action: "shell",
+    detail: "bun test src/auth/",
+    timestamp: "10:11",
+    kind: "tool",
+  },
+  {
+    id: "15",
+    agent: "theseus",
+    action: "criterion",
+    detail: "[met] OAuth2 login flow works for GitHub",
+    timestamp: "10:11",
+    kind: "status",
+  },
+  {
+    id: "16",
+    agent: "forge-1",
+    action: "search_replace",
+    detail: "src/auth/session.ts",
+    timestamp: "10:12",
+    kind: "tool",
+  },
 ];
 
 function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
@@ -161,9 +269,7 @@ function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
           >
             {entry.action}
           </span>
-          {entry.detail && (
-            <span className="text-zinc-500 truncate">{entry.detail}</span>
-          )}
+          {entry.detail && <span className="text-zinc-500 truncate">{entry.detail}</span>}
         </div>
       ))}
     </div>
@@ -174,13 +280,7 @@ function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
 // Mission header
 // ---------------------------------------------------------------------------
 
-function MissionHeader({
-  mission,
-  onClose,
-}: {
-  mission: Mission;
-  onClose: () => void;
-}) {
+function MissionHeader({ mission, onClose }: { mission: Mission; onClose: () => void }) {
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-border">
       <div className="flex items-center gap-2 min-w-0">

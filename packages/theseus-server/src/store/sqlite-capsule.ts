@@ -8,8 +8,8 @@
  * Events and artifacts persisted in theseus.db.
  */
 
-import { Effect, Layer } from "effect";
 import * as CapsuleNs from "@theseus.run/core/Capsule";
+import { Effect, Layer } from "effect";
 import { TheseusDb } from "./sqlite.ts";
 
 export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, never, TheseusDb> =>
@@ -45,7 +45,14 @@ export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, 
 
         read: () =>
           Effect.sync(() =>
-            (selectEvents.all(id) as Array<{ type: string; at: string; by: string; data_json: string }>).map(
+            (
+              selectEvents.all(id) as Array<{
+                type: string;
+                at: string;
+                by: string;
+                data_json: string;
+              }>
+            ).map(
               (row): CapsuleNs.Event => ({
                 type: row.type,
                 at: row.at,

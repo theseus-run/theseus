@@ -28,9 +28,7 @@ import type { Toolkit } from "../tool/toolkit.ts";
  * The handler is never invoked when used with `disableToolCallResolution: true`.
  * Theseus's dispatch loop calls `callTool` directly.
  */
-export const toAiTool = <I, O, F, R>(
-  tool: Tool<I, O, F, R>,
-): AiTool.Any =>
+export const toAiTool = <I, O, F, R>(tool: Tool<I, O, F, R>): AiTool.Any =>
   AiTool.make(tool.name, {
     description: tool.description,
     // biome-ignore lint/suspicious/noExplicitAny: Schema.Schema<T> widens to Schema.Top at the call site
@@ -48,8 +46,7 @@ export const toAiTool = <I, O, F, R>(
 /** Convert a Theseus Toolkit to an `@effect/ai` Toolkit (definitions only). */
 export const toAiToolkit = (
   toolkit: Toolkit<unknown>,
-): AiToolkit.Toolkit<Record<string, AiTool.Any>> =>
-  toolsArrayToAiToolkit(toolkit.tools);
+): AiToolkit.Toolkit<Record<string, AiTool.Any>> => toolsArrayToAiToolkit(toolkit.tools);
 
 /** Convert a raw array of Theseus tools. Prefer `toAiToolkit` with a `Toolkit`. */
 export const toolsArrayToAiToolkit = (
@@ -59,9 +56,9 @@ export const toolsArrayToAiToolkit = (
     return AiToolkit.empty as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
   }
   const aiTools = tools.map(toAiTool);
-  return AiToolkit.make(
-    ...(aiTools as [AiTool.Any, ...AiTool.Any[]]),
-  ) as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
+  return AiToolkit.make(...(aiTools as [AiTool.Any, ...AiTool.Any[]])) as AiToolkit.Toolkit<
+    Record<string, AiTool.Any>
+  >;
 };
 
 // ---------------------------------------------------------------------------
@@ -78,9 +75,7 @@ export interface ToolDefinition {
  * Extract plain `{ name, description, inputSchema }` definitions — for raw
  * provider APIs (Anthropic, OpenAI, Gemini) that take JSON Schema directly.
  */
-export const toToolDefinitions = (
-  toolkit: Toolkit<unknown>,
-): ReadonlyArray<ToolDefinition> =>
+export const toToolDefinitions = (toolkit: Toolkit<unknown>): ReadonlyArray<ToolDefinition> =>
   toolkit.tools.map((t) => ({
     name: t.name,
     description: t.description,

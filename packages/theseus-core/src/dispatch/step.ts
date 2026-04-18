@@ -14,17 +14,17 @@
  */
 
 import { Effect, Match, Stream } from "effect";
+import type * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
-import * as AiError from "effect/unstable/ai/AiError";
-import { AgentLLMError } from "../agent/index.ts";
 import type { AgentError } from "../agent/index.ts";
+import { AgentLLMError } from "../agent/index.ts";
+import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
 import type { Content, Presentation, ToolAny } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
-import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
-import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from "./types.ts";
+import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
@@ -78,7 +78,13 @@ const mapAiErrors = <A, R>(
 ): Effect.Effect<A, AgentError, R> =>
   effect.pipe(
     Effect.catchTag("AiError", (e) =>
-      Effect.fail(new AgentLLMError({ agent: agentName, message: `${e.module}.${e.method}: ${e.reason._tag}`, cause: e })),
+      Effect.fail(
+        new AgentLLMError({
+          agent: agentName,
+          message: `${e.module}.${e.method}: ${e.reason._tag}`,
+          cause: e,
+        }),
+      ),
     ),
   );
 
@@ -87,8 +93,11 @@ const mapAiErrors = <A, R>(
 // ---------------------------------------------------------------------------
 
 export const tryParseArgs = (tc: ToolCall): unknown => {
-  try { return JSON.parse(tc.arguments); }
-  catch { return tc.arguments; }
+  try {
+    return JSON.parse(tc.arguments);
+  } catch {
+    return tc.arguments;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -98,10 +107,14 @@ export const tryParseArgs = (tc: ToolCall): unknown => {
 
 const contentToText = (c: Content): string => {
   switch (c._tag) {
-    case "text":     return c.text;
-    case "image":    return `[image:${c.mime}]`;
-    case "audio":    return `[audio:${c.mime}]`;
-    case "resource": return c.text ?? `[resource:${c.uri}]`;
+    case "text":
+      return c.text;
+    case "image":
+      return `[image:${c.mime}]`;
+    case "audio":
+      return `[audio:${c.mime}]`;
+    case "resource":
+      return c.text ?? `[resource:${c.uri}]`;
   }
 };
 
@@ -119,22 +132,25 @@ export const runToolCall = (
   tc: ToolCall,
 ): Effect.Effect<ToolCallResult, ToolCallError, any> => {
   const tool = tools.find((t) => t.name === tc.name);
-  if (!tool)
-    return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
+  if (!tool) return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
   const parsed = tryParseArgs(tc);
   if (typeof parsed !== "object" || parsed === null)
     return Effect.fail(new ToolCallBadArgs({ callId: tc.id, name: tc.name, raw: tc.arguments }));
 
   return callTool(tool, parsed).pipe(
-    Effect.map((presentation): ToolCallResult => ({
-      callId: tc.id,
-      name: tc.name,
-      args: parsed,
-      presentation,
-      textContent: presentationToText(presentation),
-    })),
-    Effect.mapError((cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause })),
+    Effect.map(
+      (presentation): ToolCallResult => ({
+        callId: tc.id,
+        name: tc.name,
+        args: parsed,
+        presentation,
+        textContent: presentationToText(presentation),
+      }),
+    ),
+    Effect.mapError(
+      (cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause }),
+    ),
   );
 };
 
@@ -143,15 +159,29 @@ export const runToolCall = (
 // ---------------------------------------------------------------------------
 
 /** Fold streaming deltas (text-start/text-delta/text-end) back into complete parts. */
-const foldStreamParts = (streamParts: ReadonlyArray<Response.StreamPartEncoded>): Response.PartEncoded[] => {
+const foldStreamParts = (
+  streamParts: ReadonlyArray<Response.StreamPartEncoded>,
+): Response.PartEncoded[] => {
   const acc = streamParts.reduce(
     (state, part) =>
       Match.value(part.type).pipe(
         Match.when("text-delta", () => ({ ...state, text: state.text + (part as any).delta })),
-        Match.when("reasoning-delta", () => ({ ...state, reasoning: state.reasoning + (part as any).delta })),
-        Match.when("tool-call", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
-        Match.when("finish", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
-        Match.when("error", () => ({ ...state, parts: [...state.parts, part as Response.PartEncoded] })),
+        Match.when("reasoning-delta", () => ({
+          ...state,
+          reasoning: state.reasoning + (part as any).delta,
+        })),
+        Match.when("tool-call", () => ({
+          ...state,
+          parts: [...state.parts, part as Response.PartEncoded],
+        })),
+        Match.when("finish", () => ({
+          ...state,
+          parts: [...state.parts, part as Response.PartEncoded],
+        })),
+        Match.when("error", () => ({
+          ...state,
+          parts: [...state.parts, part as Response.PartEncoded],
+        })),
         Match.orElse(() => state),
       ),
     { text: "", reasoning: "", parts: [] as Response.PartEncoded[] },
@@ -239,13 +269,20 @@ export const step = (
       }),
     );
 
-    return responsePartsToStepResult(response.content.map((p: any) =>
-      Match.value(p.type).pipe(
-        Match.when("text", () => ({ type: "text" as const, text: p.text })),
-        Match.when("reasoning", () => ({ type: "reasoning" as const, text: p.text })),
-        Match.when("tool-call", () => ({ type: "tool-call" as const, id: p.id, name: p.name, params: p.params })),
-        Match.when("finish", () => p),
-        Match.orElse(() => p),
+    return responsePartsToStepResult(
+      response.content.map((p: any) =>
+        Match.value(p.type).pipe(
+          Match.when("text", () => ({ type: "text" as const, text: p.text })),
+          Match.when("reasoning", () => ({ type: "reasoning" as const, text: p.text })),
+          Match.when("tool-call", () => ({
+            type: "tool-call" as const,
+            id: p.id,
+            name: p.name,
+            params: p.params,
+          })),
+          Match.when("finish", () => p),
+          Match.orElse(() => p),
+        ),
       ),
-    ));
+    );
   });

@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`Effect.fork($args)` where {
-  register_diagnostic(message="Effect v4: Effect.fork was removed. Use Effect.forkDetach (detached), Effect.forkChild (supervised), or Effect.forkScoped (tied to Scope).", severity="error")
+`Effect.fork($args)` as $m where {
+  register_diagnostic(span=$m, message="Effect v4 (beta.50): Effect.fork was removed. Use Effect.forkDetach (detached), Effect.forkChild (supervised), or Effect.forkScoped (tied to Scope).", severity="error")
 }

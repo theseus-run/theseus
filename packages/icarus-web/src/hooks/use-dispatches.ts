@@ -2,9 +2,9 @@
  * useDispatches — fetches dispatch history from the server.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { TheseusClient } from "../lib/rpc-client";
 import type { DispatchSummary } from "@theseus.run/core/Dispatch";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TheseusClient } from "../lib/rpc-client";
 
 export function useDispatches(client: TheseusClient | null) {
   const [dispatches, setDispatches] = useState<ReadonlyArray<DispatchSummary>>([]);

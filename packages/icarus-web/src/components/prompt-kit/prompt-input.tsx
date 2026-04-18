@@ -2,7 +2,7 @@
  * PromptInput — auto-resizing textarea with submit on Enter.
  */
 
-import { useRef, useCallback, type KeyboardEvent } from "react";
+import { type KeyboardEvent, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface PromptInputProps {

@@ -3,10 +3,10 @@
  */
 
 import { Match } from "effect";
-import type { TreeSitterNode } from "./tree-sitter.ts";
+import { children, truncate } from "./ast.ts";
 import type { Symbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
-import { children, truncate } from "./ast.ts";
+import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Go AST root. */
 export const extractSymbolsGo = (root: TreeSitterNode): Symbol[] =>
@@ -19,7 +19,14 @@ export const extractSymbolsGo = (root: TreeSitterNode): Symbol[] =>
       Match.when("method_declaration", () => {
         const receiver = node.childForFieldName("receiver")?.text ?? "";
         const name = node.childForFieldName("name")?.text ?? "";
-        return [sym(node, "method", `${receiver} ${name}`, node.childForFieldName("parameters")?.text ?? "")];
+        return [
+          sym(
+            node,
+            "method",
+            `${receiver} ${name}`,
+            node.childForFieldName("parameters")?.text ?? "",
+          ),
+        ];
       }),
       Match.when("type_declaration", () => {
         const name = node.childForFieldName("name")?.text ?? "";

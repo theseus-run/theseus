@@ -10,27 +10,27 @@
  */
 
 export {
-  TheseusRpc,
   Dispatch,
-  ListDispatches,
+  GetCapsuleEvents,
   GetMessages,
+  GetResult,
   Inject,
   Interrupt,
-  GetResult,
-  GetCapsuleEvents,
-  Status,
+  ListDispatches,
   RpcError,
+  Status,
+  TheseusRpc,
 } from "./procedures.ts";
 
 export {
-  UsageSchema,
-  MessageSchema,
-  BlueprintSchema,
-  SerializedToolRefSchema,
   AgentResultSchema,
+  BlueprintSchema,
+  CapsuleEventSchema,
   DispatchEventSchema,
   DispatchSummarySchema,
-  CapsuleEventSchema,
+  MessageSchema,
   ResultKindSchema,
   SerializedToolCallErrorSchema,
+  SerializedToolRefSchema,
+  UsageSchema,
 } from "./schemas.ts";

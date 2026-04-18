@@ -2,14 +2,9 @@
  * App — root component with dispatch list + chat views.
  */
 
-import { useState, useMemo } from "react";
-import { useTheseusClient } from "@/hooks/use-theseus-client";
-import { useChat } from "@/hooks/use-chat";
-import { useDispatches } from "@/hooks/use-dispatches";
-import type { ChatMessage } from "@/hooks/use-chat";
-import type { DispatchEvent } from "@/lib/rpc-client";
-import { Header } from "@/components/header";
+import { useMemo, useState } from "react";
 import { DispatchList } from "@/components/dispatch-list";
+import { Header } from "@/components/header";
 import {
   ChatContainer,
   ChatContainerContent,
@@ -17,6 +12,11 @@ import {
 } from "@/components/prompt-kit/chat-container";
 import { Message } from "@/components/prompt-kit/message";
 import { PromptInput } from "@/components/prompt-kit/prompt-input";
+import type { ChatMessage } from "@/hooks/use-chat";
+import { useChat } from "@/hooks/use-chat";
+import { useDispatches } from "@/hooks/use-dispatches";
+import { useTheseusClient } from "@/hooks/use-theseus-client";
+import type { DispatchEvent } from "@/lib/rpc-client";
 
 // ---------------------------------------------------------------------------
 // Merge ToolCalling + ToolResult/ToolError into a single display message.

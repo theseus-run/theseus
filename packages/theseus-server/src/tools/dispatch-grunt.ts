@@ -9,19 +9,31 @@
  * Lives in theseus-server (not theseus-tools) because it requires LLM access.
  */
 
-import { Effect, Layer } from "effect";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as Dispatch from "@theseus.run/core/Dispatch";
-import * as Tool from "@theseus.run/core/Tool";
 import type * as Agent from "@theseus.run/core/Agent";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Grunt from "@theseus.run/core/Grunt";
-import { z } from "zod";
+import * as Tool from "@theseus.run/core/Tool";
+import { Effect, Layer, Schema } from "effect";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 
-const inputSchema = z.object({
-  task: z.string().min(1).describe("What the grunt should accomplish. Be specific."),
+// ---------------------------------------------------------------------------
+// Input schema + typed failure
+// ---------------------------------------------------------------------------
+
+const Input = Schema.Struct({
+  task: Schema.String.annotate({
+    description: "What the grunt should accomplish. Be specific.",
+  }),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = Schema.Schema.Type<typeof Input>;
+
+export class DispatchGruntFailure extends Schema.TaggedErrorClass<DispatchGruntFailure>()(
+  "DispatchGruntFailure",
+  {
+    message: Schema.String,
+  },
+) {}
 
 /**
  * Create a dispatch_grunt tool that delegates to a grunt with the given worker blueprint.
@@ -31,33 +43,44 @@ type Input = z.infer<typeof inputSchema>;
  *
  * @param workerBlueprint - Blueprint for the worker grunt (tools, systemPrompt)
  */
-export const makeDispatchGruntTool = (workerBlueprint: Agent.Blueprint): Effect.Effect<Tool.Any, never, LanguageModel.LanguageModel> =>
+export const makeDispatchGruntTool = (
+  workerBlueprint: Agent.Blueprint,
+): Effect.Effect<Tool.Any, never, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     // Capture the LanguageModel service at tool creation time
     const lm = yield* LanguageModel.LanguageModel;
 
-    return Tool.define<Input, string>({
+    return Tool.define<Input, string, DispatchGruntFailure>({
       name: "dispatch_grunt",
       description:
         `Delegate a task to a worker grunt ("${workerBlueprint.name}"). ` +
         "The grunt has its own tools and fresh context. " +
         "Returns the grunt's final text output. Use this for work that requires file access, code exploration, or execution.",
-      inputSchema: Tool.fromZod(inputSchema),
-      safety: "write",
-      capabilities: ["dispatch"],
-      execute: ({ task }, { fail }) =>
+      input: Input as unknown as Schema.Schema<Input>,
+      failure: DispatchGruntFailure as unknown as Schema.Schema<DispatchGruntFailure>,
+      meta: Tool.meta({ mutation: "write", capabilities: ["agent.dispatch"] }),
+      execute: ({ task }) =>
         Grunt.gruntAwait(workerBlueprint, task).pipe(
-          Effect.provide(Layer.merge(
-            Layer.succeed(LanguageModel.LanguageModel, lm),
-            Dispatch.Defaults,
-          )),
+          Effect.provide(
+            Layer.merge(Layer.succeed(LanguageModel.LanguageModel, lm), Dispatch.Defaults),
+          ),
           Effect.map((result) => result.content),
           Effect.catchTags({
-            AgentInterrupted: (e) => Effect.fail(fail(`Grunt interrupted: ${e.reason ?? "unknown"}`)),
-            AgentCycleExceeded: (e) => Effect.fail(fail(`Grunt exceeded cycle cap (${e.max} iterations)`)),
-            AgentLLMError: (e) => Effect.fail(fail(`Grunt LLM failed: ${e.message}`)),
+            AgentInterrupted: (e) =>
+              Effect.fail(
+                new DispatchGruntFailure({
+                  message: `Grunt interrupted: ${e.reason ?? "unknown"}`,
+                }),
+              ),
+            AgentCycleExceeded: (e) =>
+              Effect.fail(
+                new DispatchGruntFailure({
+                  message: `Grunt exceeded cycle cap (${e.max} iterations)`,
+                }),
+              ),
+            AgentLLMError: (e) =>
+              Effect.fail(new DispatchGruntFailure({ message: `Grunt LLM failed: ${e.message}` })),
           }),
         ),
-      encode: (s) => s,
     });
   });

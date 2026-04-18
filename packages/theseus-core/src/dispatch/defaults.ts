@@ -15,10 +15,12 @@
  */
 
 import { Layer } from "effect";
-import type { DispatchLog } from "./log.ts";
-import { NoopDispatchLog } from "./log.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
 import { DefaultSatelliteRing } from "../satellite/ring.ts";
+import type { DispatchLog } from "./log.ts";
+import { NoopDispatchLog } from "./log.ts";
 
-export const DispatchDefaults: Layer.Layer<SatelliteRing | DispatchLog> =
-  Layer.merge(DefaultSatelliteRing, NoopDispatchLog);
+export const DispatchDefaults: Layer.Layer<SatelliteRing | DispatchLog> = Layer.merge(
+  DefaultSatelliteRing,
+  NoopDispatchLog,
+);

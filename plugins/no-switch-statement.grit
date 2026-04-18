@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`switch ($discriminant) { $body }` where {
-  register_diagnostic(message="Avoid switch statements. Use Match.value($discriminant).pipe(Match.when(...), Match.exhaustive) for exhaustive, type-safe branching.", severity="warning")
+`switch ($discriminant) { $body }` as $m where {
+  register_diagnostic(span=$m, message="Avoid switch statements. Use Match.value($discriminant).pipe(Match.when(...), Match.exhaustive) for exhaustive, type-safe branching.", severity="warning")
 }

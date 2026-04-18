@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`Effect.catchAll($args)` where {
-  register_diagnostic(message="Effect v4: catchAll was removed. Use Effect.catchCause to handle all causes, or Effect.catch for a specific error tag.", severity="error")
+`Effect.catchAll($args)` as $m where {
+  register_diagnostic(span=$m, message="Effect v4 (beta.50): Effect.catchAll was renamed to Effect.catch. Use Effect.catch for all typed errors, Effect.catchTag/Effect.catchTags for specific tags, or Effect.catchCause for cause-level handling.", severity="error")
 }

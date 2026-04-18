@@ -1,4 +1,4 @@
-import { useCallback, useRef, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
+import { type KeyboardEvent, type TextareaHTMLAttributes, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type PromptFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange"> & {

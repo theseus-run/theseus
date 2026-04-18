@@ -5,10 +5,17 @@
  */
 
 import { Match } from "effect";
-import type { TreeSitterNode } from "./tree-sitter.ts";
+import {
+  children,
+  extractClassExtends,
+  extractSignature,
+  extractTypeValue,
+  findChildByType,
+  hasKeyword,
+} from "./ast.ts";
 import type { Symbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
-import { children, hasKeyword, extractSignature, extractTypeValue, extractClassExtends, findChildByType } from "./ast.ts";
+import type { TreeSitterNode } from "./tree-sitter.ts";
 
 const functionSym = (node: TreeSitterNode, prefix?: string): Symbol => {
   const name = node.childForFieldName("name")?.text ?? "";
@@ -45,7 +52,12 @@ const interfaceSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
         const mName = member.childForFieldName("name")?.text ?? "";
         const mSig = extractSignature(member);
         symbols.push(
-          sym(member, member.type === "method_signature" ? "method" : "property", `${name}.${mName}`, mSig),
+          sym(
+            member,
+            member.type === "method_signature" ? "method" : "property",
+            `${name}.${mName}`,
+            mSig,
+          ),
         );
       }
     }
@@ -61,7 +73,9 @@ const variableSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
     const vValue = child.childForFieldName("value");
     if (vValue && (vValue.type === "arrow_function" || vValue.type === "function_expression")) {
       const async = hasKeyword(vValue, "async") ? "async " : "";
-      symbols.push(sym(child, "function", `${prefix ?? ""}${vName}`, `${async}${extractSignature(vValue)}`));
+      symbols.push(
+        sym(child, "function", `${prefix ?? ""}${vName}`, `${async}${extractSignature(vValue)}`),
+      );
     } else {
       const typeAnn = findChildByType(child, "type_annotation");
       symbols.push(sym(child, "variable", `${prefix ?? ""}${vName}`, typeAnn?.text ?? ""));
@@ -83,10 +97,22 @@ const exportSym = (node: TreeSitterNode): Symbol[] => {
 
   for (const child of children(node)) {
     const extracted = Match.value(child.type).pipe(
-      Match.when("function_declaration", () => { hasDecl = true; return [functionSym(child, prefix)]; }),
-      Match.when("generator_function_declaration", () => { hasDecl = true; return [functionSym(child, prefix)]; }),
-      Match.when("class_declaration", () => { hasDecl = true; return classSym(child, prefix); }),
-      Match.when("interface_declaration", () => { hasDecl = true; return interfaceSym(child, prefix); }),
+      Match.when("function_declaration", () => {
+        hasDecl = true;
+        return [functionSym(child, prefix)];
+      }),
+      Match.when("generator_function_declaration", () => {
+        hasDecl = true;
+        return [functionSym(child, prefix)];
+      }),
+      Match.when("class_declaration", () => {
+        hasDecl = true;
+        return classSym(child, prefix);
+      }),
+      Match.when("interface_declaration", () => {
+        hasDecl = true;
+        return interfaceSym(child, prefix);
+      }),
       Match.when("type_alias_declaration", () => {
         hasDecl = true;
         const name = child.childForFieldName("name")?.text ?? "";
@@ -97,8 +123,14 @@ const exportSym = (node: TreeSitterNode): Symbol[] => {
         const name = child.childForFieldName("name")?.text ?? "";
         return [sym(child, "enum", `${prefix ?? ""}${name}`, "")];
       }),
-      Match.when("lexical_declaration", () => { hasDecl = true; return variableSym(child, prefix); }),
-      Match.when("variable_declaration", () => { hasDecl = true; return variableSym(child, prefix); }),
+      Match.when("lexical_declaration", () => {
+        hasDecl = true;
+        return variableSym(child, prefix);
+      }),
+      Match.when("variable_declaration", () => {
+        hasDecl = true;
+        return variableSym(child, prefix);
+      }),
       Match.orElse(() => []),
     );
     symbols.push(...extracted);
@@ -143,7 +175,14 @@ const processClassMember = (member: TreeSitterNode, className: string): Symbol[]
       const mName = member.childForFieldName("name")?.text ?? "";
       const isStatic = hasKeyword(member, "static");
       const typeAnn = findChildByType(member, "type_annotation");
-      return [sym(member, "property", `${className}.${mName}`, `${isStatic ? "static " : ""}${typeAnn?.text ?? ""}`)];
+      return [
+        sym(
+          member,
+          "property",
+          `${className}.${mName}`,
+          `${isStatic ? "static " : ""}${typeAnn?.text ?? ""}`,
+        ),
+      ];
     }),
     Match.orElse(() => []),
   );

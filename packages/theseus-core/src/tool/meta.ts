@@ -35,40 +35,7 @@ export const compareMutation = (a: Mutation, b: Mutation): number =>
   MUTATION_ORDER[a] - MUTATION_ORDER[b];
 
 /** Is mutation `a` at most as dangerous as `max`? */
-export const mutationAtMost = (a: Mutation, max: Mutation): boolean =>
-  compareMutation(a, max) <= 0;
-
-// ---------------------------------------------------------------------------
-// Capability — branded string, module-augmentable
-//
-// Built-in capabilities cover the common axes. Downstream packages extend
-// via module augmentation:
-//
-//   declare module "@theseus.run/core/Tool" {
-//     interface CapabilityRegistry {
-//       "linear.issue.read": true
-//       "linear.issue.write": true
-//     }
-//   }
-// ---------------------------------------------------------------------------
-
-/** Built-in capabilities. Extend via module augmentation of `CapabilityRegistry`. */
-export interface CapabilityRegistry {
-  readonly "fs.read": true;
-  readonly "fs.write": true;
-  readonly "fs.delete": true;
-  readonly "net.http": true;
-  readonly "net.fetch": true;
-  readonly "shell.exec": true;
-  readonly "llm.call": true;
-  readonly "agent.dispatch": true;
-  readonly "user.ask": true;
-  readonly "capsule.read": true;
-  readonly "capsule.write": true;
-}
-
-/** A capability string drawn from the (module-augmentable) `CapabilityRegistry`. */
-export type Capability = keyof CapabilityRegistry;
+export const mutationAtMost = (a: Mutation, max: Mutation): boolean => compareMutation(a, max) <= 0;
 
 // ---------------------------------------------------------------------------
 // ToolMeta
@@ -76,22 +43,6 @@ export type Capability = keyof CapabilityRegistry;
 
 export interface ToolMeta {
   readonly mutation: Mutation;
-  readonly capabilities: ReadonlySet<Capability>;
   /** Tool consults external, non-deterministic state (network, LLMs, clock) — affects caching. */
   readonly openWorld?: boolean;
-  /** Tool is not exposed to the LLM by default — internal dispatch utility. */
-  readonly hidden?: boolean;
 }
-
-/** Build a ToolMeta. `capabilities` accepts any iterable of capability strings. */
-export const meta = (opts: {
-  readonly mutation: Mutation;
-  readonly capabilities?: Iterable<Capability>;
-  readonly openWorld?: boolean;
-  readonly hidden?: boolean;
-}): ToolMeta => ({
-  mutation: opts.mutation,
-  capabilities: new Set(opts.capabilities ?? []),
-  ...(opts.openWorld !== undefined ? { openWorld: opts.openWorld } : {}),
-  ...(opts.hidden !== undefined ? { hidden: opts.hidden } : {}),
-});

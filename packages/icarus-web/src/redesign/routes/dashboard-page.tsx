@@ -26,10 +26,10 @@ import { StatBlock, StatBlockLabel, StatBlockValue } from "@/components/ui/stat-
 import { StatusMark } from "@/components/ui/status-mark";
 import { Token } from "@/components/ui/token";
 import { controlRows, queueRows, signalRows, statusTone } from "../fixtures/runtime";
-import { RuntimeTranscriptPanel } from "../transcript-panel";
 import { toolCalls } from "../fixtures/transcript";
 import { statusSymbol } from "../helpers";
 import { useRedesignState } from "../state";
+import { RuntimeTranscriptPanel } from "../transcript-panel";
 
 export function DashboardPage() {
   const {

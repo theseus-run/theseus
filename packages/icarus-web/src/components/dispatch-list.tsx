@@ -2,8 +2,8 @@
  * DispatchList — landing page showing dispatch history.
  */
 
-import { cn } from "@/lib/utils";
 import type { DispatchSummary } from "@theseus.run/core/Dispatch";
+import { cn } from "@/lib/utils";
 
 interface DispatchListProps {
   dispatches: ReadonlyArray<DispatchSummary>;
@@ -92,14 +92,10 @@ export function DispatchList({ dispatches, loading, onSelect, onNew }: DispatchL
                 <span className={cn("text-xs", statusColor[d.status] ?? "text-zinc-500")}>
                   {statusIcon[d.status] ?? "?"}
                 </span>
-                <span className="text-xs text-zinc-300 truncate">
-                  {d.agent || "unknown"}
-                </span>
+                <span className="text-xs text-zinc-300 truncate">{d.agent || "unknown"}</span>
               </div>
               <div className="flex items-center gap-3 text-[11px] text-zinc-600 shrink-0">
-                {formatTokens(d.usage) && (
-                  <span>{formatTokens(d.usage)}</span>
-                )}
+                {formatTokens(d.usage) && <span>{formatTokens(d.usage)}</span>}
                 <span>{formatTime(d.startedAt)}</span>
               </div>
             </div>

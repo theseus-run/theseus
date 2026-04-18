@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`Effect.sync(() => console.$method($args))` where {
-  register_diagnostic(message="Avoid console inside Effect.sync. Use Effect.log, Effect.logInfo, or Effect.logError for structured, testable logging.", severity="warning")
+`Effect.sync(() => console.$method($args))` as $m where {
+  register_diagnostic(span=$m, message="Avoid console inside Effect.sync. Use Effect.log, Effect.logInfo, or Effect.logError for structured, testable logging.", severity="warning")
 }

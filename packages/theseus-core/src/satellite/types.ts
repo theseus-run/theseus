@@ -9,8 +9,8 @@
  * intervening in its trajectory.
  */
 
-import { Data } from "effect";
 import type { Effect } from "effect";
+import { Data } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult } from "../dispatch/types.ts";
 
@@ -82,12 +82,21 @@ export interface Satellite<S = void> {
 // ---------------------------------------------------------------------------
 
 export const Pass: Action = { _tag: "Pass" };
-export const TransformMessages = (messages: ReadonlyArray<Prompt.MessageEncoded>): Action => ({ _tag: "TransformMessages", messages });
-export const TransformStepResult = (stepResult: StepResult): Action => ({ _tag: "TransformStepResult", stepResult });
+export const TransformMessages = (messages: ReadonlyArray<Prompt.MessageEncoded>): Action => ({
+  _tag: "TransformMessages",
+  messages,
+});
+export const TransformStepResult = (stepResult: StepResult): Action => ({
+  _tag: "TransformStepResult",
+  stepResult,
+});
 export const ModifyArgs = (args: unknown): Action => ({ _tag: "ModifyArgs", args });
 export const BlockTool = (content: string): Action => ({ _tag: "BlockTool", content });
 export const ReplaceResult = (content: string): Action => ({ _tag: "ReplaceResult", content });
-export const RecoverToolError = (result: ToolCallResult): Action => ({ _tag: "RecoverToolError", result });
+export const RecoverToolError = (result: ToolCallResult): Action => ({
+  _tag: "RecoverToolError",
+  result,
+});
 
 // ---------------------------------------------------------------------------
 // SatelliteAny — existential type for heterogeneous satellite arrays

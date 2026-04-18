@@ -6,8 +6,8 @@
  */
 
 import { readdir } from "node:fs/promises";
-import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
+import { Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const NOISE = new Set([

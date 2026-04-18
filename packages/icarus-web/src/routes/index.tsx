@@ -2,10 +2,10 @@
  * Home — mission list.
  */
 
-import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { missions } from "@/lib/queries";
+import { Link } from "@tanstack/react-router";
 import type { MissionSummary } from "@/lib/queries";
+import { missions } from "@/lib/queries";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -20,9 +20,7 @@ function timeAgo(iso: string): string {
 
 function MissionRow({ mission }: { mission: MissionSummary }) {
   const to =
-    mission.status === "defining"
-      ? `/missions/${mission.id}/define`
-      : `/missions/${mission.id}`;
+    mission.status === "defining" ? `/missions/${mission.id}/define` : `/missions/${mission.id}`;
 
   const statusColor = {
     defining: "text-yellow-400",
@@ -35,18 +33,14 @@ function MissionRow({ mission }: { mission: MissionSummary }) {
       to={to}
       className="flex items-baseline gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors border-b border-border"
     >
-      <span className={`shrink-0 ${statusColor}`}>
-        [{mission.status}]
-      </span>
+      <span className={`shrink-0 ${statusColor}`}>[{mission.status}]</span>
       <span className="flex-1 text-foreground truncate">{mission.goal}</span>
       {mission.criteriaTotal > 0 && (
         <span className="text-muted-foreground shrink-0">
           [{mission.criteriaMet}/{mission.criteriaTotal}]
         </span>
       )}
-      <span className="text-zinc-600 shrink-0 w-8 text-right">
-        {timeAgo(mission.createdAt)}
-      </span>
+      <span className="text-zinc-600 shrink-0 w-8 text-right">{timeAgo(mission.createdAt)}</span>
     </Link>
   );
 }
@@ -69,10 +63,7 @@ export function MissionListPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-muted-foreground">-- no missions --</p>
-        <Link
-          to="/missions/new"
-          className="btn"
-        >
+        <Link to="/missions/new" className="btn">
           + new mission
         </Link>
       </div>

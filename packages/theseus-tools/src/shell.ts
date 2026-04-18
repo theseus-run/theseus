@@ -5,9 +5,9 @@
  * Timeout via Effect.timeout, output cap, exit code reporting.
  */
 
+import * as Tool from "@theseus.run/core/Tool";
 import { $ } from "bun";
 import { Duration, Effect, Schedule, Schema } from "effect";
-import * as Tool from "@theseus.run/core/Tool";
 import { ToolFailure } from "./failure.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;

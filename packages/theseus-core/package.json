@@ -20,7 +20,9 @@
     "./agent-comm/delegate": "./src/agent-comm/delegate.ts",
     "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
   },
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@theseus.run/jsx-md": "workspace:*",
     "effect": "4.0.0-beta.50",
@@ -31,5 +33,7 @@
     "bun-types": "^1.3.10",
     "typescript": "^5.9.3"
   },
-  "engines": { "bun": ">=1.0.0" }
+  "engines": {
+    "bun": ">=1.0.0"
+  }
 }

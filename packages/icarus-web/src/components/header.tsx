@@ -39,14 +39,9 @@ export function Header({ connected, running, agent, iteration, onReset, onBack }
       <div className="flex items-center gap-3 text-xs">
         <div className="flex items-center gap-1.5">
           <div
-            className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              connected ? "bg-emerald-500" : "bg-red-500",
-            )}
+            className={cn("w-1.5 h-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-red-500")}
           />
-          <span className="text-zinc-600">
-            {connected ? "ok" : "disconnected"}
-          </span>
+          <span className="text-zinc-600">{connected ? "ok" : "disconnected"}</span>
         </div>
         <button
           type="button"

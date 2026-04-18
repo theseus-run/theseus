@@ -7,8 +7,8 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
+import { Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const Input = Schema.Struct({

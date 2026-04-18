@@ -7,21 +7,21 @@
  * Usage: bun run packages/theseus-server/src/index.ts [workspace]
  */
 
-import { Effect, Layer } from "effect";
-import { RpcServer, RpcSerialization } from "effect/unstable/rpc";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpServer from "effect/unstable/http/HttpServer";
+import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { allTools } from "@theseus.run/tools";
+import { Effect, Layer } from "effect";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServer from "effect/unstable/http/HttpServer";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HandlersLive } from "./handlers.ts";
 import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
-import { TheseusRpc } from "@theseus.run/core/Rpc";
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
-import { ToolRegistry, makeToolRegistry } from "./tool-registry.ts";
 import { TheseusDbLive } from "./store/sqlite.ts";
 import { SqliteDispatchLog } from "./store/sqlite-dispatch-log.ts";
-import { HandlersLive } from "./handlers.ts";
-import { join } from "node:path";
+import { makeToolRegistry, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -101,9 +101,7 @@ Effect.runFork(
   program.pipe(
     Effect.provide(HttpLive),
     Effect.scoped,
-    Effect.tapCause((cause) =>
-      Effect.sync(() => console.error("[theseus-server] fatal:", cause)),
-    ),
+    Effect.tapCause((cause) => Effect.sync(() => console.error("[theseus-server] fatal:", cause))),
   ),
 );
 

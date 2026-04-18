@@ -8,8 +8,8 @@
  * Distinct errors: not-found (fail), binary (succeed with info), read error (fail).
  */
 
-import { Effect, Schema } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
+import { Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const MAX_LINES = 2000;

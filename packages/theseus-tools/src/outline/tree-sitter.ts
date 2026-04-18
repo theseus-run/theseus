@@ -39,7 +39,10 @@ export type TreeSitterNode = {
 // Module-level caches
 // ---------------------------------------------------------------------------
 
-let parserPromise: Promise<{ Parser: TreeSitterParser; Language: TreeSitterLanguageStatic }> | null = null;
+let parserPromise: Promise<{
+  Parser: TreeSitterParser;
+  Language: TreeSitterLanguageStatic;
+}> | null = null;
 const languageCache = new Map<string, TreeSitterLanguageInstance>();
 
 // ---------------------------------------------------------------------------

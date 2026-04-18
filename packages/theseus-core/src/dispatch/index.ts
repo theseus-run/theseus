@@ -9,6 +9,23 @@
  * Uses LanguageModel from effect/unstable/ai.
  */
 
+// Defaults — pre-composed layer for SatelliteRing + DispatchLog
+export { DispatchDefaults } from "./defaults.ts";
+// Dispatch — full machine
+export { dispatch, dispatchAwait } from "./dispatch.ts";
+export type { DispatchSummary, EventEntry, Snapshot } from "./log.ts";
+
+// Log — append-only audit/replay/restore
+export { DispatchLog, InMemoryDispatchLog, NoopDispatchLog } from "./log.ts";
+export type { StreamDelta } from "./step.ts";
+
+// Step — pure, reusable independently
+export {
+  runToolCall,
+  step,
+  stepStream,
+  tryParseArgs,
+} from "./step.ts";
 // Types
 export type {
   DispatchEvent,
@@ -19,29 +36,8 @@ export type {
   StepText,
   StepToolCalls,
   ToolCall,
+  ToolCallError,
   ToolCallResult,
   Usage,
 } from "./types.ts";
-
-export type { ToolCallError } from "./types.ts";
-export { ToolCallUnknown, ToolCallBadArgs, ToolCallFailed } from "./types.ts";
-
-// Log — append-only audit/replay/restore
-export { DispatchLog, InMemoryDispatchLog, NoopDispatchLog } from "./log.ts";
-export type { EventEntry, Snapshot, DispatchSummary } from "./log.ts";
-
-// Step — pure, reusable independently
-export {
-  step,
-  stepStream,
-  tryParseArgs,
-  runToolCall,
-} from "./step.ts";
-
-export type { StreamDelta } from "./step.ts";
-
-// Dispatch — full machine
-export { dispatch, dispatchAwait } from "./dispatch.ts";
-
-// Defaults — pre-composed layer for SatelliteRing + DispatchLog
-export { DispatchDefaults } from "./defaults.ts";
+export { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";

@@ -3,10 +3,10 @@
  */
 
 import { Match } from "effect";
-import type { TreeSitterNode } from "./tree-sitter.ts";
+import { children, truncate } from "./ast.ts";
 import type { Symbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
-import { children, truncate } from "./ast.ts";
+import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Rust AST root. */
 export const extractSymbolsRust = (root: TreeSitterNode): Symbol[] =>

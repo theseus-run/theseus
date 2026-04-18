@@ -5,14 +5,14 @@
  * to avoid cross-package jsx-dev-runtime resolution issues in bun workspaces.
  */
 
+import { Bold, Code, H2, Hr, Li, Md, P, render, Ul } from "@theseus.run/jsx-md";
 import { Effect, Layer, Schema } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import { render, H2, P, Bold, Ul, Li, Hr, Md, Code } from "@theseus.run/jsx-md";
-import { defineTool, meta, type Tool } from "../tool/index.ts";
 import type { Blueprint } from "../agent/index.ts";
-import { gruntAwait } from "../grunt/index.ts";
-import { DispatchDefaults } from "../dispatch/defaults.ts";
 import { Capsule } from "../capsule/index.ts";
+import { DispatchDefaults } from "../dispatch/defaults.ts";
+import { gruntAwait } from "../grunt/index.ts";
+import { defineTool, meta, type Tool } from "../tool/index.ts";
 import { report } from "./report.ts";
 import type { DelegateInput } from "./types.ts";
 
@@ -33,16 +33,26 @@ const renderWorkerPrompt = (basePrompt: string, briefing: DelegateInput): string
       ? [P({ children: [Bold({ children: "Context:" })] }), P({ children: briefing.context })]
       : []),
     Hr({}),
-    P({ children: [
-      "When done, call the ",
-      Code({ children: "theseus_report" }),
-      " tool:",
-    ]}),
-    Ul({ children: [
-      Li({ children: [Bold({ children: "success" }), " — task completed, content is the deliverable"] }),
-      Li({ children: [Bold({ children: "error" }), " — not completed but you found actionable information"] }),
-      Li({ children: [Bold({ children: "defect" }), " — infrastructure broken, tools not working"] }),
-    ]}),
+    P({ children: ["When done, call the ", Code({ children: "theseus_report" }), " tool:"] }),
+    Ul({
+      children: [
+        Li({
+          children: [
+            Bold({ children: "success" }),
+            " — task completed, content is the deliverable",
+          ],
+        }),
+        Li({
+          children: [
+            Bold({ children: "error" }),
+            " — not completed but you found actionable information",
+          ],
+        }),
+        Li({
+          children: [Bold({ children: "defect" }), " — infrastructure broken, tools not working"],
+        }),
+      ],
+    }),
   ]);
 
 const DelegateInputSchema = Schema.Struct({
@@ -60,10 +70,9 @@ const DelegateInputSchema = Schema.Struct({
 });
 
 /** Typed failure for delegate — worker didn't complete successfully. */
-export class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()(
-  "DelegateFailed",
-  { reason: Schema.String },
-) {}
+export class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()("DelegateFailed", {
+  reason: Schema.String,
+}) {}
 
 /**
  * Create a theseus_delegate tool for dispatching workers.
@@ -111,15 +120,18 @@ export const makeDelegate = (
           };
 
           const agentResult = yield* gruntAwait(briefedBlueprint, input.task).pipe(
-            Effect.provide(Layer.merge(
-              Layer.succeed(LanguageModel.LanguageModel, lm),
-              DispatchDefaults,
-            )),
+            Effect.provide(
+              Layer.merge(Layer.succeed(LanguageModel.LanguageModel, lm), DispatchDefaults),
+            ),
             Effect.catchTags({
               AgentInterrupted: (e) =>
-                Effect.fail(new DelegateFailed({ reason: `Worker interrupted: ${e.reason ?? "unknown"}` })),
+                Effect.fail(
+                  new DelegateFailed({ reason: `Worker interrupted: ${e.reason ?? "unknown"}` }),
+                ),
               AgentCycleExceeded: (e) =>
-                Effect.fail(new DelegateFailed({ reason: `Worker exceeded cycle cap (${e.max} iterations)` })),
+                Effect.fail(
+                  new DelegateFailed({ reason: `Worker exceeded cycle cap (${e.max} iterations)` }),
+                ),
               AgentLLMError: (e) =>
                 Effect.fail(new DelegateFailed({ reason: `Worker LLM failed: ${e.message}` })),
             }),

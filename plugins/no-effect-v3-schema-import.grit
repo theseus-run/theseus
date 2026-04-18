@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`"@effect/schema"` where {
-  register_diagnostic(message="Effect v4: @effect/schema is gone. Import from 'effect' instead: import { Schema } from 'effect'.", severity="error")
+`"@effect/schema"` as $m where {
+  register_diagnostic(span=$m, message="Effect v4 (beta.50): @effect/schema is gone. Import from 'effect' instead: import { Schema } from 'effect'.", severity="error")
 }

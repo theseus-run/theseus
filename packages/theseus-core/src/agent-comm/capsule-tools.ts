@@ -8,8 +8,8 @@
  */
 
 import { Effect, Schema } from "effect";
-import { defineTool, meta, type Tool } from "../tool/index.ts";
 import { Capsule } from "../capsule/index.ts";
+import { defineTool, meta, type Tool } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // theseus.log — append an event to the Capsule
@@ -17,13 +17,13 @@ import { Capsule } from "../capsule/index.ts";
 
 const LogInput = Schema.Struct({
   type: Schema.Literals([
-    "mission.note",       // free-form observation
-    "mission.decide",     // decision made (rationale, trade-offs)
-    "mission.concern",    // concern identified (not blocking)
-    "mission.friction",   // protocol violation, ambiguity, impediment
-    "mission.learning",   // cross-mission insight for future improvement
-    "mission.error",      // error occurred (actionable, not a crash)
-    "mission.scope",      // scope expanded beyond original criteria
+    "mission.note", // free-form observation
+    "mission.decide", // decision made (rationale, trade-offs)
+    "mission.concern", // concern identified (not blocking)
+    "mission.friction", // protocol violation, ambiguity, impediment
+    "mission.learning", // cross-mission insight for future improvement
+    "mission.error", // error occurred (actionable, not a crash)
+    "mission.scope", // scope expanded beyond original criteria
   ]).annotate({ description: "Event type to log." }),
   summary: Schema.String.annotate({
     description: "Brief description of what happened",
@@ -51,9 +51,9 @@ export const makeLogTool = (
       input: LogInput as unknown as Schema.Schema<LogInputType>,
       meta: meta({ mutation: "write", capabilities: ["capsule.write"] }),
       execute: ({ type, summary }) =>
-        capsule.log({ type, by: agentName, data: { summary } }).pipe(
-          Effect.map(() => `Logged: ${type} — ${summary}`),
-        ),
+        capsule
+          .log({ type, by: agentName, data: { summary } })
+          .pipe(Effect.map(() => `Logged: ${type} — ${summary}`)),
     });
   });
 

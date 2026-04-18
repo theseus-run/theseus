@@ -20,13 +20,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { BunHttpClient } from "@effect/platform-bun";
 import { Data, Effect, Layer, Match, Ref, Stream } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as Prompt from "effect/unstable/ai/Prompt";
+import type * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { RuntimeConfig, RuntimeConfigLive } from "../config.ts";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,11 @@ type CopilotError = CopilotAuthError | CopilotHttpError | CopilotParseError;
 
 /** Best-effort JSON parse with fallback. */
 const safeParseJson = (raw: string, fallback: unknown = {}): unknown => {
-  try { return JSON.parse(raw); } catch { return fallback; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -156,7 +160,10 @@ const promptToChatCompletions = (prompt: Prompt.Prompt): unknown[] =>
         return {
           role: "tool",
           tool_call_id: result?.id ?? (msg as any).toolCallId ?? "",
-          content: typeof result?.result === "string" ? result.result : JSON.stringify(result?.result ?? ""),
+          content:
+            typeof result?.result === "string"
+              ? result.result
+              : JSON.stringify(result?.result ?? ""),
         };
       }),
       Match.orElse(() => ({ role: "user", content: "" })),
@@ -242,7 +249,11 @@ const makeUsage = (input: number, output: number) => ({
 });
 
 /** Build a FinishPartEncoded with all fields explicit. */
-const makeFinishPart = (reason: string, input: number, output: number): Response.FinishPartEncoded => ({
+const makeFinishPart = (
+  reason: string,
+  input: number,
+  output: number,
+): Response.FinishPartEncoded => ({
   type: "finish",
   reason: reason as any,
   usage: makeUsage(input, output),
@@ -262,22 +273,27 @@ const parseChatCompletionsToResponseParts = (data: ChatCompletionsWire): Respons
 
   if (finishReason === "tool_calls" && message?.tool_calls) {
     parts.push(
-      ...message.tool_calls.map((tc) => ({
-        type: "tool-call" as const,
-        id: tc.id,
-        name: tc.function.name,
-        params: safeParseJson(tc.function.arguments),
-      } as Response.ToolCallPartEncoded)),
+      ...message.tool_calls.map(
+        (tc) =>
+          ({
+            type: "tool-call" as const,
+            id: tc.id,
+            name: tc.function.name,
+            params: safeParseJson(tc.function.arguments),
+          }) as Response.ToolCallPartEncoded,
+      ),
     );
   } else {
     parts.push({ type: "text", text: message?.content ?? "" });
   }
 
-  parts.push(makeFinishPart(
-    finishReason === "tool_calls" ? "tool-calls" : "stop",
-    rawUsage?.prompt_tokens ?? 0,
-    rawUsage?.completion_tokens ?? 0,
-  ));
+  parts.push(
+    makeFinishPart(
+      finishReason === "tool_calls" ? "tool-calls" : "stop",
+      rawUsage?.prompt_tokens ?? 0,
+      rawUsage?.completion_tokens ?? 0,
+    ),
+  );
 
   return parts;
 };
@@ -293,12 +309,14 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
       Match.when("function_call", (): Response.PartEncoded[] => {
         hasToolCalls = true;
         const params = safeParseJson((item["arguments"] as string) ?? "{}");
-        return [{
-          type: "tool-call" as const,
-          id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
-          name: (item["name"] as string) ?? "",
-          params,
-        } as Response.ToolCallPartEncoded];
+        return [
+          {
+            type: "tool-call" as const,
+            id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
+            name: (item["name"] as string) ?? "",
+            params,
+          } as Response.ToolCallPartEncoded,
+        ];
       }),
       Match.when("reasoning", (): Response.PartEncoded[] => {
         const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
@@ -321,11 +339,13 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
   );
   parts.push(...items);
 
-  parts.push(makeFinishPart(
-    hasToolCalls ? "tool-calls" : "stop",
-    rawUsage?.input_tokens ?? 0,
-    rawUsage?.output_tokens ?? 0,
-  ));
+  parts.push(
+    makeFinishPart(
+      hasToolCalls ? "tool-calls" : "stop",
+      rawUsage?.input_tokens ?? 0,
+      rawUsage?.output_tokens ?? 0,
+    ),
+  );
 
   return parts;
 };
@@ -334,18 +354,19 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
 // SSE parsing
 // ---------------------------------------------------------------------------
 
-const parseSSELines = <E>(
-  raw: Stream.Stream<Uint8Array, E>,
-): Stream.Stream<string, E> => {
+const parseSSELines = <E>(raw: Stream.Stream<Uint8Array, E>): Stream.Stream<string, E> => {
   const decoder = new TextDecoder();
   return raw.pipe(
     Stream.map((chunk) => decoder.decode(chunk, { stream: true })),
-    Stream.mapAccum(() => "", (buffer: string, chunk: string) => {
-      const combined = buffer + chunk;
-      const parts = combined.split("\n");
-      const carry = parts.pop() ?? "";
-      return [carry, parts] as const;
-    }),
+    Stream.mapAccum(
+      () => "",
+      (buffer: string, chunk: string) => {
+        const combined = buffer + chunk;
+        const parts = combined.split("\n");
+        const carry = parts.pop() ?? "";
+        return [carry, parts] as const;
+      },
+    ),
     Stream.filter((line): line is string => typeof line === "string" && line.startsWith("data: ")),
     Stream.map((line) => line.slice(6)),
     Stream.takeWhile((data) => data !== "[DONE]"),
@@ -359,39 +380,56 @@ const parseSSELines = <E>(
 class StreamAccumulator {
   readonly parts: Response.StreamPartEncoded[] = [];
   private readonly indexMap = new Map<number, { id: string; name: string; args: string }>();
-  private readonly responsesCallMap = new Map<string, { id: string; name: string; args: string; done: boolean }>();
+  private readonly responsesCallMap = new Map<
+    string,
+    { id: string; name: string; args: string; done: boolean }
+  >();
   private readonly responsesCallOrder: string[] = [];
   private textId = "";
   private reasoningId = "";
 
-  addChatCompletionsDelta(delta: NonNullable<NonNullable<ChatCompletionsWire["choices"]>[number]["delta"]>): Response.StreamPartEncoded | null {
+  addChatCompletionsDelta(
+    delta: NonNullable<NonNullable<ChatCompletionsWire["choices"]>[number]["delta"]>,
+  ): Response.StreamPartEncoded | null {
     if (delta.tool_calls) {
       delta.tool_calls.forEach((tc) => {
         const existing = this.indexMap.get(tc.index);
         if (!existing) {
-          this.indexMap.set(tc.index, { id: tc.id ?? "", name: tc.function?.name ?? "", args: tc.function?.arguments ?? "" });
-        } else {
-          if (tc.function?.arguments) existing.args += tc.function.arguments;
-        }
+          this.indexMap.set(tc.index, {
+            id: tc.id ?? "",
+            name: tc.function?.name ?? "",
+            args: tc.function?.arguments ?? "",
+          });
+        } else if (tc.function?.arguments) existing.args += tc.function.arguments;
       });
       return null;
     }
     return Match.value(true).pipe(
-      Match.when(() => !!delta.reasoning_content, () => {
-        if (!this.reasoningId) {
-          this.reasoningId = `reasoning_${Date.now()}`;
-        }
-        return { type: "reasoning-delta", id: this.reasoningId, delta: delta.reasoning_content } as any;
-      }),
-      Match.when(() => !!delta.content, () => {
-        if (!this.textId) {
-          this.textId = `text_${Date.now()}`;
-          // Emit as text-delta directly — text-start has no delta field
-          // and would lose the first chunk's content
+      Match.when(
+        () => !!delta.reasoning_content,
+        () => {
+          if (!this.reasoningId) {
+            this.reasoningId = `reasoning_${Date.now()}`;
+          }
+          return {
+            type: "reasoning-delta",
+            id: this.reasoningId,
+            delta: delta.reasoning_content,
+          } as any;
+        },
+      ),
+      Match.when(
+        () => !!delta.content,
+        () => {
+          if (!this.textId) {
+            this.textId = `text_${Date.now()}`;
+            // Emit as text-delta directly — text-start has no delta field
+            // and would lose the first chunk's content
+            return { type: "text-delta", id: this.textId, delta: delta.content } as any;
+          }
           return { type: "text-delta", id: this.textId, delta: delta.content } as any;
-        }
-        return { type: "text-delta", id: this.textId, delta: delta.content } as any;
-      }),
+        },
+      ),
       Match.orElse(() => null),
     );
   }
@@ -402,7 +440,12 @@ class StreamAccumulator {
       Match.when("response.output_item.added", () => {
         if (data.item?.type !== "function_call") return null;
         const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${Date.now()}`);
-        this.responsesCallMap.set(callId, { id: callId, name: data.item.name ?? "", args: "", done: false });
+        this.responsesCallMap.set(callId, {
+          id: callId,
+          name: data.item.name ?? "",
+          args: "",
+          done: false,
+        });
         this.responsesCallOrder.push(callId);
         return null;
       }),
@@ -418,7 +461,12 @@ class StreamAccumulator {
           entry.args = data.arguments ?? entry.args;
           entry.done = true;
           const params = safeParseJson(entry.args);
-          return { type: "tool-call", id: entry.id, name: entry.name || data.name || "", params } as any;
+          return {
+            type: "tool-call",
+            id: entry.id,
+            name: entry.name || data.name || "",
+            params,
+          } as any;
         }
         return null;
       }),
@@ -451,12 +499,15 @@ class StreamAccumulator {
     final.push(
       ...[...this.indexMap.entries()]
         .sort(([a], [b]) => a - b)
-        .map(([, tc]) => ({
-          type: "tool-call" as const,
-          id: tc.id,
-          name: tc.name,
-          params: safeParseJson(tc.args),
-        } as any)),
+        .map(
+          ([, tc]) =>
+            ({
+              type: "tool-call" as const,
+              id: tc.id,
+              name: tc.name,
+              params: safeParseJson(tc.args),
+            }) as any,
+        ),
     );
 
     // Flush unfinished responses tool calls
@@ -464,12 +515,15 @@ class StreamAccumulator {
       ...this.responsesCallOrder
         .map((key) => this.responsesCallMap.get(key))
         .filter((tc): tc is NonNullable<typeof tc> => !!tc && !tc.done)
-        .map((tc) => ({
-          type: "tool-call" as const,
-          id: tc.id,
-          name: tc.name,
-          params: safeParseJson(tc.args),
-        } as any)),
+        .map(
+          (tc) =>
+            ({
+              type: "tool-call" as const,
+              id: tc.id,
+              name: tc.name,
+              params: safeParseJson(tc.args),
+            }) as any,
+        ),
     );
 
     const hasToolCalls = this.indexMap.size > 0 || this.responsesCallOrder.length > 0;
@@ -485,8 +539,11 @@ const processSSEChunkToStreamPart = (
   useResponses: boolean,
 ): Response.StreamPartEncoded | null => {
   let parsed: unknown;
-  try { parsed = JSON.parse(data); }
-  catch { return null; }
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return null;
+  }
 
   if (useResponses) {
     return acc.addResponsesEvent(parsed as ResponsesSSEEvent);
@@ -504,48 +561,60 @@ const processSSEChunkToStreamPart = (
 const mapError = (e: CopilotError): AiError.AiError =>
   Match.value(e).pipe(
     Match.tag("CopilotAuthError", () =>
-      AiError.make({ module: "CopilotProvider", method: "auth", reason: new AiError.AuthenticationError({ kind: "Unknown" }) }),
+      AiError.make({
+        module: "CopilotProvider",
+        method: "auth",
+        reason: new AiError.AuthenticationError({ kind: "Unknown" }),
+      }),
     ),
     Match.tag("CopilotParseError", () =>
-      AiError.make({ module: "CopilotProvider", method: "parse", reason: new AiError.InternalProviderError({ description: "Failed to parse LLM response" }) }),
+      AiError.make({
+        module: "CopilotProvider",
+        method: "parse",
+        reason: new AiError.InternalProviderError({ description: "Failed to parse LLM response" }),
+      }),
     ),
     Match.tag("CopilotHttpError", (e) =>
-      AiError.make({ module: "CopilotProvider", method: "http", reason: new AiError.UnknownError({ description: `HTTP ${e.status}: ${e.body}` }) }),
+      AiError.make({
+        module: "CopilotProvider",
+        method: "http",
+        reason: new AiError.UnknownError({ description: `HTTP ${e.status}: ${e.body}` }),
+      }),
     ),
     Match.exhaustive,
   );
 
 /** Ensure call_id stays within OpenAI's 64-char limit. */
-const sanitizeCallId = (id: string): string =>
-  id.length <= 64 ? id : id.slice(0, 64);
+const sanitizeCallId = (id: string): string => (id.length <= 64 ? id : id.slice(0, 64));
 
 // ---------------------------------------------------------------------------
 // OAuth helpers
 // ---------------------------------------------------------------------------
 
-const readOauthToken: Effect.Effect<string, CopilotAuthError> =
-  Effect.gen(function* () {
-    const path = join(homedir(), ".config", "github-copilot", "apps.json");
+const readOauthToken: Effect.Effect<string, CopilotAuthError> = Effect.gen(function* () {
+  const path = join(homedir(), ".config", "github-copilot", "apps.json");
 
-    const raw = yield* Effect.try({
-      try: () => readFileSync(path, "utf-8"),
-      catch: (cause) => new CopilotAuthError({ cause: `Cannot read ${path}: ${cause}` }),
-    });
-
-    const parsed = yield* Effect.try({
-      try: () => JSON.parse(raw) as Record<string, { oauth_token?: string }>,
-      catch: (cause) => new CopilotAuthError({ cause: `Cannot parse ${path}: ${cause}` }),
-    });
-
-    const entry = parsed["github.com"] ?? Object.values(parsed)[0];
-    if (!entry?.oauth_token) {
-      return yield* Effect.fail(
-        new CopilotAuthError({ cause: `oauth_token not found in ${path} (keys: ${Object.keys(parsed).join(", ")})` }),
-      );
-    }
-
-    return entry.oauth_token;
+  const raw = yield* Effect.try({
+    try: () => readFileSync(path, "utf-8"),
+    catch: (cause) => new CopilotAuthError({ cause: `Cannot read ${path}: ${cause}` }),
   });
+
+  const parsed = yield* Effect.try({
+    try: () => JSON.parse(raw) as Record<string, { oauth_token?: string }>,
+    catch: (cause) => new CopilotAuthError({ cause: `Cannot parse ${path}: ${cause}` }),
+  });
+
+  const entry = parsed["github.com"] ?? Object.values(parsed)[0];
+  if (!entry?.oauth_token) {
+    return yield* Effect.fail(
+      new CopilotAuthError({
+        cause: `oauth_token not found in ${path} (keys: ${Object.keys(parsed).join(", ")})`,
+      }),
+    );
+  }
+
+  return entry.oauth_token;
+});
 
 // ---------------------------------------------------------------------------
 // CopilotLanguageModel — implements LanguageModel via LanguageModel.make()
@@ -558,7 +627,9 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
     const config = yield* RuntimeConfig;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
-    const exchangeToken = (oauthToken: string): Effect.Effect<TokenCache, CopilotAuthError | CopilotParseError> =>
+    const exchangeToken = (
+      oauthToken: string,
+    ): Effect.Effect<TokenCache, CopilotAuthError | CopilotParseError> =>
       Effect.gen(function* () {
         const req = HttpClientRequest.get(config.copilotAuthUrl).pipe(
           HttpClientRequest.setHeaders({
@@ -567,12 +638,18 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
             Accept: "application/json",
           }),
         );
-        const res = yield* http.execute(req).pipe(Effect.mapError((cause) => new CopilotAuthError({ cause })));
+        const res = yield* http
+          .execute(req)
+          .pipe(Effect.mapError((cause) => new CopilotAuthError({ cause })));
         const body = yield* res.json.pipe(
           Effect.mapError((cause) => new CopilotParseError({ cause })),
         ) as Effect.Effect<{ token?: string; expires_at?: number }, CopilotParseError>;
         if (!body?.token) {
-          return yield* Effect.fail(new CopilotAuthError({ cause: new Error(`Unexpected token response: ${JSON.stringify(body)}`) }));
+          return yield* Effect.fail(
+            new CopilotAuthError({
+              cause: new Error(`Unexpected token response: ${JSON.stringify(body)}`),
+            }),
+          );
         }
         return { bearer: body.token, expiresAt: body.expires_at ?? 0 };
       });
@@ -641,11 +718,15 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
 
     const executeRequest = (req: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
-        const res = yield* http.execute(req).pipe(
-          Effect.mapError((cause) => new CopilotHttpError({ status: 0, body: String(cause) })),
-        );
+        const res = yield* http
+          .execute(req)
+          .pipe(
+            Effect.mapError((cause) => new CopilotHttpError({ status: 0, body: String(cause) })),
+          );
         if (res.status !== 200) {
-          const text = yield* res.text.pipe(Effect.mapError((cause) => new CopilotParseError({ cause })));
+          const text = yield* res.text.pipe(
+            Effect.mapError((cause) => new CopilotParseError({ cause })),
+          );
           return yield* Effect.fail(new CopilotHttpError({ status: res.status, body: text }));
         }
         return res;
@@ -673,16 +754,17 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
             const acc = new StreamAccumulator();
 
             const sseLines = parseSSELines(
-              Stream.mapError(res.stream, () => new CopilotHttpError({ status: 0, body: "Stream read error" })),
+              Stream.mapError(
+                res.stream,
+                () => new CopilotHttpError({ status: 0, body: "Stream read error" }),
+              ),
             );
 
             return sseLines.pipe(
               Stream.mapError(mapError),
               Stream.map((data) => processSSEChunkToStreamPart(data, acc, useResponses)),
               Stream.filter((c): c is Response.StreamPartEncoded => c !== null),
-              Stream.concat(
-                Stream.fromIterable(acc.buildFinalParts()),
-              ),
+              Stream.concat(Stream.fromIterable(acc.buildFinalParts())),
             );
           }).pipe(Effect.mapError(mapError)),
         ),

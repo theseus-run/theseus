@@ -25,11 +25,11 @@ export type MissionStatus = "pending" | "running" | "done" | "failed" | "cancell
 // ---------------------------------------------------------------------------
 
 const VALID_TRANSITIONS: Record<MissionStatus, ReadonlyArray<MissionStatus>> = {
-  pending:   ["running", "cancelled"],
-  running:   ["done", "failed", "cancelled"],
-  failed:    ["running"],  // retry
-  done:      [],           // terminal
-  cancelled: [],           // terminal
+  pending: ["running", "cancelled"],
+  running: ["done", "failed", "cancelled"],
+  failed: ["running"], // retry
+  done: [], // terminal
+  cancelled: [], // terminal
 };
 
 /** Check if a transition from → to is valid. */

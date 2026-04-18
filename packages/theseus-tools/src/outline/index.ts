@@ -8,20 +8,19 @@
  * Languages: TypeScript, TSX, JavaScript, Python, Go, Rust (extensible).
  */
 
-import { Effect, Match, Schema } from "effect";
-import * as Tool from "@theseus.run/core/Tool";
 import { extname } from "node:path";
-
-import { parse } from "./tree-sitter.ts";
-import { formatSymbols } from "./symbol.ts";
-import { extractSymbolsTS } from "./lang-ts.ts";
-import { extractSymbolsPython } from "./lang-python.ts";
-import { extractSymbolsGo } from "./lang-go.ts";
-import { extractSymbolsRust } from "./lang-rust.ts";
+import * as Tool from "@theseus.run/core/Tool";
+import { Effect, Match, Schema } from "effect";
 import { ToolFailure } from "../failure.ts";
+import { extractSymbolsGo } from "./lang-go.ts";
+import { extractSymbolsPython } from "./lang-python.ts";
+import { extractSymbolsRust } from "./lang-rust.ts";
+import { extractSymbolsTS } from "./lang-ts.ts";
+import type { Symbol } from "./symbol.ts";
+import { formatSymbols } from "./symbol.ts";
 
 import type { TreeSitterNode } from "./tree-sitter.ts";
-import type { Symbol } from "./symbol.ts";
+import { parse } from "./tree-sitter.ts";
 
 // ---------------------------------------------------------------------------
 // Extension → grammar mapping

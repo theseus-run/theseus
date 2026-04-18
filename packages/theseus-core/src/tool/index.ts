@@ -28,8 +28,8 @@
  *   })
  */
 
-import { Effect, Schema } from "effect";
 import type { Schedule } from "effect";
+import { type Effect, Schema } from "effect";
 import type { Presentation } from "./content.ts";
 import type { ToolMeta } from "./meta.ts";
 
@@ -50,7 +50,6 @@ export interface Tool<I, O, F, R> {
   readonly name: string;
   /** Human/LLM-readable description of what this tool does. */
   readonly description: string;
-  /** Decode raw LLM args into typed input. */
   /** Schema for the parameters the LLM sends. */
   readonly input: Schema.Schema<I>;
   /** Schema for the success value returned by `execute`. */
@@ -108,8 +107,8 @@ export const defineTool = <I, O = string, F = never, R = never>(
   name: def.name,
   description: def.description,
   input: def.input,
-  output: (def.output ?? (Schema.String as unknown as Schema.Schema<O>)),
-  failure: (def.failure ?? (Schema.Never as unknown as Schema.Schema<F>)),
+  output: def.output ?? (Schema.String as unknown as Schema.Schema<O>),
+  failure: def.failure ?? (Schema.Never as unknown as Schema.Schema<F>),
   meta: def.meta,
   execute: def.execute,
   ...(def.present ? { present: def.present } : {}),
@@ -135,13 +134,11 @@ export {
   text,
   textPresentation,
 } from "./content.ts";
-
-export type { Capability, CapabilityRegistry, Mutation, ToolMeta } from "./meta.ts";
-export { compareMutation, meta, mutationAtMost } from "./meta.ts";
-
 export {
   ToolDefect,
   ToolInputError,
   ToolOutputError,
   type ToolRuntimeError,
 } from "./errors.ts";
+export type { Capability, CapabilityRegistry, Mutation, ToolMeta } from "./meta.ts";
+export { compareMutation, meta, mutationAtMost } from "./meta.ts";

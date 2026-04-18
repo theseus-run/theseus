@@ -10,14 +10,15 @@
  *  - bracket notation: [done] [err] [...] [key: value]
  */
 
-import { useState } from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { cn } from "@/lib/utils";
-import type { DispatchEvent } from "@/lib/rpc-client";
+import { useState } from "react";
 import type { MergedEvent } from "@/App";
+import type { DispatchEvent } from "@/lib/rpc-client";
+import { cn } from "@/lib/utils";
 
 /** Narrowed type for tool-related events (ToolCalling, ToolResult, ToolError). */
 type ToolMergedEvent = Extract<MergedEvent, { readonly tool: string }>;
+
 import { TOOL_META } from "@theseus.run/tools/metadata";
 
 // ---------------------------------------------------------------------------
@@ -195,7 +196,13 @@ function ErrorSection({ error }: { error: { _tag?: string; message?: string } })
 // Component
 // ---------------------------------------------------------------------------
 
-export function ToolEvent({ event, className }: { event: DispatchEvent; className?: string | undefined }) {
+export function ToolEvent({
+  event,
+  className,
+}: {
+  event: DispatchEvent;
+  className?: string | undefined;
+}) {
   const merged = event as MergedEvent;
   const [open, setOpen] = useState(false);
 
@@ -229,7 +236,8 @@ export function ToolEvent({ event, className }: { event: DispatchEvent; classNam
   }
 
   // Tool call card — after satellite/injected early returns, only tool events remain
-  if (merged._tag !== "ToolCalling" && merged._tag !== "ToolResult" && merged._tag !== "ToolError") return null;
+  if (merged._tag !== "ToolCalling" && merged._tag !== "ToolResult" && merged._tag !== "ToolError")
+    return null;
   const toolEvent = merged as ToolMergedEvent;
   const state = resolveState(toolEvent);
   const toolName = toolEvent.tool;

@@ -19,7 +19,7 @@ export function Token({
   className,
   ...props
 }: HTMLAttributes<HTMLSpanElement> & {
-  children: ReactNode;
+  children?: ReactNode;
   label?: ReactNode;
   value?: ReactNode;
   tone?: Tone;

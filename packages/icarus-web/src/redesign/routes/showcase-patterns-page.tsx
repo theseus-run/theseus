@@ -14,14 +14,14 @@ import {
   SignalRowSymbol,
   SignalRowValue,
 } from "@/components/ui/signal-row";
+import { XStack, YStack } from "@/components/ui/stack";
 import { StatBlock, StatBlockLabel, StatBlockValue } from "@/components/ui/stat-block";
 import { StatusMark } from "@/components/ui/status-mark";
 import { Token } from "@/components/ui/token";
-import { XStack, YStack } from "@/components/ui/stack";
 import { controlRows, signalRows } from "../fixtures/runtime";
 import { toolCalls, transcriptRows } from "../fixtures/transcript";
-import { TranscriptFixturePanel } from "../transcript-panel";
 import { useRedesignState } from "../state";
+import { TranscriptFixturePanel } from "../transcript-panel";
 
 export function ShowcasePatternsPage() {
   const { openTool } = useRedesignState();

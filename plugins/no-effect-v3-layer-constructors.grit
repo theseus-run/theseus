@@ -5,6 +5,6 @@ or {
   `Layer.succeed($tag, $impl)`,
   `Layer.effect($tag, $impl)`,
   `Layer.scoped($tag, $impl)`
-} where {
-  register_diagnostic(message="Effect v4: Layer constructors are curried. Use Layer.succeed(Tag)(impl) instead of Layer.succeed(Tag, impl).", severity="error")
+} as $m where {
+  register_diagnostic(span=$m, message="Effect v4 (beta.50): Layer constructors have both curried and two-arg forms. Curried Layer.succeed(Tag)(impl) is preferred for consistency with partial application patterns.", severity="warning")
 }

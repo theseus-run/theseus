@@ -12,7 +12,7 @@ Mission dispatch system, not a chatbot. Named after the ship in *Blindsight* (Pe
 
 You dispatch a goal with done criteria. Crew executes. You await results. You don't talk to the engines.
 
-Stack: **Bun + Effect v4 (beta.33) + TypeScript + Biome**.
+Stack: **Bun + Effect v4 (beta.50) + TypeScript + Biome**.
 
 ---
 
@@ -104,41 +104,53 @@ This only works because every step is a named field on a plain interface.
 
 ### 6. Errors — flat tagged classes, named prefixes
 
+Two flavours, both yieldable:
+
 ```typescript
-// One Data.TaggedError per error kind
-class ToolError extends Data.TaggedError("ToolError")<{
+// Data.TaggedError — plain tagged error
+class ToolDefect extends Data.TaggedError("ToolDefect")<{
   readonly tool: string
   readonly message: string
   readonly cause?: unknown
 }> {}
+
+// Schema.TaggedErrorClass — schema-backed, rides through typed Failure channel
+class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()(
+  "DelegateFailed",
+  { reason: Schema.String }
+) {}
 ```
 
 Rules:
 - All errors for a primitive share a naming prefix: `Tool*`, `Capsule*`, `Mission*`
 - 3–4 error classes max per primitive, flat — no nested hierarchy
-- Typed: `ToolError` (permanent), `ToolErrorRetriable` (retriable), `ToolErrorInput` (bad caller input), `ToolErrorOutput` (bad output shape)
-- Runtime creates `*Input` and `*Output`. Authors create permanent and retriable.
+- Tool runtime errors: `ToolInputError` (bad caller input), `ToolOutputError` (bad output shape), `ToolDefect` (tool crashed). Authors define their own *typed failure* `F` via `Schema.TaggedErrorClass` — this is the tool's declared `failure:` channel, absorbed by Presentation (isError: true) at the dispatch layer, not surfaced as a runtime error.
 - Defects (bugs) propagate via `Effect.die` — no special error class for them
 
-Catch with `Effect.catchTag("ToolError", ...)` — never catch `unknown`.
+Catch with `Effect.catchTag("ToolInputError", ...)` — never catch `unknown`.
 
-### 7. Context objects — pre-bind to avoid repetition
+### 7. Typed failure channel — not an error bag
 
-Authors shouldn't repeat the primitive name in every error:
+The new `Tool<I, O, F, R>` declares its author-level failure shape `F` via a schema-backed
+tagged error. Authors fail by constructing that error directly — no name pre-binding needed:
 
 ```typescript
-// Author gets ctx pre-bound to "readFile"
-execute: ({ path }, { fail, retriable }) =>
-  someEffect.pipe(
-    Effect.mapError(e => fail("cannot read", e)),   // tool name already bound
-  )
+// Author defines (or imports) a typed failure for this tool
+class ToolFailure extends Schema.TaggedErrorClass<ToolFailure>()(
+  "ToolFailure", { message: Schema.String }
+) {}
 
-// Not this:
+// Author writes this:
 execute: ({ path }) =>
-  someEffect.pipe(
-    Effect.mapError(e => new ToolError({ tool: "readFile", message: "cannot read", cause: e })),
-  )
+  Effect.tryPromise({
+    try: () => Bun.file(path).text(),
+    catch: (e) => new ToolFailure({ message: `cannot read ${path}: ${e}` }),
+  })
 ```
+
+The dispatch layer absorbs `F` into the tool's Presentation (`isError: true`, encoded
+failure in `structured`) so the LLM sees it as a structured tool-result, not an exception.
+Runtime-level errors (`ToolInputError`, `ToolDefect`) still surface to the caller as errors.
 
 ### 8. Strict types for closed sets, strings for genuinely open extension points
 
@@ -148,7 +160,7 @@ cannot enumerate values at compile time.
 
 ```typescript
 // Closed set — union is correct, strictness is a feature
-type ToolSafety = "readonly" | "write" | "destructive"
+type Mutation = "readonly" | "write"
 
 // Genuinely open — MCPs, plugins, and user code define arbitrary capabilities
 // at runtime; you cannot enumerate them. string is the right call here.
@@ -177,17 +189,18 @@ HTTP headers are strings for the same reason. These are open protocols, not clos
 When a concept has a natural ordering, use a single ordered type:
 
 ```typescript
-// Wrong — four booleans that aren't independent
+// Wrong — booleans that aren't independent
 readonly canRead: boolean
 readonly canWrite: boolean
-readonly canDestroy: boolean
 
 // Right — one ordered enum
-type ToolSafety = "readonly" | "write" | "destructive"
+type Mutation = "readonly" | "write"
 ```
 
-A tool that destroys also writes. Ordered enum captures that. Runtime derives
-confirmation policy, retry safety, and audit trail from a single value.
+The Tool primitive carries a `meta.mutation: Mutation` field. A "write" tool implicitly
+also reads. Runtime derives confirmation policy, retry safety, and audit trail from this
+single value. (The old `"destructive"` tier was collapsed — capabilities like `"fs.delete"`
+or `"shell.exec"` on the same tool now carry that signal.)
 
 ### 10. No vendor lock-in — inject everything that might change
 
@@ -205,34 +218,48 @@ Swap the provider when the next model drops. Nothing else changes.
 
 ---
 
-## Effect v4 patterns (beta.33)
+## Effect v4 patterns (beta.50)
 
 ```typescript
-// Services
-ServiceMap.Service  (not Context.Tag)
-Layer.effect(Service)(Effect.gen(...))
+// Services — class-style Context.Service (NOT ServiceMap.Service — that was removed)
+import { Context } from "effect"
+class Capsule extends Context.Service<Capsule, CapsuleShape>()("Capsule") {}
+Layer.effect(Capsule)(Effect.gen(...))   // curried Layer
+
+// Errors handling — catch, not catchAll
+Effect.catch(fn)             // all typed errors (was Effect.catchAll)
+Effect.catchTag("Tag", fn)   // specific tag
+Effect.catchTags({ Tag: fn, OtherTag: fn })
+Effect.catchCause(fn)        // cause-level (includes defects/interrupts)
+Effect.catchDefect(fn)       // defect-only (was Effect.catchAllDefect)
 
 // Queues and deferred
-Queue.unbounded
+Queue.unbounded<T>()         // explicit type param required
 Deferred.make<A, E>() / Deferred.await / Deferred.succeed / Deferred.fail / Deferred.failCause
 
 // Retry
-Schedule.both(...)       // not Schedule.intersect (renamed in v4)
-Effect.catchTag(...)     // not Effect.catchAll for specific tags
 Schedule.exponential("200 millis").pipe(Schedule.jittered)
+// Public API: widen input slot to unknown (Schedule input is contravariant)
+readonly retry?: Schedule.Schedule<unknown>
 
 // Schema
-Schema.optional(Schema.String)   // not Schema.optionalWith
+import { Schema } from "effect"
+Schema.optional(Schema.String)                  // not Schema.optionalWith
+Schema.Int.annotate({ description: "..." })    // Int, not between(0, 1)
+class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()(
+  "DelegateFailed",
+  { reason: Schema.String }
+) {}                                             // NEW: TaggedErrorClass, not TaggedError
 
-// Forking fibers — Effect.fork does NOT exist in v4
-Effect.forkDetach(effect)   // detached, not supervised — use for fire-and-forget fibers
-Effect.forkChild(effect)    // supervised by parent fiber
-Effect.forkScoped(effect)   // tied to current Scope (adds Scope to R)
-Effect.forkIn(effect, scope) // fork in a specific scope
+// Forking fibers — Effect.fork does NOT exist
+Effect.forkDetach(effect)    // detached — fire-and-forget
+Effect.forkChild(effect)     // supervised by parent fiber
+Effect.forkScoped(effect)    // tied to current Scope
+Effect.forkIn(effect, scope)
 
-// Cause — checking interrupt
-Cause.hasInterruptsOnly(cause)  // not Cause.isInterruptedOnly (renamed)
-Cause.hasInterrupts(cause)      // has at least one interrupt
+// Cause — checking interrupt (renamed)
+Cause.hasInterruptsOnly(cause)
+Cause.hasInterrupts(cause)
 
 // Exit matching
 Exit.isSuccess(exit) / Exit.isFailure(exit)

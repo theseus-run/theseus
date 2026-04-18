@@ -16,22 +16,38 @@
 // Primary types
 // ---------------------------------------------------------------------------
 
-export type { Satellite, SatelliteAny as Any } from "./satellite/index.ts";
-export type { Phase, Action, SatelliteContext as Context } from "./satellite/index.ts";
+export type {
+  Action,
+  Phase,
+  Satellite,
+  SatelliteAny as Any,
+  SatelliteContext as Context,
+} from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
 // Service + Layers
 // ---------------------------------------------------------------------------
 
-export { SatelliteRing as Ring } from "./satellite/index.ts";
-export { DefaultSatelliteRing as DefaultRing, SatelliteRingLive as RingLive } from "./satellite/index.ts";
-export { makeSatelliteRing as makeRing } from "./satellite/index.ts";
+export {
+  DefaultSatelliteRing as DefaultRing,
+  makeSatelliteRing as makeRing,
+  SatelliteRing as Ring,
+  SatelliteRingLive as RingLive,
+} from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
 // Action constructors
 // ---------------------------------------------------------------------------
 
-export { Pass, TransformMessages, TransformStepResult, ModifyArgs, BlockTool, ReplaceResult, RecoverToolError } from "./satellite/index.ts";
+export {
+  BlockTool,
+  ModifyArgs,
+  Pass,
+  RecoverToolError,
+  ReplaceResult,
+  TransformMessages,
+  TransformStepResult,
+} from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -43,6 +59,4 @@ export { SatelliteAbort } from "./satellite/index.ts";
 // Built-in satellites
 // ---------------------------------------------------------------------------
 
-export { toolRecovery } from "./satellite/index.ts";
-export { tokenBudget } from "./satellite/index.ts";
-export { toolGuard } from "./satellite/index.ts";
+export { tokenBudget, toolGuard, toolRecovery } from "./satellite/index.ts";

@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Capsule } from "../capsule/index.ts";
 import { CapsuleLive } from "../capsule/memory.ts";
-import { makeMissionId } from "./id.ts";
-import { isValidTransition, deriveStatus } from "./status.ts";
-import { MissionErrorInvalidTransition } from "./index.ts";
 import { MissionContext } from "./context.ts";
+import { makeMissionId } from "./id.ts";
+import { MissionErrorInvalidTransition } from "./index.ts";
 import { MissionLive } from "./layer.ts";
+import { deriveStatus, isValidTransition } from "./status.ts";
 
 // ===========================================================================
 // makeMissionId
@@ -81,32 +81,65 @@ describe("deriveStatus", () => {
   });
 
   test("single transition → that status", () => {
-    expect(deriveStatus([
-      { type: "mission.create", at: "2026-04-07T00:00:00Z", by: "runtime", data: {} },
-      { type: "mission.transition", at: "2026-04-07T00:01:00Z", by: "runtime", data: { from: "pending", to: "running" } },
-    ])).toBe("running");
+    expect(
+      deriveStatus([
+        { type: "mission.create", at: "2026-04-07T00:00:00Z", by: "runtime", data: {} },
+        {
+          type: "mission.transition",
+          at: "2026-04-07T00:01:00Z",
+          by: "runtime",
+          data: { from: "pending", to: "running" },
+        },
+      ]),
+    ).toBe("running");
   });
 
   test("multiple transitions → last valid status", () => {
-    expect(deriveStatus([
-      { type: "mission.transition", at: "t1", by: "runtime", data: { from: "pending", to: "running" } },
-      { type: "mission.transition", at: "t2", by: "runtime", data: { from: "running", to: "failed" } },
-      { type: "mission.transition", at: "t3", by: "runtime", data: { from: "failed", to: "running" } },
-    ])).toBe("running");
+    expect(
+      deriveStatus([
+        {
+          type: "mission.transition",
+          at: "t1",
+          by: "runtime",
+          data: { from: "pending", to: "running" },
+        },
+        {
+          type: "mission.transition",
+          at: "t2",
+          by: "runtime",
+          data: { from: "running", to: "failed" },
+        },
+        {
+          type: "mission.transition",
+          at: "t3",
+          by: "runtime",
+          data: { from: "failed", to: "running" },
+        },
+      ]),
+    ).toBe("running");
   });
 
   test("ignores non-transition events", () => {
-    expect(deriveStatus([
-      { type: "mission.create", at: "t1", by: "runtime", data: {} },
-      { type: "mission.plan", at: "t2", by: "theseus", data: {} },
-      { type: "mission.friction", at: "t3", by: "forge", data: {} },
-    ])).toBe("pending");
+    expect(
+      deriveStatus([
+        { type: "mission.create", at: "t1", by: "runtime", data: {} },
+        { type: "mission.plan", at: "t2", by: "theseus", data: {} },
+        { type: "mission.friction", at: "t3", by: "forge", data: {} },
+      ]),
+    ).toBe("pending");
   });
 
   test("ignores invalid status values in events", () => {
-    expect(deriveStatus([
-      { type: "mission.transition", at: "t1", by: "runtime", data: { from: "pending", to: "BOGUS" } },
-    ])).toBe("pending");
+    expect(
+      deriveStatus([
+        {
+          type: "mission.transition",
+          at: "t1",
+          by: "runtime",
+          data: { from: "pending", to: "BOGUS" },
+        },
+      ]),
+    ).toBe("pending");
   });
 });
 
@@ -233,8 +266,8 @@ describe("MissionLive — transitions", () => {
     expect(result.mission.status).toBe("done");
     expect(result.events.map((e) => e.type)).toEqual([
       "mission.create",
-      "mission.transition",  // pending → running
-      "mission.transition",  // running → done
+      "mission.transition", // pending → running
+      "mission.transition", // running → done
     ]);
   });
 

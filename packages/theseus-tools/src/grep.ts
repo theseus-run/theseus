@@ -5,9 +5,9 @@
  * Exit codes: 0 = matches, 1 = no matches, 2 = error.
  */
 
-import { $ } from "bun";
-import { Effect, Schema, Schedule } from "effect";
 import * as Tool from "@theseus.run/core/Tool";
+import { $ } from "bun";
+import { Effect, Schedule, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const MAX_MATCHES = 100;
@@ -17,9 +17,7 @@ const Input = Schema.Struct({
   path: Schema.optional(
     Schema.String.annotate({ description: "Root directory or file to search (default: cwd)" }),
   ),
-  glob: Schema.optional(
-    Schema.String.annotate({ description: "File filter pattern (e.g. *.ts)" }),
-  ),
+  glob: Schema.optional(Schema.String.annotate({ description: "File filter pattern (e.g. *.ts)" })),
   context_lines: Schema.optional(
     Schema.Int.annotate({ description: "Lines of context around each match (0-10)" }),
   ),
@@ -102,8 +100,7 @@ export const grep = Tool.define<Input, string, ToolFailure>({
     // Run ripgrep
     const run = Effect.tryPromise({
       try: () => $`${args}`.nothrow().quiet(),
-      catch: (e) =>
-        new ToolFailure({ message: `Grep failed: ${e}` }),
+      catch: (e) => new ToolFailure({ message: `Grep failed: ${e}` }),
     });
 
     return run.pipe(

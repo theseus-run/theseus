@@ -19,7 +19,7 @@
  */
 
 import { Effect, Schema } from "effect";
-import { textPresentation, type Presentation } from "./content.ts";
+import { type Presentation, textPresentation } from "./content.ts";
 import { ToolDefect, ToolInputError } from "./errors.ts";
 import type { Tool } from "./index.ts";
 
@@ -28,8 +28,7 @@ import type { Tool } from "./index.ts";
 // ---------------------------------------------------------------------------
 
 /** Stringify a value for LLM consumption. Strings pass through; other shapes are JSON. */
-const stringify = (v: unknown): string =>
-  typeof v === "string" ? v : JSON.stringify(v);
+const stringify = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
 
 /** Default success presentation: text content built from the output value. */
 const defaultPresent = <O>(output: O): Presentation =>
@@ -55,12 +54,15 @@ export const callTool = <I, O, F, R>(
 
   // Schema.Schema<I> has unconstrained decoding services at the type level;
   // we cast to keep callTool's R channel clean. In practice the schema is pure.
-  // biome-ignore lint/suspicious/noExplicitAny: Schema decoding-service type erasure
-  const decodeStep: Effect.Effect<I, ToolInputError, never> = (
-    Schema.decodeUnknownEffect(tool.input as any)(raw) as Effect.Effect<I, Schema.SchemaError, never>
-  ).pipe(
-    Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })),
-  );
+  const decodeStep: Effect.Effect<I, ToolInputError, never> =
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: Schema decoding-service type erasure
+      Schema.decodeUnknownEffect(tool.input as any)(raw) as Effect.Effect<
+        I,
+        Schema.SchemaError,
+        never
+      >
+    ).pipe(Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })));
 
   const executeStep = (input: I): Effect.Effect<O, F, R> => {
     const run = tool.execute(input);
@@ -76,8 +78,6 @@ export const callTool = <I, O, F, R>(
         }),
       ),
     ),
-    Effect.catchDefect((cause) =>
-      Effect.fail(new ToolDefect({ tool: tool.name, cause })),
-    ),
+    Effect.catchDefect((cause) => Effect.fail(new ToolDefect({ tool: tool.name, cause }))),
   );
 };

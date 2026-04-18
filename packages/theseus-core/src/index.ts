@@ -17,13 +17,13 @@
  * Prefer the direct namespace imports above.
  */
 
-export * as Tool from "./Tool.ts";
-export * as Dispatch from "./Dispatch.ts";
-export * as Capsule from "./Capsule.ts";
-export * as Mission from "./Mission.ts";
-export * as Grunt from "./Grunt.ts";
 export * as Agent from "./Agent.ts";
 export * as AgentComm from "./AgentComm.ts";
 export * as Bridge from "./Bridge.ts";
-export * as Satellite from "./Satellite.ts";
+export * as Capsule from "./Capsule.ts";
+export * as Dispatch from "./Dispatch.ts";
+export * as Grunt from "./Grunt.ts";
+export * as Mission from "./Mission.ts";
 export * as Rpc from "./rpc/index.ts";
+export * as Satellite from "./Satellite.ts";
+export * as Tool from "./Tool.ts";

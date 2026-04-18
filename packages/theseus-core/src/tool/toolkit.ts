@@ -25,8 +25,7 @@ import { mutationAtMost } from "./meta.ts";
 // ---------------------------------------------------------------------------
 
 /** Extract service requirements R from a Tool type. */
-export type ToolRequirements<T> =
-  T extends Tool<infer _I, infer _O, infer _F, infer R> ? R : never;
+export type ToolRequirements<T> = T extends Tool<infer _I, infer _O, infer _F, infer R> ? R : never;
 
 // ---------------------------------------------------------------------------
 // Toolkit<R>
@@ -48,9 +47,7 @@ export interface Toolkit<R = never> {
 // Constructors
 // ---------------------------------------------------------------------------
 
-const buildCapabilities = (
-  tools: ReadonlyArray<ToolAny>,
-): ReadonlySet<Capability> => {
+const buildCapabilities = (tools: ReadonlyArray<ToolAny>): ReadonlySet<Capability> => {
   const out = new Set<Capability>();
   for (const t of tools) {
     for (const c of t.meta.capabilities) out.add(c);
@@ -58,9 +55,7 @@ const buildCapabilities = (
   return out;
 };
 
-const buildIndex = (
-  tools: ReadonlyArray<ToolAny>,
-): Map<string, ToolAny> => {
+const buildIndex = (tools: ReadonlyArray<ToolAny>): Map<string, ToolAny> => {
   const m = new Map<string, ToolAny>();
   for (const t of tools) m.set(t.name, t);
   return m;
@@ -83,8 +78,7 @@ const buildToolkit = <R>(tools: ReadonlyArray<ToolAny>): Toolkit<R> => {
  */
 export const makeToolkit = <const Tools extends ReadonlyArray<ToolAny>>(
   ...tools: Tools
-): Toolkit<ToolRequirements<Tools[number]>> =>
-  buildToolkit<ToolRequirements<Tools[number]>>(tools);
+): Toolkit<ToolRequirements<Tools[number]>> => buildToolkit<ToolRequirements<Tools[number]>>(tools);
 
 /** The empty toolkit. Useful as a base for `merge`. */
 export const emptyToolkit: Toolkit<never> = buildToolkit<never>([]);
@@ -94,10 +88,7 @@ export const emptyToolkit: Toolkit<never> = buildToolkit<never>([]);
 // ---------------------------------------------------------------------------
 
 /** Merge two toolkits. R is unioned. Later tools with the same name win. */
-export const mergeToolkits = <R1, R2>(
-  a: Toolkit<R1>,
-  b: Toolkit<R2>,
-): Toolkit<R1 | R2> => {
+export const mergeToolkits = <R1, R2>(a: Toolkit<R1>, b: Toolkit<R2>): Toolkit<R1 | R2> => {
   const byName = new Map<string, ToolAny>();
   for (const t of a.tools) byName.set(t.name, t);
   for (const t of b.tools) byName.set(t.name, t);
@@ -105,20 +96,12 @@ export const mergeToolkits = <R1, R2>(
 };
 
 /** Keep only tools whose mutation level is at most `max`. */
-export const withMaxMutation = <R>(
-  toolkit: Toolkit<R>,
-  max: Mutation,
-): Toolkit<R> =>
+export const withMaxMutation = <R>(toolkit: Toolkit<R>, max: Mutation): Toolkit<R> =>
   buildToolkit<R>(toolkit.tools.filter((t) => mutationAtMost(t.meta.mutation, max)));
 
 /** Drop tools declaring a given capability. */
-export const withoutCapability = <R>(
-  toolkit: Toolkit<R>,
-  capability: Capability,
-): Toolkit<R> =>
-  buildToolkit<R>(
-    toolkit.tools.filter((t) => !t.meta.capabilities.has(capability)),
-  );
+export const withoutCapability = <R>(toolkit: Toolkit<R>, capability: Capability): Toolkit<R> =>
+  buildToolkit<R>(toolkit.tools.filter((t) => !t.meta.capabilities.has(capability)));
 
 /** Keep only tools whose full capability set is a subset of `allowed`. */
 export const withCapabilitySubset = <R>(
@@ -141,19 +124,15 @@ export const visibleOnly = <R>(toolkit: Toolkit<R>): Toolkit<R> =>
 // ---------------------------------------------------------------------------
 
 /** Does the toolkit contain a tool declaring this capability? */
-export const hasCapability = (
-  toolkit: Toolkit<unknown>,
-  capability: Capability,
-): boolean => toolkit.capabilities.has(capability);
+export const hasCapability = (toolkit: Toolkit<unknown>, capability: Capability): boolean =>
+  toolkit.capabilities.has(capability);
 
 /** Has a tool with this name? */
 export const hasTool = (toolkit: Toolkit<unknown>, name: string): boolean =>
   toolkit.get(name) !== undefined;
 
 /** All mutation levels present in the toolkit. */
-export const mutations = (
-  toolkit: Toolkit<unknown>,
-): ReadonlySet<ToolMeta["mutation"]> => {
+export const mutations = (toolkit: Toolkit<unknown>): ReadonlySet<ToolMeta["mutation"]> => {
   const out = new Set<ToolMeta["mutation"]>();
   for (const t of toolkit.tools) out.add(t.meta.mutation);
   return out;

@@ -11,12 +11,12 @@
 
 import { Effect, Layer, Ref } from "effect";
 import { Capsule } from "../capsule/index.ts";
+import { MissionContext } from "./context.ts";
 import type { MissionId } from "./id.ts";
 import type { Mission } from "./index.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
 import type { MissionStatus } from "./status.ts";
 import { isValidTransition } from "./status.ts";
-import { MissionContext } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // MissionConfig — what you pass to create a Mission

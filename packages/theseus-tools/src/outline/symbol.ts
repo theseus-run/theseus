@@ -13,7 +13,12 @@ export interface Symbol {
 }
 
 /** Shorthand: build a Symbol from a tree-sitter node. */
-export const sym = (node: TreeSitterNode, kind: string, name: string, signature: string): Symbol => ({
+export const sym = (
+  node: TreeSitterNode,
+  kind: string,
+  name: string,
+  signature: string,
+): Symbol => ({
   line: node.startPosition.row + 1,
   col: node.startPosition.column,
   kind,

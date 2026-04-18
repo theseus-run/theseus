@@ -105,7 +105,13 @@ const STUB_MISSION_DETAIL: Mission = {
     { text: "New OAuth integration tests added", status: "pending" },
   ],
   artifacts: [
-    { kind: "issue", source: "linear", ref: "PROJ-456", title: "Migrate to OAuth2", direction: "input" },
+    {
+      kind: "issue",
+      source: "linear",
+      ref: "PROJ-456",
+      title: "Migrate to OAuth2",
+      direction: "input",
+    },
     { kind: "branch", source: "github", ref: "org/repo:feat/oauth", direction: "output" },
   ],
   dispatches: ["d-1", "d-2", "d-3"],

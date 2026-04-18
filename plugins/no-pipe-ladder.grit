@@ -1,6 +1,6 @@
 engine biome(1.0)
 language js
 
-`$a.pipe($b).pipe($c)` where {
-  register_diagnostic(message="Avoid chained .pipe().pipe() ladders. Combine all operators in a single .pipe() call.", severity="warning")
+`$a.pipe($b).pipe($c)` as $m where {
+  register_diagnostic(span=$m, message="Avoid chained .pipe().pipe() ladders. Combine all operators in a single .pipe() call.", severity="warning")
 }

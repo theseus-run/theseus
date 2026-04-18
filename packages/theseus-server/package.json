@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-beta.33",
+    "@effect/platform-bun": "4.0.0-beta.50",
     "@theseus.run/core": "workspace:*",
     "@theseus.run/tools": "workspace:*",
-    "effect": "4.0.0-beta.33",
+    "effect": "4.0.0-beta.50",
     "zod": "4.3.6"
   },
   "devDependencies": {

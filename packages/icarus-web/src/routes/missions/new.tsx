@@ -3,7 +3,7 @@
  */
 
 import { useNavigate } from "@tanstack/react-router";
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 
 export function NewMissionPage() {
   const navigate = useNavigate();
@@ -44,9 +44,7 @@ export function NewMissionPage() {
         />
 
         <div className="flex items-center justify-between mt-2">
-          <p className="text-zinc-600">
-            paste links to issues, docs, etc.
-          </p>
+          <p className="text-zinc-600">paste links to issues, docs, etc.</p>
           <button onClick={handleSubmit} disabled={!goal.trim()} className="btn">
             start
           </button>
