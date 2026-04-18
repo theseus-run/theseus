@@ -36,7 +36,7 @@ export const readFile = Tool.define<Input, string, ToolFailure>({
     "Read a file. Returns line-numbered text. Binary files return a type indicator. Use offset/limit for large files.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  policy: { interaction: "observe" },
   execute: ({ path, offset, limit }) =>
     Effect.gen(function* () {
       const file = Bun.file(path);

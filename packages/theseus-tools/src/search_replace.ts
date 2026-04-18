@@ -55,7 +55,7 @@ export const searchReplace = Tool.define<Input, string, ToolFailure>({
     "Replace text in a file. Exact match first, whitespace-normalized fallback. Errors if old text matches in multiple places.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "write", capabilities: ["fs.write"] }),
+  policy: { interaction: "write" },
   execute: ({ path, old: oldText, new: newText }) =>
     Effect.tryPromise({
       try: async () => {

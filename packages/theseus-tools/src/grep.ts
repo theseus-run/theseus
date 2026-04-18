@@ -83,7 +83,7 @@ export const grep = Tool.define<Input, string, ToolFailure>({
     "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read", "shell.exec"] }),
+  policy: { interaction: "observe" },
   // Retry transient ripgrep-not-found once (binary may have been installed concurrently).
   retry: Schedule.recurs(1) as unknown as Schedule.Schedule<unknown>,
   execute: ({ pattern, path, glob: globPattern, context_lines }) => {

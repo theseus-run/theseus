@@ -23,7 +23,7 @@ export const writeFile = Tool.define<Input, string, ToolFailure>({
   description: "Create or overwrite a file. Creates parent directories automatically.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "write", capabilities: ["fs.write"] }),
+  policy: { interaction: "write_idempotent" },
   execute: ({ path, content }) =>
     Effect.tryPromise({
       try: async () => {

@@ -42,7 +42,7 @@ export const shell = Tool.define<Input, string, ToolFailure>({
     "Run a shell command. Returns stdout, stderr, exit code. Default timeout 30s (max 600s). Output capped at 8KB.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "write", capabilities: ["shell.exec"] }),
+  policy: { interaction: "write_destructive" },
   // Retry transient failures (e.g. timeouts, EBUSY) up to 3 times.
   retry: Schedule.recurs(3) as unknown as Schedule.Schedule<unknown>,
   execute: ({ command, timeout_ms }) => {

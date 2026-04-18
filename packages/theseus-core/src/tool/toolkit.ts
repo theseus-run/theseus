@@ -6,8 +6,7 @@
  * 1. **R aggregation**. A Toolkit's `R` is the union of all its tools'
  *    service requirements. Code consuming the toolkit sees that union.
  * 2. **Named lookup**. O(1) lookup by tool name via an internal map.
- * 3. **Metadata aggregation**. `capabilities` is pre-computed.
- * 4. **Provider caching hook**. Wire-format conversions (e.g. @effect/ai
+ * 3. **Provider caching hook**. Wire-format conversions (e.g. @effect/ai
  *    Toolkit, MCP tool list) can cache against the Toolkit instance.
  *
  *   import { makeToolkit } from "@theseus.run/core/Tool"
@@ -17,8 +16,8 @@
  */
 
 import type { Tool, ToolAny } from "./index.ts";
-import type { Capability, Mutation, ToolMeta } from "./meta.ts";
-import { mutationAtMost } from "./meta.ts";
+import type { ToolInteraction, ToolPolicy } from "./meta.ts";
+import { interactionAtMost } from "./meta.ts";
 
 // ---------------------------------------------------------------------------
 // Type-level utilities
@@ -37,8 +36,6 @@ export interface Toolkit<R = never> {
   readonly tools: ReadonlyArray<ToolAny>;
   /** O(1) lookup by tool name. */
   readonly get: (name: string) => ToolAny | undefined;
-  /** Aggregated capabilities across all tools. */
-  readonly capabilities: ReadonlySet<Capability>;
   /** Phantom brand — the union of all tools' service requirements. */
   readonly _R: R;
 }
@@ -46,14 +43,6 @@ export interface Toolkit<R = never> {
 // ---------------------------------------------------------------------------
 // Constructors
 // ---------------------------------------------------------------------------
-
-const buildCapabilities = (tools: ReadonlyArray<ToolAny>): ReadonlySet<Capability> => {
-  const out = new Set<Capability>();
-  for (const t of tools) {
-    for (const c of t.meta.capabilities) out.add(c);
-  }
-  return out;
-};
 
 const buildIndex = (tools: ReadonlyArray<ToolAny>): Map<string, ToolAny> => {
   const m = new Map<string, ToolAny>();
@@ -67,7 +56,6 @@ const buildToolkit = <R>(tools: ReadonlyArray<ToolAny>): Toolkit<R> => {
     _tag: "Toolkit",
     tools,
     get: (name) => index.get(name),
-    capabilities: buildCapabilities(tools),
     // biome-ignore lint/suspicious/noExplicitAny: phantom type — never read at runtime
     _R: undefined as any,
   };
@@ -95,45 +83,21 @@ export const mergeToolkits = <R1, R2>(a: Toolkit<R1>, b: Toolkit<R2>): Toolkit<R
   return buildToolkit<R1 | R2>([...byName.values()]);
 };
 
-/** Keep only tools whose mutation level is at most `max`. */
-export const withMaxMutation = <R>(toolkit: Toolkit<R>, max: Mutation): Toolkit<R> =>
-  buildToolkit<R>(toolkit.tools.filter((t) => mutationAtMost(t.meta.mutation, max)));
-
-/** Drop tools declaring a given capability. */
-export const withoutCapability = <R>(toolkit: Toolkit<R>, capability: Capability): Toolkit<R> =>
-  buildToolkit<R>(toolkit.tools.filter((t) => !t.meta.capabilities.has(capability)));
-
-/** Keep only tools whose full capability set is a subset of `allowed`. */
-export const withCapabilitySubset = <R>(
-  toolkit: Toolkit<R>,
-  allowed: ReadonlySet<Capability>,
-): Toolkit<R> =>
-  buildToolkit<R>(
-    toolkit.tools.filter((t) => {
-      for (const c of t.meta.capabilities) if (!allowed.has(c)) return false;
-      return true;
-    }),
-  );
-
-/** Drop hidden tools — the set an agent normally sees. */
-export const visibleOnly = <R>(toolkit: Toolkit<R>): Toolkit<R> =>
-  buildToolkit<R>(toolkit.tools.filter((t) => !t.meta.hidden));
+/** Keep only tools whose interaction level is at most `max`. */
+export const withMaxInteraction = <R>(toolkit: Toolkit<R>, max: ToolInteraction): Toolkit<R> =>
+  buildToolkit<R>(toolkit.tools.filter((t) => interactionAtMost(t.policy.interaction, max)));
 
 // ---------------------------------------------------------------------------
 // Accessors
 // ---------------------------------------------------------------------------
 
-/** Does the toolkit contain a tool declaring this capability? */
-export const hasCapability = (toolkit: Toolkit<unknown>, capability: Capability): boolean =>
-  toolkit.capabilities.has(capability);
-
 /** Has a tool with this name? */
 export const hasTool = (toolkit: Toolkit<unknown>, name: string): boolean =>
   toolkit.get(name) !== undefined;
 
-/** All mutation levels present in the toolkit. */
-export const mutations = (toolkit: Toolkit<unknown>): ReadonlySet<ToolMeta["mutation"]> => {
-  const out = new Set<ToolMeta["mutation"]>();
-  for (const t of toolkit.tools) out.add(t.meta.mutation);
+/** All interaction levels present in the toolkit. */
+export const interactions = (toolkit: Toolkit<unknown>): ReadonlySet<ToolPolicy["interaction"]> => {
+  const out = new Set<ToolPolicy["interaction"]>();
+  for (const t of toolkit.tools) out.add(t.policy.interaction);
   return out;
 };

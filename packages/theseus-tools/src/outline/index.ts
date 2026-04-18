@@ -73,7 +73,7 @@ export const outline = Tool.define<Input, string, ToolFailure>({
     "Extract symbol outline (functions, classes, types, imports) from a source file. Prefer over read_file for structural understanding. Supports: .ts .tsx .js .jsx .py .go .rs",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  policy: { interaction: "observe" },
   execute: ({ path }) =>
     Effect.gen(function* () {
       const file = Bun.file(path);

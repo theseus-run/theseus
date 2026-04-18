@@ -11,7 +11,7 @@
  *     name: "readFile",
  *     description: "Read a file by path",
  *     input: Schema.Struct({ path: Schema.String }),
- *     meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+ *     policy: { interaction: "observe" },
  *     execute: ({ path }) => Effect.tryPromise({
  *       try: () => Bun.file(path).text(),
  *       catch: (e) => new ReadFailed({ path, cause: e }),
@@ -47,19 +47,16 @@ export {
 } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
-// Meta — policy metadata
+// Policy — world-interaction metadata
 // ---------------------------------------------------------------------------
 
 export type {
-  Capability,
-  CapabilityRegistry,
-  Mutation,
-  ToolMeta as Meta,
+  ToolInteraction,
+  ToolPolicy as Policy,
 } from "./tool/index.ts";
 export {
-  compareMutation,
-  meta,
-  mutationAtMost,
+  compareInteraction,
+  interactionAtMost,
 } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -75,15 +72,11 @@ export { defineTool as define } from "./tool/index.ts";
 export type { Toolkit, ToolRequirements } from "./tool/toolkit.ts";
 export {
   emptyToolkit,
-  hasCapability,
   hasTool,
   makeToolkit,
   mergeToolkits,
-  mutations,
-  visibleOnly,
-  withCapabilitySubset,
-  withMaxMutation,
-  withoutCapability,
+  interactions,
+  withMaxInteraction,
 } from "./tool/toolkit.ts";
 
 // ---------------------------------------------------------------------------

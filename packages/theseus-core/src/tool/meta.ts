@@ -1,48 +1,51 @@
 /**
- * ToolMeta — policy metadata carried by every tool.
+ * ToolPolicy — ordered world-interaction policy carried by every tool.
  *
- * Metadata is inert on its own; a runtime (policy engine, UI, retry loop)
- * reads it to decide things like "may this tool run in readonly mode?",
- * "is it safe to retry?", "should this be hidden from the model?".
+ * Policy is inert on its own; runtimes read it to decide things like
+ * "may this tool run in observe-only mode?" or "what is the default retry
+ * posture for this tool?".
  */
 
 // ---------------------------------------------------------------------------
-// Mutation — ordered permission level
-//
-// Ordering matters: a policy allowing "write" must also allow "idempotent"
-// and "readonly". `compareMutation` supplies the ordering.
+// ToolInteraction — ordered from least to most dangerous
 // ---------------------------------------------------------------------------
 
 /**
- * Mutation level — ordered from least to most dangerous.
+ * World-interaction level for a tool.
  *
- * - `readonly`    — no state change (read a file, query an API)
- * - `idempotent`  — state change but safe to repeat (PUT, upsert, set-to-value)
- * - `write`       — state change, not safe to blindly repeat (POST, append, increment)
- * - `destructive` — irreversible state change (delete, drop table, rm -rf)
+ * - `pure`              — closed-world transform, no ambient reads, no writes
+ * - `observe`           — reads ambient state, no writes
+ * - `write_idempotent`  — mutates, but repeating the same call converges safely
+ * - `write`             — mutates, not safe to blindly retry
+ * - `write_destructive` — lossy, irreversible, or arbitrarily dangerous mutation
  */
-export type Mutation = "readonly" | "idempotent" | "write" | "destructive";
+export type ToolInteraction =
+  | "pure"
+  | "observe"
+  | "write_idempotent"
+  | "write"
+  | "write_destructive";
 
-const MUTATION_ORDER: Record<Mutation, number> = {
-  readonly: 0,
-  idempotent: 1,
-  write: 2,
-  destructive: 3,
+const INTERACTION_ORDER: Record<ToolInteraction, number> = {
+  pure: 0,
+  observe: 1,
+  write_idempotent: 2,
+  write: 3,
+  write_destructive: 4,
 };
 
-/** Compare two mutation levels. Negative if a < b, 0 if equal, positive if a > b. */
-export const compareMutation = (a: Mutation, b: Mutation): number =>
-  MUTATION_ORDER[a] - MUTATION_ORDER[b];
+/** Compare two interaction levels. Negative if a < b, 0 if equal, positive if a > b. */
+export const compareInteraction = (a: ToolInteraction, b: ToolInteraction): number =>
+  INTERACTION_ORDER[a] - INTERACTION_ORDER[b];
 
-/** Is mutation `a` at most as dangerous as `max`? */
-export const mutationAtMost = (a: Mutation, max: Mutation): boolean => compareMutation(a, max) <= 0;
+/** Is interaction `a` at most as dangerous as `max`? */
+export const interactionAtMost = (a: ToolInteraction, max: ToolInteraction): boolean =>
+  compareInteraction(a, max) <= 0;
 
 // ---------------------------------------------------------------------------
-// ToolMeta
+// ToolPolicy
 // ---------------------------------------------------------------------------
 
-export interface ToolMeta {
-  readonly mutation: Mutation;
-  /** Tool consults external, non-deterministic state (network, LLMs, clock) — affects caching. */
-  readonly openWorld?: boolean;
+export interface ToolPolicy {
+  readonly interaction: ToolInteraction;
 }

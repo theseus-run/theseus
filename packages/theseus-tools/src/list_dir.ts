@@ -38,7 +38,7 @@ export const listDir = Tool.define<Input, string, ToolFailure>({
     "List directory contents. Dirs end with /, symlinks with @. Skips node_modules, .git, dist, build, coverage.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  policy: { interaction: "observe" },
   execute: ({ path }) =>
     Effect.tryPromise({
       try: async () => {

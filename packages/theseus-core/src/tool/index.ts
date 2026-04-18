@@ -6,20 +6,20 @@
  *   - `output`  — Effect Schema for the value execute returns
  *   - `failure` — Effect Schema for known failure shapes (the LLM sees these)
  *   - `execute` — Effect producing `O`, failing with `F`, requiring services `R`
- *   - `meta`    — policy metadata (mutation level, capabilities)
+ *   - `policy`  — ordered world-interaction policy
  *
  * Everything else is optional: `present` to override the default text
  * presentation, `retry` to declare a retry policy, etc.
  *
  *   import { Schema, Effect } from "effect"
- *   import { defineTool, meta } from "@theseus.run/core/Tool"
+ *   import { defineTool } from "@theseus.run/core/Tool"
  *
  *   const readFile = defineTool({
  *     name: "readFile",
  *     description: "Read a file by path",
  *     input: Schema.Struct({ path: Schema.String }),
  *     output: Schema.String,
- *     meta: meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+ *     policy: { interaction: "observe" },
  *     execute: ({ path }) =>
  *       Effect.tryPromise({
  *         try: () => Bun.file(path).text(),
@@ -31,7 +31,7 @@
 import type { Schedule } from "effect";
 import { type Effect, Schema } from "effect";
 import type { Presentation } from "./content.ts";
-import type { ToolMeta } from "./meta.ts";
+import type { ToolPolicy } from "./meta.ts";
 
 // ---------------------------------------------------------------------------
 // Tool<I, O, F, R>
@@ -56,8 +56,8 @@ export interface Tool<I, O, F, R> {
   readonly output: Schema.Schema<O>;
   /** Schema for known failure shapes. `Schema.Never` means "no known failures". */
   readonly failure: Schema.Schema<F>;
-  /** Policy metadata (mutation level, capabilities). */
-  readonly meta: ToolMeta;
+  /** Ordered world-interaction policy. */
+  readonly policy: ToolPolicy;
   /** The typed effect. */
   readonly execute: (input: I) => Effect.Effect<O, F, R>;
   /** Convert the typed output into LLM/UI content. Defaults to text via JSON encode. */
@@ -87,7 +87,7 @@ export interface ToolDef<I, O, F, R> {
   readonly input: Schema.Schema<I>;
   readonly output?: Schema.Schema<O>;
   readonly failure?: Schema.Schema<F>;
-  readonly meta: ToolMeta;
+  readonly policy: ToolPolicy;
   readonly execute: (input: I) => Effect.Effect<O, F, R>;
   readonly present?: (output: O) => Presentation;
   readonly retry?: Schedule.Schedule<unknown>;
@@ -109,7 +109,7 @@ export const defineTool = <I, O = string, F = never, R = never>(
   input: def.input,
   output: def.output ?? (Schema.String as unknown as Schema.Schema<O>),
   failure: def.failure ?? (Schema.Never as unknown as Schema.Schema<F>),
-  meta: def.meta,
+  policy: def.policy,
   execute: def.execute,
   ...(def.present ? { present: def.present } : {}),
   ...(def.retry ? { retry: def.retry } : {}),
@@ -140,5 +140,5 @@ export {
   ToolOutputError,
   type ToolRuntimeError,
 } from "./errors.ts";
-export type { Capability, CapabilityRegistry, Mutation, ToolMeta } from "./meta.ts";
-export { compareMutation, meta, mutationAtMost } from "./meta.ts";
+export type { ToolInteraction, ToolPolicy } from "./meta.ts";
+export { compareInteraction, interactionAtMost } from "./meta.ts";

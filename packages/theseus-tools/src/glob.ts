@@ -28,7 +28,7 @@ export const glob = Tool.define<Input, string, ToolFailure>({
     "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns ≤100 paths. Skips node_modules, .git, dist, coverage.",
   input: Input as unknown as Schema.Schema<Input>,
   failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
-  meta: Tool.meta({ mutation: "readonly", capabilities: ["fs.read"] }),
+  policy: { interaction: "observe" },
   execute: ({ pattern, path }) =>
     Effect.tryPromise({
       try: async () => {
