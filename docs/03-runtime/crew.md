@@ -1,12 +1,12 @@
 # Crew
 
-Canonical reference for the Theseus agent roster, dispatch topology, agent traits, and the mission workflow. Sourced from `.theseus/` in the cockpit workspace (v0 OpenCode implementation). Updated to reflect the evolved Mission/Session model — see `capsule-system.md` for the full mission system design.
+Canonical reference for the Theseus agent roster, dispatch topology, agent traits, and the mission workflow. Sourced from `.theseus/` in the cockpit workspace (v0 OpenCode implementation). Updated to reflect the evolved Mission/Session model — see [[mission-system]] for the full mission system design.
 
 ---
 
 ## Tiers
 
-Three tiers, matching the runtime architecture in `architecture.md`:
+Three tiers, matching the runtime architecture in [[architecture]]:
 
 | Tier | Agents | Lifetime |
 |---|---|---|
@@ -510,4 +510,4 @@ If a prior mission is still `active` at session start — surface it to user bef
 
 Subagents (`forge`, `crusher`, `sentinel`, etc.) have read access only. The only write path to mission state is through Theseus. Violations are permission-denied at runtime.
 
-Sessions have no tools — they are auto-managed by the runtime (see `capsule-system.md`).
+Sessions have no tools — they are auto-managed by the runtime (see [[mission-system]]).

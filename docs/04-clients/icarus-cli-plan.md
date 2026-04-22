@@ -32,7 +32,7 @@ packages/theseus-runtime     ← headless, unchanged
 ## What does NOT change
 
 - All of `theseus-runtime`: `AppLayer`, `AgentRegistry`, `CopilotProvider`, `TsService`, tools, agents, actor model, message types.
-- `architecture.md` locked decisions.
+- [[architecture]] locked decisions.
 
 Changes inside `theseus-runtime` are minimal and additive:
 - Add `RuntimeBus` service definition + `UIEvent` types (exported from runtime, no UI dep)

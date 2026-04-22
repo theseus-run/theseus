@@ -2,7 +2,7 @@
 
 Research into whether we should build naive tool implementations (ripgrep wrapper, raw file read, bare `Bun.spawn`) or invest in better backends. Constraint: **local only, no SaaS, no API keys.** Native builds (Zig, Rust) and local servers/daemons are allowed.
 
-Companion to `docs/tools.md` (the tool catalog). This doc covers the *how* — what backends and technologies to use for each tool.
+Companion to [[tools]] (the tool catalog). This doc covers the *how* — what backends and technologies to use for each tool.
 
 ---
 
@@ -546,7 +546,7 @@ The model doesn't need to *see* the code to know *where* it is. It needs to see 
 
 ## Structural Search/Replace — GritQL, ast-grep, Comby
 
-This is a category we didn't cover in `docs/tools.md` and it changes the picture for `search_replace` and `grep`. Instead of text matching (exact string, regex), structural tools match against the AST — they understand code structure.
+This is a category we didn't cover in [[tools]] and it changes the picture for `search_replace` and `grep`. Instead of text matching (exact string, regex), structural tools match against the AST — they understand code structure.
 
 ### The Design Space
 
