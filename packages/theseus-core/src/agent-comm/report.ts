@@ -12,7 +12,7 @@
  */
 
 import { Effect, Schema } from "effect";
-import { defineTool, meta } from "../tool/index.ts";
+import { defineTool } from "../tool/index.ts";
 import type { ReportInput } from "./types.ts";
 
 const ReportInputSchema = Schema.Struct({
@@ -28,6 +28,11 @@ const ReportInputSchema = Schema.Struct({
   }),
 });
 
+export const decodeReportInput = (input: unknown): Effect.Effect<ReportInput, Schema.SchemaError> =>
+  Schema.decodeUnknownEffect(ReportInputSchema as unknown as Schema.Schema<ReportInput>)(
+    input,
+  ) as Effect.Effect<ReportInput, Schema.SchemaError, never>;
+
 /**
  * The theseus.report tool. Add to worker Blueprint's tools array.
  *
@@ -40,7 +45,7 @@ export const report = defineTool<ReportInput>({
     "Report results and terminate. Call when done (success), stuck on a real problem (error), or infrastructure is broken (defect). " +
     "This ends your work — do not call until you have completed the task or determined you cannot.",
   input: ReportInputSchema as unknown as Schema.Schema<ReportInput>,
-  meta: meta({ mutation: "readonly" }),
+  policy: { interaction: "pure" },
   // Never reached — dispatch loop intercepts. Fallback if somehow called directly.
   execute: ({ result, summary }) => Effect.succeed(`Report: ${result} — ${summary}`),
 });

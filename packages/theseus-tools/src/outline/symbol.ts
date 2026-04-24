@@ -1,10 +1,10 @@
 /**
- * Symbol data type, constructor helper, and formatter.
+ * Outline symbol data type, constructor helper, and formatter.
  */
 
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
-export interface Symbol {
+export interface OutlineSymbol {
   readonly line: number;
   readonly col: number;
   readonly kind: string;
@@ -12,13 +12,13 @@ export interface Symbol {
   readonly signature: string;
 }
 
-/** Shorthand: build a Symbol from a tree-sitter node. */
+/** Shorthand: build an outline symbol from a tree-sitter node. */
 export const sym = (
   node: TreeSitterNode,
   kind: string,
   name: string,
   signature: string,
-): Symbol => ({
+): OutlineSymbol => ({
   line: node.startPosition.row + 1,
   col: node.startPosition.column,
   kind,
@@ -27,7 +27,7 @@ export const sym = (
 });
 
 /** Format symbols into aligned columnar output. */
-export const formatSymbols = (symbols: Symbol[]): string => {
+export const formatSymbols = (symbols: OutlineSymbol[]): string => {
   if (symbols.length === 0) return "No symbols found";
 
   const maxLine = Math.max(...symbols.map((s) => String(s.line).length));

@@ -35,17 +35,18 @@ const parseRgJson = (raw: string): GrepMatch[] => {
   const matches: GrepMatch[] = [];
   for (const line of raw.split("\n")) {
     if (!line) continue;
-    try {
-      const obj = JSON.parse(line);
-      if (obj.type === "match") {
-        matches.push({
-          file: obj.data.path.text,
-          line: obj.data.line_number,
-          content: obj.data.lines.text.trimEnd(),
-        });
-      }
-    } catch {
-      // Skip malformed JSON lines
+    const obj = JSON.parse(line) as unknown;
+    if (obj && typeof obj === "object" && "type" in obj && obj.type === "match" && "data" in obj) {
+      const data = obj.data as {
+        path: { text: string };
+        line_number: number;
+        lines: { text: string };
+      };
+      matches.push({
+        file: data.path.text,
+        line: data.line_number,
+        content: data.lines.text.trimEnd(),
+      });
     }
   }
   return matches;

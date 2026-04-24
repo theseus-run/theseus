@@ -67,9 +67,8 @@
       "name": "@theseus.run/core",
       "version": "0.0.1",
       "dependencies": {
-        "@theseus.run/jsx-md": "workspace:*",
+        "@theseus.run/jsx-md": "0.2.1",
         "effect": "4.0.0-beta.50",
-        "zod": "4.3.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.10",
@@ -96,12 +95,10 @@
       "name": "@theseus.run/tools",
       "version": "0.0.1",
       "dependencies": {
-        "@theseus.run/core": "workspace:*",
-        "@theseus.run/jsx-md": "workspace:*",
+        "@theseus.run/core": "0.0.1",
         "effect": "4.0.0-beta.50",
         "tree-sitter-wasms": "^0.1.13",
         "web-tree-sitter": "^0.25.3",
-        "zod": "4.3.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.10",

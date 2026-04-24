@@ -8,7 +8,6 @@
  *   import * as AgentComm from "@theseus.run/core/AgentComm"
  *
  *   const delegateTool = yield* AgentComm.makeDelegate(workerBlueprint)
- *   const logTool = AgentComm.makeLogTool("forge-1")
  */
 
 // ---------------------------------------------------------------------------

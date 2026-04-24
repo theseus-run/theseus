@@ -30,6 +30,60 @@ const Input = Schema.Struct({
 
 type Input = Schema.Schema.Type<typeof Input>;
 
+const ensureExists = (exists: boolean, path: string): Effect.Effect<void, ToolFailure> =>
+  exists ? Effect.void : Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
+
+const formatLine = (line: string): string => {
+  if (line.length <= MAX_LINE_LENGTH) return line;
+  return `${line.slice(0, MAX_LINE_LENGTH)}...`;
+};
+
+const binaryDescription = (file: Pick<Bun.BunFile, "type" | "size">): string | undefined => {
+  const mime = file.type;
+  if (!mime || mime.startsWith("text/") || TEXT_MIMES.some((t) => mime.includes(t))) {
+    return undefined;
+  }
+  return `Binary file (${mime}, ${file.size} bytes)`;
+};
+
+const formatContent = (content: string, offset?: number, limit?: number): string => {
+  const allLines = content.split("\n");
+  const totalLines = allLines.length;
+
+  const start = (offset ?? 1) - 1;
+  const cap = limit ?? MAX_LINES;
+  const end = Math.min(start + cap, totalLines);
+  const lines = allLines.slice(start, end);
+
+  const padWidth = String(end).length;
+  const formatted = lines
+    .map((line, i) => {
+      const lineNum = String(start + i + 1).padStart(padWidth, " ");
+      return `${lineNum}\t${formatLine(line)}`;
+    })
+    .join("\n");
+
+  if (end < totalLines) {
+    return `[${start + 1}-${end} of ${totalLines} lines]\n${formatted}\n[truncated - use offset/limit for remaining ${totalLines - end} lines]`;
+  }
+  return formatted;
+};
+
+const readTextFile = (
+  file: Bun.BunFile,
+  path: string,
+  offset?: number,
+  limit?: number,
+): Effect.Effect<string, ToolFailure> => {
+  const binary = binaryDescription(file);
+  if (binary) return Effect.succeed(binary);
+
+  return Effect.tryPromise({
+    try: () => file.text(),
+    catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
+  }).pipe(Effect.map((content) => formatContent(content, offset, limit)));
+};
+
 export const readFile = Tool.define<Input, string, ToolFailure>({
   name: "read_file",
   description:
@@ -46,44 +100,8 @@ export const readFile = Tool.define<Input, string, ToolFailure>({
         try: () => file.exists(),
         catch: (e) => new ToolFailure({ message: `Cannot access ${path}: ${e}` }),
       });
-      if (!exists) {
-        return yield* Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
-      }
+      yield* ensureExists(exists, path);
 
-      // Step 2: binary detection via MIME type
-      const mime = file.type;
-      if (mime && !mime.startsWith("text/") && !TEXT_MIMES.some((t) => mime.includes(t))) {
-        return `Binary file (${mime}, ${file.size} bytes)`;
-      }
-
-      // Step 3: read content
-      const content = yield* Effect.tryPromise({
-        try: () => file.text(),
-        catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
-      });
-
-      // Step 4: slice and format
-      const allLines = content.split("\n");
-      const totalLines = allLines.length;
-
-      const start = (offset ?? 1) - 1;
-      const cap = limit ?? MAX_LINES;
-      const end = Math.min(start + cap, totalLines);
-      const lines = allLines.slice(start, end);
-
-      const padWidth = String(end).length;
-      const formatted = lines
-        .map((line, i) => {
-          const lineNum = String(start + i + 1).padStart(padWidth, " ");
-          const truncated =
-            line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)}...` : line;
-          return `${lineNum}\t${truncated}`;
-        })
-        .join("\n");
-
-      if (end < totalLines) {
-        return `[${start + 1}-${end} of ${totalLines} lines]\n${formatted}\n[truncated — use offset/limit for remaining ${totalLines - end} lines]`;
-      }
-      return formatted;
+      return yield* readTextFile(file, path, offset, limit);
     }),
 });

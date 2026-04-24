@@ -58,11 +58,11 @@ export const makeDispatchGruntTool = (
         "Returns the grunt's final text output. Use this for work that requires file access, code exploration, or execution.",
       input: Input as unknown as Schema.Schema<Input>,
       failure: DispatchGruntFailure as unknown as Schema.Schema<DispatchGruntFailure>,
-      meta: Tool.meta({ mutation: "write", capabilities: ["agent.dispatch"] }),
+      policy: { interaction: "write" },
       execute: ({ task }) =>
         Grunt.gruntAwait(workerBlueprint, task).pipe(
           Effect.provide(
-            Layer.merge(Layer.succeed(LanguageModel.LanguageModel, lm), Dispatch.Defaults),
+            Layer.merge(Layer.succeed(LanguageModel.LanguageModel)(lm), Dispatch.Defaults),
           ),
           Effect.map((result) => result.content),
           Effect.catchTags({

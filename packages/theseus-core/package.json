@@ -2,8 +2,23 @@
   "name": "@theseus.run/core",
   "version": "0.0.1",
   "description": "Typed primitives for LLM agent systems — Tool, Dispatch, LLM provider interface",
-  "private": true,
+  "private": false,
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theseus-run/theseus.git",
+    "directory": "packages/theseus-core"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "tsconfig.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./Tool": "./src/Tool.ts",
@@ -24,9 +39,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@theseus.run/jsx-md": "workspace:*",
-    "effect": "4.0.0-beta.50",
-    "zod": "4.3.6"
+    "@theseus.run/jsx-md": "0.2.1",
+    "effect": "4.0.0-beta.50"
   },
   "devDependencies": {
     "@types/bun": "^1.3.10",

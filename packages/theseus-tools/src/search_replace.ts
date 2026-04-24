@@ -20,7 +20,10 @@ const Input = Schema.Struct({
 type Input = Schema.Schema.Type<typeof Input>;
 
 /** Find the position of `needle` in `haystack` using whitespace-normalized comparison. */
-const fuzzyFind = (haystack: string, needle: string): { start: number; end: number } | null => {
+const fuzzyFind = (
+  haystack: string,
+  needle: string,
+): { start: number; end: number } | undefined => {
   const haystackLines = haystack.split("\n");
   const needleLines = needle.split("\n");
   const needleNorm = needleLines.map((l) => l.replace(/\s+/g, " ").trim());
@@ -28,8 +31,14 @@ const fuzzyFind = (haystack: string, needle: string): { start: number; end: numb
   for (let i = 0; i <= haystackLines.length - needleLines.length; i++) {
     let match = true;
     for (let j = 0; j < needleLines.length; j++) {
-      const hNorm = haystackLines[i + j]!.replace(/\s+/g, " ").trim();
-      if (hNorm !== needleNorm[j]!) {
+      const haystackLine = haystackLines[i + j];
+      const needleLine = needleNorm[j];
+      if (haystackLine === undefined || needleLine === undefined) {
+        match = false;
+        break;
+      }
+      const hNorm = haystackLine.replace(/\s+/g, " ").trim();
+      if (hNorm !== needleLine) {
         match = false;
         break;
       }
@@ -46,7 +55,7 @@ const fuzzyFind = (haystack: string, needle: string): { start: number; end: numb
       return { start, end };
     }
   }
-  return null;
+  return undefined;
 };
 
 export const searchReplace = Tool.define<Input, string, ToolFailure>({

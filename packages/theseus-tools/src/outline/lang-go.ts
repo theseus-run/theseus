@@ -4,12 +4,12 @@
 
 import { Match } from "effect";
 import { children, truncate } from "./ast.ts";
-import type { Symbol } from "./symbol.ts";
+import type { OutlineSymbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Go AST root. */
-export const extractSymbolsGo = (root: TreeSitterNode): Symbol[] =>
+export const extractSymbolsGo = (root: TreeSitterNode): OutlineSymbol[] =>
   children(root).flatMap((node) =>
     Match.value(node.type).pipe(
       Match.when("function_declaration", () => {

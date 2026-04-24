@@ -16,7 +16,7 @@ import { extractSymbolsGo } from "./lang-go.ts";
 import { extractSymbolsPython } from "./lang-python.ts";
 import { extractSymbolsRust } from "./lang-rust.ts";
 import { extractSymbolsTS } from "./lang-ts.ts";
-import type { Symbol } from "./symbol.ts";
+import type { OutlineSymbol } from "./symbol.ts";
 import { formatSymbols } from "./symbol.ts";
 
 import type { TreeSitterNode } from "./tree-sitter.ts";
@@ -46,7 +46,7 @@ export const SUPPORTED_EXTS = new Set(Object.keys(EXT_TO_GRAMMAR));
 // Grammar → extractor dispatch
 // ---------------------------------------------------------------------------
 
-const extractSymbols = (root: TreeSitterNode, grammar: string): Symbol[] =>
+const extractSymbols = (root: TreeSitterNode, grammar: string): OutlineSymbol[] =>
   Match.value(grammar).pipe(
     Match.when("tree-sitter-typescript", () => extractSymbolsTS(root)),
     Match.when("tree-sitter-tsx", () => extractSymbolsTS(root)),
@@ -67,6 +67,56 @@ const Input = Schema.Struct({
 
 type Input = Schema.Schema.Type<typeof Input>;
 
+const ensureExists = (exists: boolean, path: string): Effect.Effect<void, ToolFailure> =>
+  exists ? Effect.void : Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
+
+const ensureSupportedExt = (ext: string): Effect.Effect<void, ToolFailure> =>
+  SUPPORTED_EXTS.has(ext)
+    ? Effect.void
+    : Effect.fail(
+        new ToolFailure({
+          message: `Unsupported file type: ${ext}. Supported: ${[...SUPPORTED_EXTS].join(", ")}`,
+        }),
+      );
+
+const outlineBinaryDescription = (file: Pick<Bun.BunFile, "type" | "size">): string | undefined => {
+  const mime = file.type;
+  if (
+    !mime ||
+    mime.startsWith("text/") ||
+    mime.includes("javascript") ||
+    mime.includes("typescript")
+  ) {
+    return undefined;
+  }
+  return `Binary file (${mime}, ${file.size} bytes)`;
+};
+
+const parseOutlineFile = (
+  file: Bun.BunFile,
+  path: string,
+  grammarName: string,
+): Effect.Effect<string, ToolFailure> => {
+  const binary = outlineBinaryDescription(file);
+  if (binary) return Effect.succeed(binary);
+
+  return Effect.tryPromise({
+    try: () => file.text(),
+    catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
+  }).pipe(
+    Effect.flatMap((content) => {
+      if (content.trim().length === 0) return Effect.succeed("Empty file");
+
+      return parse(content, grammarName).pipe(
+        Effect.map((tree) => {
+          const symbols = extractSymbols(tree.rootNode, grammarName);
+          return formatSymbols(symbols);
+        }),
+      );
+    }),
+  );
+};
+
 export const outline = Tool.define<Input, string, ToolFailure>({
   name: "outline",
   description:
@@ -83,48 +133,17 @@ export const outline = Tool.define<Input, string, ToolFailure>({
         try: () => file.exists(),
         catch: (e) => new ToolFailure({ message: `Cannot access ${path}: ${e}` }),
       });
-      if (!exists) {
-        return yield* Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
-      }
+      yield* ensureExists(exists, path);
 
       // Extension check
       const ext = extname(path).toLowerCase();
-      if (!SUPPORTED_EXTS.has(ext)) {
-        return yield* Effect.fail(
-          new ToolFailure({
-            message: `Unsupported file type: ${ext}. Supported: ${[...SUPPORTED_EXTS].join(", ")}`,
-          }),
-        );
-      }
+      yield* ensureSupportedExt(ext);
 
-      // Binary detection
-      const mime = file.type;
-      if (
-        mime &&
-        !mime.startsWith("text/") &&
-        !mime.includes("javascript") &&
-        !mime.includes("typescript")
-      ) {
-        return `Binary file (${mime}, ${file.size} bytes)`;
-      }
-
-      // Read content
-      const content = yield* Effect.tryPromise({
-        try: () => file.text(),
-        catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
-      });
-
-      if (content.trim().length === 0) return "Empty file";
-
-      // Parse with tree-sitter
-      const grammarName = EXT_TO_GRAMMAR[ext]!;
-      const tree = yield* parse(content, grammarName);
-
-      const symbols = extractSymbols(tree.rootNode, grammarName);
-      return formatSymbols(symbols);
+      const grammarName = EXT_TO_GRAMMAR[ext] ?? "tree-sitter-typescript";
+      return yield* parseOutlineFile(file, path, grammarName);
     }),
 });
 
 // Re-export types for consumers
-export type { Symbol } from "./symbol.ts";
+export type { OutlineSymbol } from "./symbol.ts";
 export type { TreeSitterNode, TreeSitterTree } from "./tree-sitter.ts";

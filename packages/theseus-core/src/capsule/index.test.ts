@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import * as Tool from "../Tool.ts";
 import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
 import { CapsuleLive } from "./memory.ts";
+import { makeReadCapsuleTool } from "./tools.ts";
 
 const run = <A>(effect: Effect.Effect<A, any, Capsule>) =>
   Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
@@ -102,5 +104,30 @@ describe("Capsule.id", () => {
       }),
     );
     expect(id).toContain("test");
+  });
+});
+
+describe("Capsule tools", () => {
+  test("read capsule clamps tail to the documented maximum", async () => {
+    const output = await run(
+      Effect.gen(function* () {
+        const capsule = yield* Capsule;
+        for (let i = 0; i < 60; i++) {
+          yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
+        }
+
+        const readTool = yield* makeReadCapsuleTool();
+        const presentation = yield* Tool.call(readTool, { tail: 100 });
+        const text = presentation.content
+          .map((content) => (content._tag === "text" ? content.text : ""))
+          .join("");
+        return text;
+      }),
+    );
+
+    expect(output.split("\n")).toHaveLength(50);
+    expect(output).toContain("event-10");
+    expect(output).toContain("event-59");
+    expect(output).not.toContain("event-9");
   });
 });

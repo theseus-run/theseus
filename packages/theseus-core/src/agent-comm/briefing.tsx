@@ -12,6 +12,7 @@
 
 import type { VNode } from "@theseus.run/jsx-md";
 import { Bold, Code, H2, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
+import { report } from "./report.ts";
 import type { DelegateInput } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ export function WorkerPrompt({
       <Briefing {...briefing} />
       <Hr />
       <P>
-        When done, call the <Code>theseus.report</Code> tool:
+        When done, call the <Code>{report.name}</Code> tool:
       </P>
       <Ul>
         <Li>

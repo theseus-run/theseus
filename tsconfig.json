@@ -19,6 +19,7 @@
     "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": true,
     "exactOptionalPropertyTypes": true,
+    "ignoreDeprecations": "6.0",
     "plugins": [
       {
         "name": "@effect/language-service"

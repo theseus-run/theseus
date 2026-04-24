@@ -4,12 +4,12 @@
 
 import { Match } from "effect";
 import { children, truncate } from "./ast.ts";
-import type { Symbol } from "./symbol.ts";
+import type { OutlineSymbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Python AST root. */
-export const extractSymbolsPython = (root: TreeSitterNode): Symbol[] =>
+export const extractSymbolsPython = (root: TreeSitterNode): OutlineSymbol[] =>
   children(root).flatMap((node) =>
     Match.value(node.type).pipe(
       Match.when("function_definition", () => {
@@ -18,7 +18,7 @@ export const extractSymbolsPython = (root: TreeSitterNode): Symbol[] =>
       }),
       Match.when("class_definition", () => {
         const name = node.childForFieldName("name")?.text ?? "";
-        const symbols: Symbol[] = [sym(node, "class", name, "")];
+        const symbols: OutlineSymbol[] = [sym(node, "class", name, "")];
         const body = node.childForFieldName("body");
         if (body) {
           for (const member of children(body)) {

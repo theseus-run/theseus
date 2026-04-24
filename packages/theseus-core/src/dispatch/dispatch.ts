@@ -16,11 +16,12 @@ import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
 import { AgentCycleExceeded, AgentInterrupted } from "../agent/index.ts";
-import { report } from "../agent-comm/report.ts";
+import { decodeReportInput, report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
-import type { Presentation } from "../tool/index.ts";
+import type { Presentation, ToolAny } from "../tool/index.ts";
 import { textPresentation } from "../tool/index.ts";
+import { interactionAtMost } from "../tool/meta.ts";
 import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, stepStream, tryParseArgs } from "./step.ts";
 import type {
@@ -60,6 +61,15 @@ const addUsage = (a: Usage, b: Usage): Usage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
 });
+
+const toolsAllowedByPolicy = (
+  tools: ReadonlyArray<ToolAny>,
+  options?: DispatchOptions,
+): ReadonlyArray<ToolAny> => {
+  const maxInteraction = options?.maxInteraction;
+  if (!maxInteraction) return tools;
+  return tools.filter((tool) => interactionAtMost(tool.policy.interaction, maxInteraction));
+};
 
 // ---------------------------------------------------------------------------
 // drainInjections — apply all pending injections at iteration boundary.
@@ -112,6 +122,7 @@ export const dispatch = (
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
     const dispatchId = options?.dispatchId ?? `${blueprint.name}-${Date.now().toString(36)}`;
+    const allowedTools = toolsAllowedByPolicy(blueprint.tools, options);
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -201,30 +212,26 @@ export const dispatch = (
 
           yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
 
-          const rawResult = yield* stepStream(
-            callMessages,
-            blueprint.tools,
-            blueprint.name,
-            (chunk) =>
-              Match.value(chunk.type).pipe(
-                Match.when("text-delta", () =>
-                  emit({
-                    _tag: "TextDelta",
-                    agent: blueprint.name,
-                    iteration: iterations,
-                    content: chunk.delta,
-                  }),
-                ),
-                Match.when("reasoning-delta", () =>
-                  emit({
-                    _tag: "ThinkingDelta",
-                    agent: blueprint.name,
-                    iteration: iterations,
-                    content: chunk.delta,
-                  }),
-                ),
-                Match.orElse(() => Effect.void),
+          const rawResult = yield* stepStream(callMessages, allowedTools, blueprint.name, (chunk) =>
+            Match.value(chunk.type).pipe(
+              Match.when("text-delta", () =>
+                emit({
+                  _tag: "TextDelta",
+                  agent: blueprint.name,
+                  iteration: iterations,
+                  content: chunk.delta,
+                }),
               ),
+              Match.when("reasoning-delta", () =>
+                emit({
+                  _tag: "ThinkingDelta",
+                  agent: blueprint.name,
+                  iteration: iterations,
+                  content: chunk.delta,
+                }),
+              ),
+              Match.orElse(() => Effect.void),
+            ),
           ).pipe(
             Effect.withSpan("llm-call", {
               attributes: { "llm.agent": blueprint.name, "llm.iteration": iterations },
@@ -259,26 +266,33 @@ export const dispatch = (
             };
 
           // Check for theseus.report — terminates the loop with structured data
-          const reportCall = result.toolCalls.find((tc) => tc.name === report.name);
+          const canReport = allowedTools.some((tool) => tool.name === report.name);
+          const reportCall = canReport
+            ? result.toolCalls.find((tc) => tc.name === report.name)
+            : undefined;
           if (reportCall) {
-            const args = tryParseArgs(reportCall) as {
-              result?: string;
-              summary?: string;
-              content?: string;
-            };
-            yield* emit({
-              _tag: "ToolCalling",
-              agent: blueprint.name,
-              iteration: iterations,
-              tool: report.name,
-              args,
-            });
-            return {
-              result: (args.result ?? "unstructured") as AgentResult["result"],
-              summary: args.summary ?? "",
-              content: args.content ?? "",
-              usage: totalUsage,
-            };
+            const args = tryParseArgs(reportCall);
+            const decoded = yield* decodeReportInput(args).pipe(
+              Effect.match({
+                onFailure: () => undefined,
+                onSuccess: (input) => input,
+              }),
+            );
+            if (decoded) {
+              yield* emit({
+                _tag: "ToolCalling",
+                agent: blueprint.name,
+                iteration: iterations,
+                tool: report.name,
+                args: decoded,
+              });
+              return {
+                result: decoded.result,
+                summary: decoded.summary,
+                content: decoded.content,
+                usage: totalUsage,
+              };
+            }
           }
 
           // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
@@ -312,7 +326,7 @@ export const dispatch = (
 
                 // Execute tool
                 const callResult: ToolCallResult = yield* runToolCall(
-                  blueprint.tools,
+                  allowedTools,
                   effectiveTc,
                 ).pipe(
                   Effect.catch((err: ToolCallError) =>

@@ -12,9 +12,11 @@ import type { Blueprint } from "../agent/index.ts";
 import { Capsule } from "../capsule/index.ts";
 import { DispatchDefaults } from "../dispatch/defaults.ts";
 import { gruntAwait } from "../grunt/index.ts";
-import { defineTool, meta, type Tool } from "../tool/index.ts";
+import { defineTool, type Tool } from "../tool/index.ts";
 import { report } from "./report.ts";
 import type { DelegateInput } from "./types.ts";
+
+type CapsuleService = typeof Capsule.Service;
 
 /** Render a worker's full system prompt with briefing section using jsx-md primitives. */
 const renderWorkerPrompt = (basePrompt: string, briefing: DelegateInput): string =>
@@ -74,6 +76,53 @@ export class DelegateFailed extends Schema.TaggedErrorClass<DelegateFailed>()("D
   reason: Schema.String,
 }) {}
 
+const executeDelegate =
+  (workerBlueprint: Blueprint, lm: LanguageModel.Service, capsule: CapsuleService) =>
+  (input: DelegateInput): Effect.Effect<string, DelegateFailed> =>
+    Effect.gen(function* () {
+      const briefingMd = renderWorkerPrompt(workerBlueprint.systemPrompt, input);
+
+      yield* capsule.artifact(`briefing-${Date.now()}`, briefingMd);
+
+      yield* capsule.log({
+        type: "agent.dispatch",
+        by: "orchestrator",
+        data: { agent: workerBlueprint.name, task: input.task, criteria: input.criteria },
+      });
+
+      const briefedBlueprint: Blueprint = {
+        ...workerBlueprint,
+        systemPrompt: briefingMd,
+        tools: [...workerBlueprint.tools, report],
+      };
+
+      const agentResult = yield* gruntAwait(briefedBlueprint, input.task).pipe(
+        Effect.provide(
+          Layer.merge(Layer.succeed(LanguageModel.LanguageModel)(lm), DispatchDefaults),
+        ),
+        Effect.catchTags({
+          AgentInterrupted: (e) =>
+            Effect.fail(
+              new DelegateFailed({ reason: `Worker interrupted: ${e.reason ?? "unknown"}` }),
+            ),
+          AgentCycleExceeded: (e) =>
+            Effect.fail(
+              new DelegateFailed({ reason: `Worker exceeded cycle cap (${e.max} iterations)` }),
+            ),
+          AgentLLMError: (e) =>
+            Effect.fail(new DelegateFailed({ reason: `Worker LLM failed: ${e.message}` })),
+        }),
+      );
+
+      yield* capsule.log({
+        type: "agent.result",
+        by: workerBlueprint.name,
+        data: { result: agentResult.result, summary: agentResult.summary },
+      });
+
+      return `[${agentResult.result}] ${agentResult.summary}\n\n${agentResult.content}`;
+    });
+
 /**
  * Create a theseus_delegate tool for dispatching workers.
  *
@@ -100,50 +149,7 @@ export const makeDelegate = (
         "Returns the worker's structured result.",
       input: DelegateInputSchema as unknown as Schema.Schema<DelegateInput>,
       failure: DelegateFailed as unknown as Schema.Schema<DelegateFailed>,
-      meta: meta({ mutation: "write", capabilities: ["agent.dispatch"] }),
-      execute: (input) =>
-        Effect.gen(function* () {
-          const briefingMd = renderWorkerPrompt(workerBlueprint.systemPrompt, input);
-
-          yield* capsule.artifact(`briefing-${Date.now()}`, briefingMd);
-
-          yield* capsule.log({
-            type: "agent.dispatch",
-            by: "orchestrator",
-            data: { agent: workerBlueprint.name, task: input.task, criteria: input.criteria },
-          });
-
-          const briefedBlueprint: Blueprint = {
-            ...workerBlueprint,
-            systemPrompt: briefingMd,
-            tools: [...workerBlueprint.tools, report],
-          };
-
-          const agentResult = yield* gruntAwait(briefedBlueprint, input.task).pipe(
-            Effect.provide(
-              Layer.merge(Layer.succeed(LanguageModel.LanguageModel, lm), DispatchDefaults),
-            ),
-            Effect.catchTags({
-              AgentInterrupted: (e) =>
-                Effect.fail(
-                  new DelegateFailed({ reason: `Worker interrupted: ${e.reason ?? "unknown"}` }),
-                ),
-              AgentCycleExceeded: (e) =>
-                Effect.fail(
-                  new DelegateFailed({ reason: `Worker exceeded cycle cap (${e.max} iterations)` }),
-                ),
-              AgentLLMError: (e) =>
-                Effect.fail(new DelegateFailed({ reason: `Worker LLM failed: ${e.message}` })),
-            }),
-          );
-
-          yield* capsule.log({
-            type: "agent.result",
-            by: workerBlueprint.name,
-            data: { result: agentResult.result, summary: agentResult.summary },
-          });
-
-          return `[${agentResult.result}] ${agentResult.summary}\n\n${agentResult.content}`;
-        }),
+      policy: { interaction: "write" },
+      execute: executeDelegate(workerBlueprint, lm, capsule),
     });
   });

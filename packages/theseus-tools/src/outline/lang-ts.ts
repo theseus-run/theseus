@@ -13,21 +13,21 @@ import {
   findChildByType,
   hasKeyword,
 } from "./ast.ts";
-import type { Symbol } from "./symbol.ts";
+import type { OutlineSymbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
-const functionSym = (node: TreeSitterNode, prefix?: string): Symbol => {
+const functionSym = (node: TreeSitterNode, prefix?: string): OutlineSymbol => {
   const name = node.childForFieldName("name")?.text ?? "";
   const async = hasKeyword(node, "async") ? "async " : "";
   const gen = node.type === "generator_function_declaration" ? "*" : "";
   return sym(node, "function", `${prefix ?? ""}${gen}${name}`, `${async}${extractSignature(node)}`);
 };
 
-const classSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
+const classSym = (node: TreeSitterNode, prefix?: string): OutlineSymbol[] => {
   const name = node.childForFieldName("name")?.text ?? "";
   const ext = extractClassExtends(node);
-  const symbols: Symbol[] = [sym(node, "class", `${prefix ?? ""}${name}`, ext)];
+  const symbols: OutlineSymbol[] = [sym(node, "class", `${prefix ?? ""}${name}`, ext)];
 
   const body = node.childForFieldName("body");
   if (body) {
@@ -39,10 +39,10 @@ const classSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
   return symbols;
 };
 
-const interfaceSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
+const interfaceSym = (node: TreeSitterNode, prefix?: string): OutlineSymbol[] => {
   const name = node.childForFieldName("name")?.text ?? "";
   const ext = extractClassExtends(node);
-  const symbols: Symbol[] = [sym(node, "interface", `${prefix ?? ""}${name}`, ext)];
+  const symbols: OutlineSymbol[] = [sym(node, "interface", `${prefix ?? ""}${name}`, ext)];
 
   const body = node.childForFieldName("body");
   if (body) {
@@ -65,8 +65,8 @@ const interfaceSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
   return symbols;
 };
 
-const variableSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
-  const symbols: Symbol[] = [];
+const variableSym = (node: TreeSitterNode, prefix?: string): OutlineSymbol[] => {
+  const symbols: OutlineSymbol[] = [];
   for (const child of children(node)) {
     if (child.type !== "variable_declarator") continue;
     const vName = child.childForFieldName("name")?.text ?? "";
@@ -84,15 +84,15 @@ const variableSym = (node: TreeSitterNode, prefix?: string): Symbol[] => {
   return symbols;
 };
 
-const importSym = (node: TreeSitterNode): Symbol => {
+const importSym = (node: TreeSitterNode): OutlineSymbol => {
   const source = node.childForFieldName("source");
   return sym(node, "import", source?.text ?? node.text.slice(0, 60), "");
 };
 
-const exportSym = (node: TreeSitterNode): Symbol[] => {
+const exportSym = (node: TreeSitterNode): OutlineSymbol[] => {
   const isDefault = hasKeyword(node, "default");
   const prefix = isDefault ? "default " : undefined;
-  const symbols: Symbol[] = [];
+  const symbols: OutlineSymbol[] = [];
   let hasDecl = false;
 
   for (const child of children(node)) {
@@ -145,7 +145,7 @@ const exportSym = (node: TreeSitterNode): Symbol[] => {
   return symbols;
 };
 
-const processClassMember = (member: TreeSitterNode, className: string): Symbol[] =>
+const processClassMember = (member: TreeSitterNode, className: string): OutlineSymbol[] =>
   Match.value(member.type).pipe(
     Match.when("method_definition", () => {
       const mName = member.childForFieldName("name")?.text ?? "";
@@ -188,7 +188,7 @@ const processClassMember = (member: TreeSitterNode, className: string): Symbol[]
   );
 
 /** Extract symbols from a TypeScript/TSX/JavaScript AST root. */
-export const extractSymbolsTS = (root: TreeSitterNode): Symbol[] =>
+export const extractSymbolsTS = (root: TreeSitterNode): OutlineSymbol[] =>
   children(root).flatMap((node) =>
     Match.value(node.type).pipe(
       Match.when("function_declaration", () => [functionSym(node)]),

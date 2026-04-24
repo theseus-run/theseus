@@ -4,12 +4,12 @@
 
 import { Match } from "effect";
 import { children, truncate } from "./ast.ts";
-import type { Symbol } from "./symbol.ts";
+import type { OutlineSymbol } from "./symbol.ts";
 import { sym } from "./symbol.ts";
 import type { TreeSitterNode } from "./tree-sitter.ts";
 
 /** Extract symbols from a Rust AST root. */
-export const extractSymbolsRust = (root: TreeSitterNode): Symbol[] =>
+export const extractSymbolsRust = (root: TreeSitterNode): OutlineSymbol[] =>
   children(root).flatMap((node) =>
     Match.value(node.type).pipe(
       Match.when("function_item", () => {
