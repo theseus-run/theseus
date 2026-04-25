@@ -17,8 +17,6 @@ const Input = Schema.Struct({
   new: Schema.String.annotate({ description: "Replacement text (empty string to delete)" }),
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
 /** Find the position of `needle` in `haystack` using whitespace-normalized comparison. */
 const fuzzyFind = (
   haystack: string,
@@ -58,12 +56,13 @@ const fuzzyFind = (
   return undefined;
 };
 
-export const searchReplace = Tool.defineTool<Input, string, ToolFailure>({
+export const searchReplace = Tool.defineTool({
   name: "search_replace",
   description:
     "Replace text in a file. Exact match first, whitespace-normalized fallback. Errors if old text matches in multiple places.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "write" },
   execute: ({ path, old: oldText, new: newText }) =>
     Effect.tryPromise({

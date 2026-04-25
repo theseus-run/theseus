@@ -12,36 +12,23 @@
  */
 
 import { Effect, Schema } from "effect";
-import { defineTool } from "../tool/index.ts";
-import type { ReportInput } from "./types.ts";
-
-const ReportInputSchema = Schema.Struct({
-  result: Schema.Literals(["success", "error", "defect"]).annotate({
-    description:
-      "success: task done. error: not done but actionable info. defect: infrastructure broken.",
-  }),
-  summary: Schema.String.annotate({
-    description: "One-line summary of what happened.",
-  }),
-  content: Schema.String.annotate({
-    description: "Full deliverable, error description, or defect details.",
-  }),
-});
+import { Defaults, defineTool } from "../tool/index.ts";
+import { type ReportInput, ReportInputSchema } from "./types.ts";
 
 export const decodeReportInput = (input: unknown): Effect.Effect<ReportInput, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(ReportInputSchema as unknown as Schema.Schema<ReportInput>)(
-    input,
-  ) as Effect.Effect<ReportInput, Schema.SchemaError, never>;
+  Schema.decodeUnknownEffect(ReportInputSchema)(input);
 
 /**
  * The theseus.report tool. Add to worker Blueprint's tools array when the
  * worker should emit structured completion data.
  */
-export const report = defineTool<ReportInput>({
+export const report = defineTool({
   name: "theseus_report",
   description:
     "Report structured results. Call when done (success), stuck on a real problem (error), or infrastructure is broken (defect). After calling this tool, stop.",
-  input: ReportInputSchema as unknown as Schema.Schema<ReportInput>,
+  input: ReportInputSchema,
+  output: Defaults.TextOutput,
+  failure: Defaults.NoFailure,
   policy: { interaction: "pure" },
   execute: ({ result, summary }) => Effect.succeed(`Report: ${result} — ${summary}`),
 });

@@ -28,8 +28,6 @@ const Input = Schema.Struct({
   ),
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
 const ensureExists = (exists: boolean, path: string): Effect.Effect<void, ToolFailure> =>
   exists ? Effect.void : Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
 
@@ -84,12 +82,13 @@ const readTextFile = (
   }).pipe(Effect.map((content) => formatContent(content, offset, limit)));
 };
 
-export const readFile = Tool.defineTool<Input, string, ToolFailure>({
+export const readFile = Tool.defineTool({
   name: "read_file",
   description:
     "Read a file. Returns line-numbered text. Binary files return a type indicator. Use offset/limit for large files.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "observe" },
   execute: ({ path, offset, limit }) =>
     Effect.gen(function* () {

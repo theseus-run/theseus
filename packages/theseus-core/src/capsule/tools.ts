@@ -7,7 +7,7 @@
 
 import { Effect, Schema } from "effect";
 import { AgentIdentity } from "../agent/index.ts";
-import { defineTool, type Tool } from "../tool/index.ts";
+import { Defaults, defineTool, type Tool } from "../tool/index.ts";
 import { Capsule } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -32,11 +32,13 @@ const LogInput = Schema.Struct({
 type LogInputType = Schema.Schema.Type<typeof LogInput>;
 
 export const logCapsuleTool: Tool<LogInputType, string, never, Capsule | AgentIdentity> =
-  defineTool<LogInputType, string, never, Capsule | AgentIdentity>({
+  defineTool({
     name: "theseus_log",
     description:
       "Log an event to the mission capsule. Use for decisions, concerns, friction, or notes.",
-    input: LogInput as unknown as Schema.Schema<LogInputType>,
+    input: LogInput,
+    output: Defaults.TextOutput,
+    failure: Defaults.NoFailure,
     policy: { interaction: "write" },
     execute: ({ type, summary }) =>
       Effect.gen(function* () {
@@ -66,15 +68,12 @@ const clampTail = (tail: number | undefined): number => {
   return Math.min(50, Math.max(1, tail));
 };
 
-export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, Capsule> = defineTool<
-  ReadCapsuleInputType,
-  string,
-  never,
-  Capsule
->({
+export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, Capsule> = defineTool({
   name: "theseus_read_capsule",
   description: "Read recent events from the mission capsule. Returns the event trail for context.",
-  input: ReadCapsuleInput as unknown as Schema.Schema<ReadCapsuleInputType>,
+  input: ReadCapsuleInput,
+  output: Defaults.TextOutput,
+  failure: Defaults.NoFailure,
   policy: { interaction: "observe" },
   execute: ({ tail }) =>
     Effect.gen(function* () {

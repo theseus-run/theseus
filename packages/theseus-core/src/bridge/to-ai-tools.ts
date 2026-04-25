@@ -32,11 +32,11 @@ export const toAiTool = <I, O, F, R>(tool: Tool<I, O, F, R>): AiTool.Any =>
   AiTool.make(tool.name, {
     description: tool.description,
     // biome-ignore lint/suspicious/noExplicitAny: Schema.Schema<T> widens to Schema.Top at the call site
-    parameters: tool.input as unknown as Schema.Schema<any>,
+    parameters: tool.input as Schema.Schema<any>,
     // biome-ignore lint/suspicious/noExplicitAny: same
-    success: tool.output as unknown as Schema.Schema<any>,
+    success: tool.output as Schema.Schema<any>,
     // biome-ignore lint/suspicious/noExplicitAny: same
-    failure: tool.failure as unknown as Schema.Schema<any>,
+    failure: tool.failure as Schema.Schema<any>,
   }) as unknown as AiTool.Any;
 
 // ---------------------------------------------------------------------------

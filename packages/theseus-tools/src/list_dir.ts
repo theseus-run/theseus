@@ -30,14 +30,13 @@ const Input = Schema.Struct({
   path: Schema.String,
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
-export const listDir = Tool.defineTool<Input, string, ToolFailure>({
+export const listDir = Tool.defineTool({
   name: "list_dir",
   description:
     "List directory contents. Dirs end with /, symlinks with @. Skips node_modules, .git, dist, build, coverage.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "observe" },
   execute: ({ path }) =>
     Effect.tryPromise({

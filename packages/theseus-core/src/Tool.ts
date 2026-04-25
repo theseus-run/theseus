@@ -59,7 +59,7 @@ export type {
 // Constructor
 // ---------------------------------------------------------------------------
 
-export { defineTool } from "./tool/index.ts";
+export { Defaults, defineTool } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Toolkit

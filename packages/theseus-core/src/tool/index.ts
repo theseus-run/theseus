@@ -19,6 +19,7 @@
  *     description: "Read a file by path",
  *     input: Schema.Struct({ path: Schema.String }),
  *     output: Schema.String,
+ *     failure: ReadFailed,
  *     policy: { interaction: "observe" },
  *     execute: ({ path }) =>
  *       Effect.tryPromise({
@@ -28,8 +29,7 @@
  *   })
  */
 
-import type { Schedule } from "effect";
-import { type Effect, Schema } from "effect";
+import type { Effect, Schedule, Schema } from "effect";
 import type { Presentation } from "./content.ts";
 import type { ToolPolicy } from "./meta.ts";
 
@@ -77,22 +77,25 @@ export type ToolAny = Tool<any, any, any, any>;
 export type ToolAnyWith<R> = Tool<any, any, any, R>;
 
 // ---------------------------------------------------------------------------
-// ToolDef<I, O, F, R> — author-facing config for defineTool
-//
-// `output` and `failure` are optional with sensible defaults:
-//   - output  defaults to Schema.String
-//   - failure defaults to Schema.Never
+// ToolDef<Input, Output, Failure, R> — author-facing config for defineTool
 // ---------------------------------------------------------------------------
 
-export interface ToolDef<I, O, F, R> {
+export interface ToolDef<
+  Input extends Schema.Schema<unknown>,
+  Output extends Schema.Schema<unknown>,
+  Failure extends Schema.Schema<unknown>,
+  R,
+> {
   readonly name: string;
   readonly description: string;
-  readonly input: Schema.Schema<I>;
-  readonly output?: Schema.Schema<O>;
-  readonly failure?: Schema.Schema<F>;
+  readonly input: Input;
+  readonly output: Output;
+  readonly failure: Failure;
   readonly policy: ToolPolicy;
-  readonly execute: (input: I) => Effect.Effect<O, F, R>;
-  readonly present?: (output: O) => Presentation;
+  readonly execute: (
+    input: Schema.Schema.Type<Input>,
+  ) => Effect.Effect<Schema.Schema.Type<Output>, Schema.Schema.Type<Failure>, R>;
+  readonly present?: (output: Schema.Schema.Type<Output>) => Presentation;
   readonly retry?: Schedule.Schedule<unknown>;
 }
 
@@ -104,14 +107,19 @@ export interface ToolDef<I, O, F, R> {
  * Define a tool. One constructor; all pipeline concerns (decode, encode,
  * validate, retry) are handled by the runtime via the tool's schemas.
  */
-export const defineTool = <I, O = string, F = never, R = never>(
-  def: ToolDef<I, O, F, R>,
-): Tool<I, O, F, R> => ({
+export const defineTool = <
+  Input extends Schema.Schema<unknown>,
+  Output extends Schema.Schema<unknown>,
+  Failure extends Schema.Schema<unknown>,
+  R = never,
+>(
+  def: ToolDef<Input, Output, Failure, R>,
+): Tool<Schema.Schema.Type<Input>, Schema.Schema.Type<Output>, Schema.Schema.Type<Failure>, R> => ({
   name: def.name,
   description: def.description,
-  input: def.input,
-  output: def.output ?? (Schema.String as unknown as Schema.Schema<O>),
-  failure: def.failure ?? (Schema.Never as unknown as Schema.Schema<F>),
+  input: def.input as Schema.Schema<Schema.Schema.Type<Input>>,
+  output: def.output as Schema.Schema<Schema.Schema.Type<Output>>,
+  failure: def.failure as Schema.Schema<Schema.Schema.Type<Failure>>,
   policy: def.policy,
   execute: def.execute,
   ...(def.present ? { present: def.present } : {}),
@@ -137,6 +145,7 @@ export {
   text,
   textPresentation,
 } from "./content.ts";
+export * as Defaults from "./defaults.ts";
 export {
   ToolDefect,
   ToolInputError,

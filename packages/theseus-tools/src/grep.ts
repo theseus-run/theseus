@@ -23,8 +23,6 @@ const Input = Schema.Struct({
   ),
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
 interface GrepMatch {
   readonly file: string;
   readonly line: number;
@@ -78,12 +76,13 @@ const formatMatches = (matches: GrepMatch[], total: number): string => {
   return parts.join("\n");
 };
 
-export const grep = Tool.defineTool<Input, string, ToolFailure>({
+export const grep = Tool.defineTool({
   name: "grep",
   description:
     "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "observe" },
   // Retry transient ripgrep-not-found once (binary may have been installed concurrently).
   retry: Schedule.recurs(1) as unknown as Schedule.Schedule<unknown>,

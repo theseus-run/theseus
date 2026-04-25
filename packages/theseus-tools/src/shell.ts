@@ -20,8 +20,6 @@ const Input = Schema.Struct({
   ),
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
 const truncateOutput = (output: string, maxBytes: number): string => {
   if (Buffer.byteLength(output) <= maxBytes) return output;
 
@@ -36,12 +34,13 @@ const truncateOutput = (output: string, maxBytes: number): string => {
   return `${head}\n\n[... ${elided} bytes truncated ...]\n\n${tail}`;
 };
 
-export const shell = Tool.defineTool<Input, string, ToolFailure>({
+export const shell = Tool.defineTool({
   name: "shell",
   description:
     "Run a shell command. Returns stdout, stderr, exit code. Default timeout 30s (max 600s). Output capped at 8KB.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "write_destructive" },
   // Retry transient failures (e.g. timeouts, EBUSY) up to 3 times.
   retry: Schedule.recurs(3) as unknown as Schedule.Schedule<unknown>,

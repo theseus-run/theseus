@@ -16,13 +16,12 @@ const Input = Schema.Struct({
   content: Schema.String,
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
-export const writeFile = Tool.defineTool<Input, string, ToolFailure>({
+export const writeFile = Tool.defineTool({
   name: "write_file",
   description: "Create or overwrite a file. Creates parent directories automatically.",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "write_idempotent" },
   execute: ({ path, content }) =>
     Effect.tryPromise({

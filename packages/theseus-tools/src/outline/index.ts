@@ -65,8 +65,6 @@ const Input = Schema.Struct({
   path: Schema.String,
 });
 
-type Input = Schema.Schema.Type<typeof Input>;
-
 const ensureExists = (exists: boolean, path: string): Effect.Effect<void, ToolFailure> =>
   exists ? Effect.void : Effect.fail(new ToolFailure({ message: `File not found: ${path}` }));
 
@@ -117,12 +115,13 @@ const parseOutlineFile = (
   );
 };
 
-export const outline = Tool.defineTool<Input, string, ToolFailure>({
+export const outline = Tool.defineTool({
   name: "outline",
   description:
     "Extract symbol outline (functions, classes, types, imports) from a source file. Prefer over read_file for structural understanding. Supports: .ts .tsx .js .jsx .py .go .rs",
-  input: Input as unknown as Schema.Schema<Input>,
-  failure: ToolFailure as unknown as Schema.Schema<ToolFailure>,
+  input: Input,
+  output: Tool.Defaults.TextOutput,
+  failure: ToolFailure,
   policy: { interaction: "observe" },
   execute: ({ path }) =>
     Effect.gen(function* () {
