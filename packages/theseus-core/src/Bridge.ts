@@ -9,14 +9,7 @@
  *
  *   const aiToolkit = Bridge.toAiToolkit(toolkit)
  *   const aiTool    = Bridge.toAiTool(myTool)
- *   const defs      = Bridge.toToolDefinitions(toolkit)  // for raw provider SDKs
  */
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type { ToolDefinition } from "./bridge/to-ai-tools.ts";
 
 // ---------------------------------------------------------------------------
 // Conversions
@@ -26,5 +19,4 @@ export {
   toAiTool,
   toAiToolkit,
   toolsArrayToAiToolkit,
-  toToolDefinitions,
 } from "./bridge/to-ai-tools.ts";

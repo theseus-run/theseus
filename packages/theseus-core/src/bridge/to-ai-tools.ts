@@ -1,22 +1,31 @@
 /**
- * Bridge: Theseus `Tool` / `Toolkit` → `@effect/ai` `Tool` / `Toolkit`.
+ * Bridge: Theseus `Tool` / `Toolkit` -> `@effect/ai` `Tool` / `Toolkit`.
  *
  * Used with `disableToolCallResolution: true` on `LanguageModel.generateText`
  * / `streamText`: the AI framework sees tool definitions (name, description,
- * schemas) and passes them to the model, but never invokes the handlers —
+ * schemas) and passes them to the model, but never invokes the handlers -
  * Theseus's dispatch loop owns execution via `callTool`.
  *
  * Because both libraries use `effect/Schema`, the conversion is direct:
  *   AiTool.make(name, { description, parameters, success, failure })
  *
- * No JSON-schema hack, no `dynamic` sentinel, no `(x as any).jsonSchema = …`.
+ * No JSON-schema hack, no dynamic sentinel, no provider-specific shape here.
  */
 
-import { Schema } from "effect";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as AiToolkit from "effect/unstable/ai/Toolkit";
 import type { Tool, ToolAny } from "../tool/index.ts";
 import type { Toolkit } from "../tool/toolkit.ts";
+
+type AiToolFromTheseus<I, O, F, R> = AiTool.Tool<
+  string,
+  {
+    readonly parameters: Tool<I, O, F, R>["input"];
+    readonly success: Tool<I, O, F, R>["output"];
+    readonly failure: Tool<I, O, F, R>["failure"];
+    readonly failureMode: "error";
+  }
+>;
 
 // ---------------------------------------------------------------------------
 // Single-tool conversion
@@ -28,16 +37,13 @@ import type { Toolkit } from "../tool/toolkit.ts";
  * The handler is never invoked when used with `disableToolCallResolution: true`.
  * Theseus's dispatch loop calls `callTool` directly.
  */
-export const toAiTool = <I, O, F, R>(tool: Tool<I, O, F, R>): AiTool.Any =>
+export const toAiTool = <I, O, F, R>(tool: Tool<I, O, F, R>): AiToolFromTheseus<I, O, F, R> =>
   AiTool.make(tool.name, {
     description: tool.description,
-    // biome-ignore lint/suspicious/noExplicitAny: Schema.Schema<T> widens to Schema.Top at the call site
-    parameters: tool.input as Schema.Schema<any>,
-    // biome-ignore lint/suspicious/noExplicitAny: same
-    success: tool.output as Schema.Schema<any>,
-    // biome-ignore lint/suspicious/noExplicitAny: same
-    failure: tool.failure as Schema.Schema<any>,
-  }) as unknown as AiTool.Any;
+    parameters: tool.input,
+    success: tool.output,
+    failure: tool.failure,
+  }) as AiToolFromTheseus<I, O, F, R>;
 
 // ---------------------------------------------------------------------------
 // Toolkit conversion
@@ -56,35 +62,7 @@ export const toolsArrayToAiToolkit = (
     return AiToolkit.empty as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
   }
   const aiTools = tools.map(toAiTool);
-  return AiToolkit.make(...(aiTools as [AiTool.Any, ...AiTool.Any[]])) as AiToolkit.Toolkit<
-    Record<string, AiTool.Any>
-  >;
-};
-
-// ---------------------------------------------------------------------------
-// Plain tool definitions — for provider SDKs that don't use `@effect/ai`
-// ---------------------------------------------------------------------------
-
-export interface ToolDefinition {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: Record<string, unknown>;
-}
-
-/**
- * Extract plain `{ name, description, inputSchema }` definitions — for raw
- * provider APIs (Anthropic, OpenAI, Gemini) that take JSON Schema directly.
- */
-export const toToolDefinitions = (toolkit: Toolkit<unknown>): ReadonlyArray<ToolDefinition> =>
-  toolkit.tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    // biome-ignore lint/suspicious/noExplicitAny: Schema.toJsonSchemaDocument accepts Top
-    inputSchema: jsonSchemaOf(t.input as any),
-  }));
-
-// biome-ignore lint/suspicious/noExplicitAny: Schema.Top is the widest; we accept it opaquely
-const jsonSchemaOf = (schema: any): Record<string, unknown> => {
-  const doc = Schema.toJsonSchemaDocument(schema);
-  return doc.schema as Record<string, unknown>;
+  return AiToolkit.make(
+    ...(aiTools as unknown as [AiTool.Any, ...AiTool.Any[]]),
+  ) as AiToolkit.Toolkit<Record<string, AiTool.Any>>;
 };

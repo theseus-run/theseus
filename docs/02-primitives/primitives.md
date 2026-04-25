@@ -202,7 +202,7 @@ injected — nothing here is OpenAI-specific, Anthropic-specific, or Copilot-spe
 interface LLMProvider {
   readonly call: (
     messages: ReadonlyArray<Message>,
-    tools:    ReadonlyArray<ToolDefinition>,
+    tools:    ReadonlyArray<ToolAny>,
   ) => Effect<LLMResponse, LLMError>
 }
 

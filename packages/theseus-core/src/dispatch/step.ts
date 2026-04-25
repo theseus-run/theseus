@@ -12,11 +12,12 @@
  * so that our dispatch loop retains full control over tool execution.
  */
 
-import { Effect, Match } from "effect";
+import { Effect } from "effect";
 import type * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
+import type * as AiTool from "effect/unstable/ai/Tool";
 import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
 import type { Content, Presentation, ToolAnyWith } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
@@ -24,52 +25,30 @@ import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from 
 import { DispatchModelFailed, ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 
 // ---------------------------------------------------------------------------
-// responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
+// responseToStepResult — translate Effect/AI response into Theseus step output
 // ---------------------------------------------------------------------------
 
-const extractUsage = (parts: ReadonlyArray<Response.PartEncoded>): Usage =>
-  parts.reduce<Usage>(
-    (acc, part) => {
-      const finish = part as Response.FinishPartEncoded & {
-        readonly usage?: {
-          readonly inputTokens?: { readonly total?: number };
-          readonly outputTokens?: { readonly total?: number };
-        };
-      };
-      return part.type === "finish"
-        ? {
-            inputTokens: finish.usage?.inputTokens?.total ?? acc.inputTokens,
-            outputTokens: finish.usage?.outputTokens?.total ?? acc.outputTokens,
-          }
-        : acc;
-    },
-    { inputTokens: 0, outputTokens: 0 },
-  );
+const usageToUsage = (usage: Response.Usage): Usage => ({
+  inputTokens: usage.inputTokens.total ?? 0,
+  outputTokens: usage.outputTokens.total ?? 0,
+});
 
-const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): StepResult => {
-  const text = parts
-    .filter((p): p is Response.TextPartEncoded => p.type === "text")
-    .map((p) => p.text)
-    .join("");
+const stringifyToolParams = (params: unknown): string => JSON.stringify(params) ?? "{}";
 
-  const thinking = parts
-    .filter((p) => p.type === "reasoning")
-    .map((p) => (p as { text: string }).text)
-    .join("");
-
-  const toolCalls: ToolCall[] = parts
-    .filter((p): p is Response.ToolCallPartEncoded => p.type === "tool-call")
-    .map((tc) => ({
-      id: tc.id,
-      name: tc.name,
-      arguments: JSON.stringify(tc.params),
-    }));
+const responseToStepResult = (
+  response: LanguageModel.GenerateTextResponse<Record<string, AiTool.Any>>,
+): StepResult => {
+  const toolCalls: ToolCall[] = response.toolCalls.map((tc) => ({
+    id: tc.id,
+    name: tc.name,
+    arguments: stringifyToolParams(tc.params),
+  }));
 
   return {
-    content: text,
-    ...(thinking ? { thinking } : {}),
+    content: response.text,
+    ...(response.reasoningText ? { thinking: response.reasoningText } : {}),
     toolCalls,
-    usage: extractUsage(parts),
+    usage: usageToUsage(response.usage),
   };
 };
 
@@ -186,29 +165,5 @@ export const step = (
       }),
     );
 
-    return responsePartsToStepResult(
-      response.content.map((p) => {
-        const encodedPart = p as unknown as Response.PartEncoded & {
-          readonly text?: string;
-          readonly id?: string;
-          readonly name?: string;
-          readonly params?: unknown;
-        };
-        return Match.value(encodedPart.type).pipe(
-          Match.when("text", () => ({ type: "text" as const, text: encodedPart.text ?? "" })),
-          Match.when("reasoning", () => ({
-            type: "reasoning" as const,
-            text: encodedPart.text ?? "",
-          })),
-          Match.when("tool-call", () => ({
-            type: "tool-call" as const,
-            id: encodedPart.id ?? "",
-            name: encodedPart.name ?? "",
-            params: encodedPart.params,
-          })),
-          Match.when("finish", () => encodedPart),
-          Match.orElse(() => encodedPart),
-        );
-      }),
-    );
+    return responseToStepResult(response);
   });

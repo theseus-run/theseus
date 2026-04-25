@@ -215,7 +215,7 @@ result ← yield* registry.spawnAndAwait(Probe, { query: "..." })
 type Skill = {
   name: string
   instructions: JSX.Element   // rendered to Markdown via @theseus.run/jsx-md
-  tools?: ToolDefinition[]
+  tools?: ToolAny[]
   model?: ModelOverride
 }
 ```
