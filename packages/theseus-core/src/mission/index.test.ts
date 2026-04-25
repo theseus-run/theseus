@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer, Random } from "effect";
 import { TestClock } from "effect/testing";
-import { Capsule } from "../capsule/index.ts";
-import { CapsuleLive } from "../capsule/memory.ts";
-import { MissionContext } from "./context.ts";
+import { CurrentCapsule } from "../capsule/index.ts";
+import { CurrentCapsuleLive } from "../capsule/memory.ts";
+import { CurrentMission } from "./context.ts";
 import { makeMissionId } from "./id.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
-import { MissionLive } from "./layer.ts";
+import { CurrentMissionLive } from "./layer.ts";
 import { deriveStatus, isValidTransition } from "./status.ts";
 
 // ===========================================================================
@@ -159,7 +159,7 @@ describe("deriveStatus", () => {
 });
 
 // ===========================================================================
-// MissionLive — layer composition
+// CurrentMissionLive — layer composition
 // ===========================================================================
 
 const makeMissionConfig = Effect.gen(function* () {
@@ -171,15 +171,15 @@ const makeMissionConfig = Effect.gen(function* () {
   };
 });
 
-const capsuleLayer = CapsuleLive("test-mission");
+const capsuleLayer = CurrentCapsuleLive("test-mission");
 
 const makeFullLayer = Effect.gen(function* () {
   const config = yield* makeMissionConfig;
-  const missionLayer = Layer.provide(MissionLive(config), capsuleLayer);
+  const missionLayer = Layer.provide(CurrentMissionLive(config), capsuleLayer);
   return Layer.merge(capsuleLayer, missionLayer);
 });
 
-const runMission = <A>(effect: Effect.Effect<A, unknown, MissionContext | Capsule>) =>
+const runMission = <A>(effect: Effect.Effect<A, unknown, CurrentMission | CurrentCapsule>) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fullLayer = yield* makeFullLayer;
@@ -195,11 +195,11 @@ const expectEvent = <T>(items: ReadonlyArray<T>, index: number): T => {
 
 const recordData = (value: unknown): Record<string, unknown> => value as Record<string, unknown>;
 
-describe("MissionLive — creation", () => {
+describe("CurrentMissionLive — creation", () => {
   test("mission starts in pending status", async () => {
     const mission = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
+        const ctx = yield* CurrentMission;
         return yield* ctx.mission;
       }),
     );
@@ -212,7 +212,7 @@ describe("MissionLive — creation", () => {
   test("auto-logs mission.create event to Capsule", async () => {
     const events = await runMission(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         return yield* capsule.read();
       }),
     );
@@ -224,11 +224,11 @@ describe("MissionLive — creation", () => {
   });
 });
 
-describe("MissionLive — transitions", () => {
+describe("CurrentMissionLive — transitions", () => {
   test("pending → running succeeds", async () => {
     const status = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
+        const ctx = yield* CurrentMission;
         yield* ctx.transition("running");
         const m = yield* ctx.mission;
         return m.status;
@@ -240,8 +240,8 @@ describe("MissionLive — transitions", () => {
   test("transition logs event to Capsule", async () => {
     const events = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
-        const capsule = yield* Capsule;
+        const ctx = yield* CurrentMission;
+        const capsule = yield* CurrentCapsule;
         yield* ctx.transition("running");
         return yield* capsule.read();
       }),
@@ -260,7 +260,7 @@ describe("MissionLive — transitions", () => {
         return yield* Effect.provide(
           Effect.flip(
             Effect.gen(function* () {
-              const ctx = yield* MissionContext;
+              const ctx = yield* CurrentMission;
               yield* ctx.transition("done"); // pending → done is invalid
             }),
           ),
@@ -276,8 +276,8 @@ describe("MissionLive — transitions", () => {
   test("full lifecycle: pending → running → done", async () => {
     const result = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
-        const capsule = yield* Capsule;
+        const ctx = yield* CurrentMission;
+        const capsule = yield* CurrentCapsule;
 
         yield* ctx.transition("running");
         yield* ctx.transition("done");
@@ -299,7 +299,7 @@ describe("MissionLive — transitions", () => {
   test("failed → running (retry)", async () => {
     const status = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
+        const ctx = yield* CurrentMission;
         yield* ctx.transition("running");
         yield* ctx.transition("failed");
         yield* ctx.transition("running"); // retry
@@ -319,8 +319,8 @@ describe("Plan artifact flow", () => {
   test("write plan during pending, read during running", async () => {
     const plan = await runMission(
       Effect.gen(function* () {
-        const ctx = yield* MissionContext;
-        const capsule = yield* Capsule;
+        const ctx = yield* CurrentMission;
+        const capsule = yield* CurrentCapsule;
 
         // Pending phase: write plan artifact
         yield* capsule.artifact("plan.md", "# Plan\n\n1. Fix the bug\n2. Add tests");

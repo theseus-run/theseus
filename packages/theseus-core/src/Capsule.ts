@@ -7,8 +7,8 @@
  * Usage:
  *   import * as Capsule from "@theseus.run/core/Capsule"
  *
- *   const layer = Capsule.CapsuleLive("my-mission")
- *   const capsule = yield* Capsule.Capsule
+ *   const layer = Capsule.CurrentCapsuleLive("my-mission")
+ *   const capsule = yield* Capsule.CurrentCapsule
  *   yield* capsule.log({ type: "mission.note", by: "runtime", data: { ... } })
  */
 
@@ -16,7 +16,7 @@
 // Primary type (Effect service class)
 // ---------------------------------------------------------------------------
 
-export { Capsule } from "./capsule/index.ts";
+export { CurrentCapsule } from "./capsule/index.ts";
 
 // ---------------------------------------------------------------------------
 // Types (short aliases — namespaced by `Capsule.*`)
@@ -37,10 +37,10 @@ export { logCapsuleTool, readCapsuleTool } from "./capsule/tools.ts";
 // ---------------------------------------------------------------------------
 
 export {
-  CapsuleLive,
+  CurrentCapsuleLive,
   CapsuleStore,
   InMemoryCapsuleStore,
-  makeInMemoryCapsule,
+  makeInMemoryCapsuleRecord,
 } from "./capsule/store.ts";
 
 // ---------------------------------------------------------------------------

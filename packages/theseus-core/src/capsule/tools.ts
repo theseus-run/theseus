@@ -8,7 +8,7 @@
 import { Effect, Schema } from "effect";
 import { AgentIdentity } from "../agent/index.ts";
 import { Defaults, defineTool, type Tool } from "../tool/index.ts";
-import { Capsule } from "./index.ts";
+import { CurrentCapsule } from "./index.ts";
 
 // ---------------------------------------------------------------------------
 // theseus.log — append an event to the Capsule
@@ -31,7 +31,7 @@ const LogInput = Schema.Struct({
 
 type LogInputType = Schema.Schema.Type<typeof LogInput>;
 
-export const logCapsuleTool: Tool<LogInputType, string, never, Capsule | AgentIdentity> =
+export const logCapsuleTool: Tool<LogInputType, string, never, CurrentCapsule | AgentIdentity> =
   defineTool({
     name: "theseus_log",
     description:
@@ -42,7 +42,7 @@ export const logCapsuleTool: Tool<LogInputType, string, never, Capsule | AgentId
     policy: { interaction: "write" },
     execute: ({ type, summary }) =>
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         const identity = yield* AgentIdentity;
         yield* capsule.log({ type, by: identity.name, data: { summary } });
         return `Logged: ${type} - ${summary}`;
@@ -68,7 +68,7 @@ const clampTail = (tail: number | undefined): number => {
   return Math.min(50, Math.max(1, tail));
 };
 
-export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, Capsule> = defineTool({
+export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, CurrentCapsule> = defineTool({
   name: "theseus_read_capsule",
   description: "Read recent events from the mission capsule. Returns the event trail for context.",
   input: ReadCapsuleInput,
@@ -77,7 +77,7 @@ export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, Capsule>
   policy: { interaction: "observe" },
   execute: ({ tail }) =>
     Effect.gen(function* () {
-      const capsule = yield* Capsule;
+      const capsule = yield* CurrentCapsule;
       const events = yield* capsule.read();
       const recent = events.slice(-clampTail(tail));
       return (

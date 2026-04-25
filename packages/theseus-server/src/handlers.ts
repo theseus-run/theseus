@@ -15,7 +15,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { DispatchRegistry } from "./registry.ts";
 import { serializeEvent } from "./serialize.ts";
 import { TheseusDb } from "./store/sqlite.ts";
-import { SqliteCapsuleLive } from "./store/sqlite-capsule.ts";
+import { SqliteCurrentCapsuleLive } from "./store/sqlite-capsule.ts";
 import { resolveBlueprint, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
@@ -64,11 +64,11 @@ export const HandlersLive = TheseusRpc.toLayer({
         }
       }
 
-      // Create per-dispatch Capsule backed by SQLite
+      // Create per-dispatch CurrentCapsule backed by SQLite
       const dbLayer = Layer.succeed(TheseusDb)(theseusDb);
-      const capsuleLayer = Layer.provide(SqliteCapsuleLive(blueprint.name), dbLayer);
+      const capsuleLayer = Layer.provide(SqliteCurrentCapsuleLive(blueprint.name), dbLayer);
       const getCapsule = Effect.gen(function* () {
-        return yield* CapsuleNs.Capsule;
+        return yield* CapsuleNs.CurrentCapsule;
       });
       const capsule = yield* Effect.provide(getCapsule, capsuleLayer);
 

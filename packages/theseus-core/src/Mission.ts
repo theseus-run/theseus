@@ -8,7 +8,7 @@
  *   import * as Mission from "@theseus.run/core/Mission"
  *
  *   const id = yield* Mission.makeMissionId("my-mission")
- *   const layer = Mission.MissionLive({ id, goal: "...", criteria: ["..."] })
+ *   const layer = Mission.CurrentMissionLive({ id, goal: "...", criteria: ["..."] })
  */
 
 // ---------------------------------------------------------------------------
@@ -31,14 +31,14 @@ export type { MissionCreate } from "./mission/store.ts";
 // Service
 // ---------------------------------------------------------------------------
 
-export { MissionContext } from "./mission/context.ts";
+export { CurrentMission } from "./mission/context.ts";
 export { InMemoryMissionStore, MissionStore } from "./mission/store.ts";
 
 // ---------------------------------------------------------------------------
 // Layer
 // ---------------------------------------------------------------------------
 
-export { MissionLive, makeMissionRecord } from "./mission/layer.ts";
+export { CurrentMissionLive, makeMissionRecord } from "./mission/layer.ts";
 
 // ---------------------------------------------------------------------------
 // Functions

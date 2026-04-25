@@ -1,1 +1,1 @@
-export { CapsuleLive, InMemoryCapsuleStore, makeInMemoryCapsule } from "./store.ts";
+export { CurrentCapsuleLive, InMemoryCapsuleStore, makeInMemoryCapsuleRecord } from "./store.ts";

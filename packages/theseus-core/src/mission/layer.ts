@@ -1,17 +1,17 @@
 /**
- * MissionLive — Layer that provisions MissionContext.
+ * CurrentMissionLive — Layer that provisions CurrentMission.
  *
- * Requires Capsule in the environment (capsule-first architecture).
- * Creates MissionContext with Ref-backed status, auto-logs lifecycle events.
+ * Requires CurrentCapsule in the environment (capsule-first architecture).
+ * Creates CurrentMission with Ref-backed status, auto-logs lifecycle events.
  *
  * Usage:
- *   const layers = Layer.merge(CapsuleLive("slug"), MissionLive(config))
+ *   const layers = Layer.merge(CurrentCapsuleLive("slug"), CurrentMissionLive(config))
  *   Effect.provide(program, layers)
  */
 
 import { Clock, Effect, Layer, Ref } from "effect";
-import { Capsule } from "../capsule/index.ts";
-import { MissionContext, type MissionRecord } from "./context.ts";
+import { CurrentCapsule } from "../capsule/index.ts";
+import { CurrentMission, type MissionRecord } from "./context.ts";
 import type { MissionId } from "./id.ts";
 import type { Mission } from "./index.ts";
 import { MissionErrorInvalidTransition } from "./index.ts";
@@ -29,21 +29,21 @@ export interface MissionConfig {
 }
 
 // ---------------------------------------------------------------------------
-// MissionLive — Layer<MissionContext> (requires Capsule)
+// CurrentMissionLive — Layer<CurrentMission> (requires CurrentCapsule)
 // ---------------------------------------------------------------------------
 
 /**
- * Create a Mission Layer that provides MissionContext.
- * Requires Capsule already in scope (capsule-first architecture).
+ * Create a Mission Layer that provides CurrentMission.
+ * Requires CurrentCapsule already in scope (capsule-first architecture).
  *
  * The Mission starts in "pending" status. Transition to "running"
  * is the approval gate where the human reviews the plan.
  */
 export const makeMissionRecord = (
   config: MissionConfig,
-): Effect.Effect<MissionRecord, never, Capsule> =>
+): Effect.Effect<MissionRecord, never, CurrentCapsule> =>
   Effect.gen(function* () {
-    const capsule = yield* Capsule;
+    const capsule = yield* CurrentCapsule;
     const now = yield* Clock.currentTimeMillis;
     const createdAt = new Date(now).toISOString();
     const statusRef = yield* Ref.make<MissionStatus>("pending");
@@ -85,5 +85,7 @@ export const makeMissionRecord = (
     };
   });
 
-export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext, never, Capsule> =>
-  Layer.effect(MissionContext)(makeMissionRecord(config));
+export const CurrentMissionLive = (
+  config: MissionConfig,
+): Layer.Layer<CurrentMission, never, CurrentCapsule> =>
+  Layer.effect(CurrentMission)(makeMissionRecord(config));

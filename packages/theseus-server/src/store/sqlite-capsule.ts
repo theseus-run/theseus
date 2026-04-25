@@ -1,7 +1,7 @@
 /**
- * SqliteCapsuleLive — persistent Capsule backed by SQLite.
+ * SqliteCurrentCapsuleLive — persistent CurrentCapsule backed by SQLite.
  *
- * Persistent implementation of the Capsule service.
+ * Persistent implementation of the CurrentCapsule service.
  * Requires TheseusDb in the Layer.
  *
  * Events and artifacts persisted in theseus.db.
@@ -11,8 +11,10 @@ import * as CapsuleNs from "@theseus.run/core/Capsule";
 import { Clock, Effect, Layer } from "effect";
 import { TheseusDb } from "./sqlite.ts";
 
-export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, never, TheseusDb> =>
-  Layer.effect(CapsuleNs.Capsule)(
+export const SqliteCurrentCapsuleLive = (
+  slug: string,
+): Layer.Layer<CapsuleNs.CurrentCapsule, never, TheseusDb> =>
+  Layer.effect(CapsuleNs.CurrentCapsule)(
     Effect.gen(function* () {
       const id = yield* CapsuleNs.makeCapsuleId(slug);
       const { db } = yield* TheseusDb;
@@ -33,7 +35,7 @@ export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, 
         "SELECT content FROM capsule_artifacts WHERE capsule_id = ? AND name = ?",
       );
 
-      return CapsuleNs.Capsule.of({
+      return CapsuleNs.CurrentCapsule.of({
         id,
 
         log: (input: CapsuleNs.CapsuleEventInput) =>

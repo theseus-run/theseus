@@ -2,11 +2,11 @@
  * MissionStore — collection boundary for mission records.
  *
  * Minimal today: create a mission record and own mission id generation.
- * Current mission access remains the `MissionContext` service.
+ * Current mission access remains the `CurrentMission` service.
  */
 
 import { Context, Effect, Layer } from "effect";
-import type { Capsule } from "../capsule/index.ts";
+import type { CurrentCapsule } from "../capsule/index.ts";
 import type { MissionRecord } from "./context.ts";
 import { makeMissionId } from "./id.ts";
 import { type MissionConfig, makeMissionRecord } from "./layer.ts";
@@ -20,7 +20,7 @@ export interface MissionCreate {
 export class MissionStore extends Context.Service<
   MissionStore,
   {
-    readonly create: (input: MissionCreate) => Effect.Effect<MissionRecord, never, Capsule>;
+    readonly create: (input: MissionCreate) => Effect.Effect<MissionRecord, never, CurrentCapsule>;
   }
 >()("MissionStore") {}
 

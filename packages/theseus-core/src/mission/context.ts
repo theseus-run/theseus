@@ -1,10 +1,11 @@
 /**
- * MissionContext — Effect service providing mission identity and lifecycle.
+ * CurrentMission — Effect service providing mission identity and lifecycle.
  *
  * The `mission` field reads from a Ref (changes as transitions happen).
  * The `transition` method enforces the state machine.
  *
- * Capsule access is separate — MissionContext provides lifecycle, Capsule provides logging.
+ * CurrentCapsule access is separate — CurrentMission provides lifecycle,
+ * CurrentCapsule provides logging.
  * They compose via the Layer.
  */
 
@@ -19,6 +20,6 @@ export interface MissionRecord {
   readonly transition: (to: MissionStatus) => Effect.Effect<void, MissionErrorInvalidTransition>;
 }
 
-export class MissionContext extends Context.Service<MissionContext, MissionRecord>()(
-  "MissionContext",
+export class CurrentMission extends Context.Service<CurrentMission, MissionRecord>()(
+  "CurrentMission",
 ) {}

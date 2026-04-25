@@ -68,10 +68,12 @@ export interface CapsuleRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Capsule — current capsule Effect service
+// CurrentCapsule — current capsule Effect service
 // ---------------------------------------------------------------------------
 
-export class Capsule extends Context.Service<Capsule, CapsuleRecord>()("Capsule") {}
+export class CurrentCapsule extends Context.Service<CurrentCapsule, CapsuleRecord>()(
+  "CurrentCapsule",
+) {}
 
 // ---------------------------------------------------------------------------
 // CapsuleError

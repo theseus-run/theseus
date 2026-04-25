@@ -3,12 +3,12 @@ import { Effect, Layer, Random } from "effect";
 import { TestClock } from "effect/testing";
 import { AgentIdentityLive } from "../agent/index.ts";
 import * as Tool from "../Tool.ts";
-import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
-import { CapsuleLive } from "./memory.ts";
+import { CurrentCapsule, CapsuleError, makeCapsuleId } from "./index.ts";
+import { CurrentCapsuleLive } from "./memory.ts";
 import { logCapsuleTool, readCapsuleTool } from "./tools.ts";
 
 const run = <A>(effect: Effect.Effect<A, unknown, Capsule>) =>
-  Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
+  Effect.runPromise(Effect.provide(effect, CurrentCapsuleLive("test")));
 
 describe("makeCapsuleId", () => {
   test("includes slug and date components", async () => {
@@ -37,7 +37,7 @@ describe("Capsule.log + read", () => {
   test("appends events and reads them back in order", async () => {
     const events = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         yield* capsule.log({ type: "mission.create", by: "runtime", data: { goal: "test" } });
         yield* capsule.log({ type: "mission.plan", by: "theseus", data: { path: "plan.md" } });
         yield* capsule.log({
@@ -66,10 +66,10 @@ describe("Capsule.log + read", () => {
     const events = await Effect.runPromise(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.UTC(2024, 0, 2, 3, 4, 5));
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         yield* capsule.log({ type: "mission.create", by: "runtime", data: {} });
         return yield* capsule.read();
-      }).pipe(Effect.provide(Layer.merge(CapsuleLive("test"), TestClock.layer())), Effect.scoped),
+      }).pipe(Effect.provide(Layer.merge(CurrentCapsuleLive("test"), TestClock.layer())), Effect.scoped),
     );
 
     expect(events[0]?.at).toBe("2024-01-02T03:04:05.000Z");
@@ -78,7 +78,7 @@ describe("Capsule.log + read", () => {
   test("empty capsule reads as empty array", async () => {
     const events = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         return yield* capsule.read();
       }),
     );
@@ -90,7 +90,7 @@ describe("Capsule.artifact + readArtifact", () => {
   test("writes and reads an artifact", async () => {
     const content = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         yield* capsule.artifact("plan.md", "# Plan\n\n1. Do the thing");
         return yield* capsule.readArtifact("plan.md");
       }),
@@ -101,7 +101,7 @@ describe("Capsule.artifact + readArtifact", () => {
   test("overwrites existing artifact", async () => {
     const content = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         yield* capsule.artifact("plan.md", "v1");
         yield* capsule.artifact("plan.md", "v2");
         return yield* capsule.readArtifact("plan.md");
@@ -115,11 +115,11 @@ describe("Capsule.artifact + readArtifact", () => {
       Effect.provide(
         Effect.flip(
           Effect.gen(function* () {
-            const capsule = yield* Capsule;
+            const capsule = yield* CurrentCapsule;
             return yield* capsule.readArtifact("nonexistent.md");
           }),
         ),
-        CapsuleLive("test"),
+        CurrentCapsuleLive("test"),
       ),
     );
     expect(error).toBeInstanceOf(CapsuleError);
@@ -131,7 +131,7 @@ describe("Capsule.id", () => {
   test("exposes the capsule id", async () => {
     const id = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         return capsule.id;
       }),
     );
@@ -153,7 +153,7 @@ describe("Capsule tools", () => {
             .map((content) => (content._tag === "text" ? content.text : ""))
             .join("");
         }),
-        Layer.merge(CapsuleLive("test"), AgentIdentityLive("agent")),
+        Layer.merge(CurrentCapsuleLive("test"), AgentIdentityLive("agent")),
       ),
     );
 
@@ -164,7 +164,7 @@ describe("Capsule tools", () => {
   test("read capsule clamps tail to the documented maximum", async () => {
     const output = await run(
       Effect.gen(function* () {
-        const capsule = yield* Capsule;
+        const capsule = yield* CurrentCapsule;
         for (let i = 0; i < 60; i++) {
           yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
         }
