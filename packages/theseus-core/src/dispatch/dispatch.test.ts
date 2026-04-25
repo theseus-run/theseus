@@ -11,7 +11,7 @@ import {
 import { Defaults, defineTool } from "../tool/index.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
-import { CurrentDispatch } from "./store.ts";
+import { CurrentDispatch, DispatchStore } from "./store.ts";
 import type { DispatchSpec } from "./types.ts";
 
 const CompleteInput = Schema.Struct({
@@ -141,6 +141,7 @@ describe("dispatch loop", () => {
     );
 
     expect(result.content).toBe("final answer");
+    expect(result.messages.at(-1)).toEqual({ role: "assistant", content: "final answer" });
     expect(prompts).toHaveLength(2);
     expect(
       JSON.stringify(prompts[1], (_key, value: unknown) =>
@@ -253,5 +254,27 @@ describe("dispatch loop", () => {
     );
 
     expect(result.content).toBe("done");
+  });
+
+  test("records failed dispatches as terminal summaries", async () => {
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 0,
+    };
+
+    const summary = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it");
+        yield* Effect.flip(handle.result);
+        const store = yield* DispatchStore;
+        const summaries = yield* store.list();
+        return summaries.find((entry) => entry.dispatchId === handle.dispatchId);
+      }).pipe(Effect.provide(Layer.merge(makeMockLanguageModel([]), DispatchDefaults))),
+    );
+
+    expect(summary?.status).toBe("failed");
+    expect(summary?.completedAt).not.toBeNull();
   });
 });

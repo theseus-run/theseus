@@ -98,13 +98,7 @@ export const HandlersLive = TheseusRpc.toLayer({
             : e._tag === "Done"
               ? Effect.gen(function* () {
                   // Save final snapshot for session continuity
-                  const finalMessages = yield* handle.messages;
-                  yield* store.snapshot(
-                    handle.dispatchId,
-                    -1,
-                    [...finalMessages, { role: "assistant" as const, content: e.result.content }],
-                    e.result.usage,
-                  );
+                  yield* store.snapshot(handle.dispatchId, -1, e.result.messages, e.result.usage);
                   yield* capsule.log({
                     type: "dispatch.done",
                     by: "runtime",

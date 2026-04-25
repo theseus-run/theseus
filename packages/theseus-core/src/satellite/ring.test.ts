@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { StepResult } from "../dispatch/types.ts";
+import { backgroundSatellite } from "./background.ts";
 import { makeSatelliteRing } from "./ring.ts";
 import type { Satellite } from "./types.ts";
 import { TransformStepResult } from "./types.ts";
@@ -55,5 +56,28 @@ describe("SatelliteRing", () => {
     if (states._tag === "TransformStepResult") {
       expect(states.stepResult.content).toBe("7");
     }
+  });
+
+  test("background satellite failures abort instead of disappearing", async () => {
+    const bg = backgroundSatellite({
+      name: "scanner",
+      shouldStart: (checkpoint) => (checkpoint === "iteration-start" ? "scan" : null),
+      work: () => Effect.fail("denied"),
+      toDecision: () => ({ _tag: "Pass" as const }),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const ring = yield* makeSatelliteRing([bg]);
+        const scope = yield* ring.openScope({ dispatchId: "a", name: "runner", task: "one" });
+        const ctx = { dispatchId: "a", name: "runner", task: "one", iteration: 0 };
+        yield* scope.checkpoint("iteration-start", ctx);
+        yield* Effect.yieldNow;
+        return yield* Effect.flip(scope.checkpoint("iteration-start", ctx));
+      }).pipe(Effect.scoped),
+    );
+
+    expect(error._tag).toBe("SatelliteAbort");
+    expect(error.satellite).toBe("scanner");
   });
 });

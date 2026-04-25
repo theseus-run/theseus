@@ -7,16 +7,19 @@
 
 import * as Tool from "@theseus.run/core/Tool";
 import { $ } from "bun";
-import { Duration, Effect, Schedule, Schema } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = 600_000;
 const MAX_OUTPUT_BYTES = 8192;
 
 const Input = Schema.Struct({
   command: Schema.String,
   timeout_ms: Schema.optional(
-    Schema.Int.annotate({ description: "Timeout (default 30000, max 600000)" }),
+    Schema.Int.check(Schema.isBetween({ minimum: 1_000, maximum: MAX_TIMEOUT_MS })).annotate({
+      description: "Timeout (default 30000, max 600000)",
+    }),
   ),
 });
 
@@ -42,8 +45,6 @@ export const shell = Tool.defineTool({
   output: Tool.Defaults.TextOutput,
   failure: ToolFailure,
   policy: { interaction: "write_destructive" },
-  // Retry transient failures (e.g. timeouts, EBUSY) up to 3 times.
-  retry: Schedule.recurs(3) as unknown as Schedule.Schedule<unknown>,
   execute: ({ command, timeout_ms }) => {
     const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
 

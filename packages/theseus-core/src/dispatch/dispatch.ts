@@ -258,13 +258,20 @@ export const dispatch = <R = never>(
           const result =
             afterCallAction._tag === "TransformStepResult" ? afterCallAction.stepResult : rawResult;
 
-          if (result.toolCalls.length === 0)
+          if (result.toolCalls.length === 0) {
+            const finalMessages: ReadonlyArray<Prompt.MessageEncoded> = [
+              ...callMessages,
+              { role: "assistant" as const, content: result.content },
+            ];
+            yield* Ref.set(messagesRef, finalMessages);
             return {
               dispatchId,
               name: spec.name,
               content: result.content,
+              messages: finalMessages,
               usage: totalUsage,
             };
+          }
 
           // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
           yield* emitAll(result.toolCalls, (tc) => ({
@@ -421,17 +428,25 @@ export const dispatch = <R = never>(
         Effect.onExit((exit) =>
           Exit.match(exit, {
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
-            onFailure: (cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? Deferred.fail(
-                    resultDeferred,
-                    new DispatchInterrupted({
-                      dispatchId,
-                      name: spec.name,
-                      reason: "Fiber interrupted",
-                    }),
-                  )
-                : Deferred.failCause(resultDeferred, cause),
+            onFailure: (cause) => {
+              const reason = Cause.hasInterruptsOnly(cause)
+                ? "Fiber interrupted"
+                : String(Cause.squash(cause));
+              const failure = Cause.hasInterruptsOnly(cause)
+                ? new DispatchInterrupted({
+                    dispatchId,
+                    name: spec.name,
+                    reason,
+                  })
+                : undefined;
+              return emit({ _tag: "Failed", name: spec.name, reason }).pipe(
+                Effect.flatMap(() =>
+                  failure
+                    ? Deferred.fail(resultDeferred, failure)
+                    : Deferred.failCause(resultDeferred, cause),
+                ),
+              );
+            },
           }),
         ),
         Effect.ensuring(Queue.end(eventQueue)),

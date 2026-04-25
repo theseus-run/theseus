@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Tool from "@theseus.run/core/Tool";
 import { Effect } from "effect";
-import { allTools, listDir, readFile, readonlyTools, searchReplace, writeFile } from "./index.ts";
+import {
+  allTools,
+  grep,
+  listDir,
+  readFile,
+  readonlyTools,
+  searchReplace,
+  shell,
+  writeFile,
+} from "./index.ts";
 import { allToolMeta, TOOL_META } from "./metadata.ts";
 
 const tempDirs: string[] = [];
@@ -31,6 +40,15 @@ const callText = async (tool: Tool.ToolAny, raw: unknown) => {
     .join("");
 };
 
+const callError = async (tool: Tool.ToolAny, raw: unknown) => {
+  const effect = Tool.callTool(tool, raw) as Effect.Effect<
+    Tool.ToolOutcome<unknown, unknown, unknown>,
+    Tool.ToolRuntimeError,
+    never
+  >;
+  return await Effect.runPromise(Effect.flip(effect));
+};
+
 describe("@theseus.run/tools metadata", () => {
   test("publishes metadata for every runtime tool", () => {
     expect(allToolMeta.map((meta) => meta.name).sort()).toEqual(
@@ -39,6 +57,7 @@ describe("@theseus.run/tools metadata", () => {
 
     for (const tool of allTools) {
       expect(TOOL_META[tool.name]?.interaction).toBe(tool.policy.interaction);
+      expect(TOOL_META[tool.name]?.description).toBe(tool.description);
     }
   });
 
@@ -80,5 +99,29 @@ describe("@theseus.run/tools filesystem tools", () => {
     const output = await callText(listDir, { path: dir });
     expect(output).toContain("src/");
     expect(output).not.toContain("node_modules");
+  });
+
+  test("read_file rejects non-positive offset and limit at schema boundary", async () => {
+    const offsetError = await callError(readFile, { path: "x", offset: 0 });
+    const limitError = await callError(readFile, { path: "x", limit: 0 });
+
+    expect(offsetError._tag).toBe("ToolInputError");
+    expect(limitError._tag).toBe("ToolInputError");
+  });
+
+  test("grep rejects out-of-range context_lines at schema boundary", async () => {
+    const low = await callError(grep, { pattern: "x", context_lines: -1 });
+    const high = await callError(grep, { pattern: "x", context_lines: 11 });
+
+    expect(low._tag).toBe("ToolInputError");
+    expect(high._tag).toBe("ToolInputError");
+  });
+
+  test("shell rejects out-of-range timeout at schema boundary", async () => {
+    const low = await callError(shell, { command: "echo ok", timeout_ms: 999 });
+    const high = await callError(shell, { command: "echo ok", timeout_ms: 600_001 });
+
+    expect(low._tag).toBe("ToolInputError");
+    expect(high._tag).toBe("ToolInputError");
   });
 });

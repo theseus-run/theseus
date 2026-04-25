@@ -119,6 +119,11 @@ export const DispatchEventSchema = Schema.Union([
     name: Schema.String,
     result: DispatchOutputSchema,
   }),
+  Schema.Struct({
+    _tag: Schema.Literal("Failed"),
+    name: Schema.String,
+    reason: Schema.String,
+  }),
 ]);
 
 // ---------------------------------------------------------------------------

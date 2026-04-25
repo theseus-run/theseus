@@ -14,23 +14,27 @@ import type {
   SatelliteCheckpoint,
   SatelliteContext,
 } from "./types.ts";
-import { Pass } from "./types.ts";
+import { Pass, SatelliteAbort as SatelliteAbortError } from "./types.ts";
 
 export interface BackgroundSatelliteConfig<I, O, E = never, R = never> {
   readonly name: string;
   readonly shouldStart: (checkpoint: SatelliteCheckpoint, ctx: SatelliteContext) => I | null;
   readonly work: (input: I) => Effect.Effect<O, E, R>;
   readonly toDecision: (result: O, checkpoint: SatelliteCheckpoint) => CheckpointDecision;
+  readonly onFailure?: (
+    error: E,
+    checkpoint: SatelliteCheckpoint,
+  ) => Effect.Effect<CheckpointDecision, SatelliteAbort, R>;
 }
 
-interface BgState<O> {
-  readonly deferred: Deferred.Deferred<O, unknown> | null;
+interface BgState<O, E> {
+  readonly deferred: Deferred.Deferred<O, E> | null;
   readonly fiber: Fiber.Fiber<unknown, unknown> | null;
 }
 
 export const backgroundSatellite = <I, O, E = never, R = never>(
   config: BackgroundSatelliteConfig<I, O, E, R>,
-): Satellite<BgState<O>, R> => ({
+): Satellite<BgState<O, E>, R> => ({
   name: config.name,
   open: () => Effect.succeed({ deferred: null, fiber: null }),
   close: (state) =>
@@ -40,7 +44,7 @@ export const backgroundSatellite = <I, O, E = never, R = never>(
     ctx,
     state,
   ): Effect.Effect<
-    { readonly decision: CheckpointDecision; readonly state: BgState<O> },
+    { readonly decision: CheckpointDecision; readonly state: BgState<O, E> },
     SatelliteAbort,
     R
   > =>
@@ -53,11 +57,31 @@ export const backgroundSatellite = <I, O, E = never, R = never>(
               decision: config.toDecision(value, checkpoint),
               state: { deferred: null, fiber: null },
             })),
-            Effect.sandbox,
-            Effect.orElseSucceed(() => ({
-              decision: Pass,
-              state: { deferred: null, fiber: null },
-            })),
+            Effect.catch((error: E) =>
+              (config.onFailure
+                ? config.onFailure(error, checkpoint)
+                : Effect.fail(
+                    new SatelliteAbortError({
+                      satellite: config.name,
+                      reason: `Background work failed: ${String(error)}`,
+                    }),
+                  )
+              ).pipe(
+                Effect.map((decision) => ({
+                  decision,
+                  state: { deferred: null, fiber: null },
+                })),
+              ),
+            ),
+            Effect.catchDefect((cause) =>
+              Effect.fail(
+                new SatelliteAbortError({
+                  satellite: config.name,
+                  reason: `Background work defect: ${String(cause)}`,
+                }),
+              ),
+            ),
+            Effect.catch((abort: SatelliteAbort) => Effect.fail(abort)),
           );
         }
         return { decision: Pass, state };
@@ -66,7 +90,7 @@ export const backgroundSatellite = <I, O, E = never, R = never>(
       const input = config.shouldStart(checkpoint, ctx);
       if (input === null) return { decision: Pass, state };
 
-      const deferred = yield* Deferred.make<O, unknown>();
+      const deferred = yield* Deferred.make<O, E>();
       const fiber = yield* Deferred.into(deferred)(config.work(input)).pipe(Effect.forkChild);
       return { decision: Pass, state: { deferred, fiber } };
     }),

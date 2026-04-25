@@ -49,6 +49,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
           r.task,
           MIN(e.timestamp) as started_at,
           MAX(CASE WHEN e.event_tag = 'Done' THEN e.timestamp END) as completed_at,
+          MAX(CASE WHEN e.event_tag = 'Failed' THEN e.timestamp END) as failed_at,
           MAX(CASE WHEN e.event_tag = 'Done' THEN e.event_json END) as done_json
         FROM dispatch_records r
         LEFT JOIN dispatch_events e ON e.dispatch_id = r.dispatch_id
@@ -157,6 +158,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
               task: string;
               started_at: number | null;
               completed_at: number | null;
+              failed_at: number | null;
               done_json: string | null;
             }>;
             return rows.map((row): Dispatch.DispatchSummary => {
@@ -167,8 +169,8 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
                 name: row.name,
                 task: row.task,
                 startedAt: row.started_at ?? 0,
-                completedAt: row.completed_at,
-                status: row.completed_at ? "done" : "running",
+                completedAt: row.completed_at ?? row.failed_at,
+                status: row.completed_at ? "done" : row.failed_at ? "failed" : "running",
                 usage: result?.usage ?? { inputTokens: 0, outputTokens: 0 },
               };
             });

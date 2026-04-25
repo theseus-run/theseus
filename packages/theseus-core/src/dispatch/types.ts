@@ -48,10 +48,13 @@ export const DispatchOutputSchema = Schema.Struct({
   dispatchId: Schema.String,
   name: Schema.String,
   content: Schema.String,
+  messages: Schema.Array(Schema.Unknown),
   usage: UsageSchema,
 });
 
-export type DispatchOutput = Schema.Schema.Type<typeof DispatchOutputSchema>;
+export interface DispatchOutput extends Schema.Schema.Type<typeof DispatchOutputSchema> {
+  readonly messages: ReadonlyArray<Prompt.MessageEncoded>;
+}
 
 // ---------------------------------------------------------------------------
 // DispatchError — raw operational failures from the loop
@@ -219,7 +222,8 @@ export type DispatchEvent =
       readonly injection: string;
       readonly detail?: string;
     }
-  | { readonly _tag: "Done"; readonly name: string; readonly result: DispatchOutput };
+  | { readonly _tag: "Done"; readonly name: string; readonly result: DispatchOutput }
+  | { readonly _tag: "Failed"; readonly name: string; readonly reason: string };
 
 // ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside

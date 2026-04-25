@@ -77,7 +77,7 @@ const list_dir: ToolMeta = {
 const glob: ToolMeta = {
   name: "glob",
   description:
-    "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns <=100 paths. Skips node_modules, .git, dist, coverage.",
+    "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns ≤100 paths. Skips node_modules, .git, dist, coverage.",
   interaction: "observe",
   safety: "readonly",
   inputSchema: objectSchema(
@@ -92,7 +92,7 @@ const glob: ToolMeta = {
 const grep: ToolMeta = {
   name: "grep",
   description:
-    "Search file contents by regex. Returns matches grouped by file (file:line:content). <=100 matches.",
+    "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",
   interaction: "observe",
   safety: "readonly",
   inputSchema: objectSchema(

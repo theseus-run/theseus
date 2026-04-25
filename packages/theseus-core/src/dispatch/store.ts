@@ -157,15 +157,15 @@ export const InMemoryDispatchStore: Layer.Layer<DispatchStore> = Layer.effect(Di
             const dispatchEvents = entries.filter((entry) => entry.dispatchId === record.id);
             const first = dispatchEvents[0];
             if (first === undefined) continue;
-            const last = dispatchEvents[dispatchEvents.length - 1];
             const done = dispatchEvents.find((entry) => entry.event._tag === "Done");
+            const failed = dispatchEvents.find((entry) => entry.event._tag === "Failed");
             summaries.push({
               dispatchId: record.id,
               name: record.name,
               task: record.task,
               startedAt: first.timestamp,
-              completedAt: done?.timestamp ?? null,
-              status: done ? "done" : last?.event._tag === "Done" ? "done" : "running",
+              completedAt: done?.timestamp ?? failed?.timestamp ?? null,
+              status: done ? "done" : failed ? "failed" : "running",
               usage:
                 done?.event._tag === "Done"
                   ? done.event.result.usage

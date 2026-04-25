@@ -21,10 +21,14 @@ const TEXT_MIMES = ["json", "xml", "javascript", "typescript", "ecmascript"];
 const Input = Schema.Struct({
   path: Schema.String,
   offset: Schema.optional(
-    Schema.Int.annotate({ description: "Start at this line number (1-indexed)" }),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+      description: "Start at this line number (1-indexed)",
+    }),
   ),
   limit: Schema.optional(
-    Schema.Int.annotate({ description: "Max lines to return (default 2000)" }),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+      description: "Max lines to return (default 2000)",
+    }),
   ),
 });
 

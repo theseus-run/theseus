@@ -19,7 +19,9 @@ const Input = Schema.Struct({
   ),
   glob: Schema.optional(Schema.String.annotate({ description: "File filter pattern (e.g. *.ts)" })),
   context_lines: Schema.optional(
-    Schema.Int.annotate({ description: "Lines of context around each match (0-10)" }),
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10 })).annotate({
+      description: "Lines of context around each match (0-10)",
+    }),
   ),
 });
 
@@ -104,23 +106,28 @@ export const grep = Tool.defineTool({
     });
 
     return run.pipe(
-      Effect.flatMap((result) => {
-        const exitCode = result.exitCode;
+      Effect.flatMap((result) =>
+        Effect.gen(function* () {
+          const exitCode = result.exitCode;
 
-        // Exit code 2 = ripgrep error (bad regex, permission denied, etc.)
-        if (exitCode === 2) {
-          const stderr = result.stderr.toString().trim();
-          return Effect.fail(new ToolFailure({ message: `ripgrep error: ${stderr}` }));
-        }
+          // Exit code 2 = ripgrep error (bad regex, permission denied, etc.)
+          if (exitCode === 2) {
+            const stderr = result.stderr.toString().trim();
+            return yield* Effect.fail(new ToolFailure({ message: `ripgrep error: ${stderr}` }));
+          }
 
-        // Exit code 1 = no matches (not an error)
-        // Exit code 0 = matches found
-        const raw = result.stdout.toString();
-        const allMatches = parseRgJson(raw);
-        const capped = allMatches.slice(0, MAX_MATCHES);
+          // Exit code 1 = no matches (not an error)
+          // Exit code 0 = matches found
+          const raw = result.stdout.toString();
+          const allMatches = yield* Effect.try({
+            try: () => parseRgJson(raw),
+            catch: (e) => new ToolFailure({ message: `Failed to parse ripgrep JSON: ${e}` }),
+          });
+          const capped = allMatches.slice(0, MAX_MATCHES);
 
-        return Effect.succeed(formatMatches(capped, allMatches.length));
-      }),
+          return formatMatches(capped, allMatches.length);
+        }),
+      ),
     );
   },
 });
