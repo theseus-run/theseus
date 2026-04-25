@@ -9,7 +9,7 @@
  *   Effect.provide(program, layers)
  */
 
-import { Effect, Layer, Ref } from "effect";
+import { Clock, Effect, Layer, Ref } from "effect";
 import { Capsule } from "../capsule/index.ts";
 import { MissionContext } from "./context.ts";
 import type { MissionId } from "./id.ts";
@@ -43,7 +43,8 @@ export const MissionLive = (config: MissionConfig): Layer.Layer<MissionContext, 
   Layer.effect(MissionContext)(
     Effect.gen(function* () {
       const capsule = yield* Capsule;
-      const createdAt = new Date().toISOString();
+      const now = yield* Clock.currentTimeMillis;
+      const createdAt = new Date(now).toISOString();
       const statusRef = yield* Ref.make<MissionStatus>("pending");
 
       // Auto-log mission creation

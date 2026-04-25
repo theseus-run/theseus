@@ -1,12 +1,43 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import type { Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
-import { makeMockLanguageModel, toolCallParts } from "../test-utils/mock-language-model.ts";
+import {
+  makeMockLanguageModel,
+  textParts,
+  toolCallParts,
+} from "../test-utils/mock-language-model.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
 
 describe("dispatch loop", () => {
+  test("generates dispatch id from Effect Clock", async () => {
+    const now = Date.UTC(2024, 0, 2, 3, 4, 5);
+    const blueprint: Blueprint = {
+      name: "worker",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 1,
+    };
+
+    const layer = Layer.mergeAll(
+      makeMockLanguageModel([textParts("done")]),
+      DispatchDefaults,
+      TestClock.layer(),
+    );
+
+    const dispatchId = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(now);
+        const handle = yield* dispatch<never>(blueprint, "do it");
+        return handle.dispatchId;
+      }).pipe(Effect.provide(layer), Effect.scoped),
+    );
+
+    expect(dispatchId).toBe(`worker-${now.toString(36)}`);
+  });
+
   test("invalid report input cannot become terminal success", async () => {
     const blueprint: Blueprint = {
       name: "worker",

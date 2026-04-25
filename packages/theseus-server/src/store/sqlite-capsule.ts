@@ -8,7 +8,7 @@
  */
 
 import * as CapsuleNs from "@theseus.run/core/Capsule";
-import { Effect, Layer } from "effect";
+import { Clock, Effect, Layer } from "effect";
 import { TheseusDb } from "./sqlite.ts";
 
 export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, never, TheseusDb> =>
@@ -37,8 +37,9 @@ export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, 
         id,
 
         log: (input: CapsuleNs.CapsuleEventInput) =>
-          Effect.sync(() => {
-            const at = new Date().toISOString();
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const at = new Date(now).toISOString();
             insertEvent.run(id, input.type, at, input.by, JSON.stringify(input.data));
           }),
 

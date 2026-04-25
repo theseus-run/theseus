@@ -10,6 +10,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import type { Mission } from "@/lib/queries";
 import { missions } from "@/lib/queries";
+import { makeLocalId } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
 // Definition panel (right sidebar — same side as mission control)
@@ -178,7 +179,7 @@ export function DefinePage() {
   ]);
 
   const handleSend = useCallback((text: string) => {
-    setChatMessages((prev) => [...prev, { id: String(Date.now()), role: "user", content: text }]);
+    setChatMessages((prev) => [...prev, { id: makeLocalId(), role: "user", content: text }]);
   }, []);
 
   const handleLock = useCallback(() => {

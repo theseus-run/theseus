@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Random } from "effect";
+import { TestClock } from "effect/testing";
 import { AgentIdentityLive } from "../agent/index.ts";
 import * as Tool from "../Tool.ts";
 import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
@@ -14,6 +15,21 @@ describe("makeCapsuleId", () => {
     const id = await Effect.runPromise(makeCapsuleId("my-mission"));
     expect(id).toContain("my-mission");
     expect(id.length).toBeGreaterThan(20);
+  });
+
+  test("uses Effect Clock and Random services", async () => {
+    const [first, second] = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.UTC(2024, 0, 2, 3, 4));
+        const a = yield* makeCapsuleId("deterministic").pipe(Random.withSeed("capsule"));
+        const b = yield* makeCapsuleId("deterministic").pipe(Random.withSeed("capsule"));
+        return [a, b] as const;
+      }).pipe(Effect.provide(TestClock.layer()), Effect.scoped),
+    );
+
+    expect(first).toBe(second);
+    expect(first).toStartWith("20240102-0304-");
+    expect(first).toContain("-deterministic");
   });
 });
 
@@ -44,6 +60,19 @@ describe("Capsule.log + read", () => {
     for (const event of events) {
       expect(event.at).toBeTruthy();
     }
+  });
+
+  test("timestamps events from Effect Clock", async () => {
+    const events = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.UTC(2024, 0, 2, 3, 4, 5));
+        const capsule = yield* Capsule;
+        yield* capsule.log({ type: "mission.create", by: "runtime", data: {} });
+        return yield* capsule.read();
+      }).pipe(Effect.provide(Layer.merge(CapsuleLive("test"), TestClock.layer())), Effect.scoped),
+    );
+
+    expect(events[0]?.at).toBe("2024-01-02T03:04:05.000Z");
   });
 
   test("empty capsule reads as empty array", async () => {

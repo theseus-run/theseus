@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BunHttpClient } from "@effect/platform-bun";
-import { Data, Effect, Layer, Match, Ref, Stream } from "effect";
+import { Clock, Data, Effect, Layer, Match, Ref, Stream } from "effect";
 import * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
@@ -418,6 +418,8 @@ class StreamAccumulator {
   private textId = "";
   private reasoningId = "";
 
+  constructor(private readonly now: () => number) {}
+
   addChatCompletionsDelta(
     delta: NonNullable<NonNullable<ChatCompletionsWire["choices"]>[number]["delta"]>,
   ): Response.StreamPartEncoded | null {
@@ -439,7 +441,7 @@ class StreamAccumulator {
         () => !!delta.reasoning_content,
         () => {
           if (!this.reasoningId) {
-            this.reasoningId = `reasoning_${Date.now()}`;
+            this.reasoningId = `reasoning_${this.now()}`;
           }
           return {
             type: "reasoning-delta",
@@ -452,7 +454,7 @@ class StreamAccumulator {
         () => !!delta.content,
         () => {
           if (!this.textId) {
-            this.textId = `text_${Date.now()}`;
+            this.textId = `text_${this.now()}`;
             // Emit as text-delta directly — text-start has no delta field
             // and would lose the first chunk's content
             return streamPart({ type: "text-delta", id: this.textId, delta: delta.content });
@@ -469,7 +471,7 @@ class StreamAccumulator {
     return Match.value(eventType).pipe(
       Match.when("response.output_item.added", () => {
         if (data.item?.type !== "function_call") return null;
-        const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${Date.now()}`);
+        const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${this.now()}`);
         this.responsesCallMap.set(callId, {
           id: callId,
           name: data.item.name ?? "",
@@ -503,14 +505,14 @@ class StreamAccumulator {
       Match.when("response.output_text.delta", () => {
         if (!data.delta) return null;
         if (!this.textId) {
-          this.textId = `text_${Date.now()}`;
+          this.textId = `text_${this.now()}`;
         }
         return streamPart({ type: "text-delta", id: this.textId, delta: data.delta });
       }),
       Match.when("response.reasoning_text.delta", () => {
         if (!data.delta) return null;
         if (!this.reasoningId) {
-          this.reasoningId = `reasoning_${Date.now()}`;
+          this.reasoningId = `reasoning_${this.now()}`;
         }
         return streamPart({ type: "reasoning-delta", id: this.reasoningId, delta: data.delta });
       }),
@@ -655,6 +657,7 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const config = yield* RuntimeConfig;
+    const clock = yield* Clock.Clock;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
     const exchangeToken = (
@@ -686,7 +689,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
 
     const getBearer = (): Effect.Effect<string, CopilotAuthError | CopilotParseError> =>
       Effect.gen(function* () {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMillis = yield* Clock.currentTimeMillis;
+        const now = Math.floor(nowMillis / 1000);
         const cached = yield* Ref.get(tokenCacheRef);
         if (cached !== null && cached.expiresAt - now > 60) return cached.bearer;
         const oauth = yield* readOauthToken;
@@ -781,7 +785,7 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
           Effect.gen(function* () {
             const { req, useResponses } = yield* buildRequest(options.prompt, options.tools, true);
             const res = yield* executeRequest(req);
-            const acc = new StreamAccumulator();
+            const acc = new StreamAccumulator(() => clock.currentTimeMillisUnsafe());
 
             const sseLines = parseSSELines(
               Stream.mapError(

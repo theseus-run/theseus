@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Random } from "effect";
+import { TestClock } from "effect/testing";
 import { Capsule } from "../capsule/index.ts";
 import { CapsuleLive } from "../capsule/memory.ts";
 import { MissionContext } from "./context.ts";
@@ -21,6 +22,20 @@ describe("makeMissionId", () => {
   test("slug is optional", async () => {
     const id = await Effect.runPromise(makeMissionId());
     expect(id).toMatch(/^[A-Z0-9]{7}-\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("uses Effect Clock and Random services", async () => {
+    const [first, second] = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.UTC(2024, 0, 2));
+        const a = yield* makeMissionId("deterministic").pipe(Random.withSeed("mission"));
+        const b = yield* makeMissionId("deterministic").pipe(Random.withSeed("mission"));
+        return [a, b] as const;
+      }).pipe(Effect.provide(TestClock.layer()), Effect.scoped),
+    );
+
+    expect(first).toBe(second);
+    expect(first).toContain("-2024-01-02-deterministic");
   });
 });
 

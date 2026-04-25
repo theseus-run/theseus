@@ -5,20 +5,25 @@
  * The nanoid is the identity. Date and slug are hints — can be omitted in lookups.
  */
 
-import { Effect } from "effect";
+import { Clock, Effect, Random } from "effect";
 
 export type MissionId = string & { readonly _brand: unique symbol };
 
 /** Generate a 7-char uppercase nanoid. */
-const nanoid7 = (): string => {
+const nanoid7: Effect.Effect<string> = Effect.gen(function* () {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  return Array.from({ length: 7 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-};
+  const out: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const index = yield* Random.nextIntBetween(0, chars.length - 1);
+    out.push(chars[index] ?? "A");
+  }
+  return out.join("");
+});
 
-/** Generate a unique MissionId. Uses Effect.sync for testability. */
 export const makeMissionId = (slug?: string): Effect.Effect<MissionId> =>
-  Effect.sync(() => {
-    const id = nanoid7();
-    const date = new Date().toISOString().slice(0, 10);
+  Effect.gen(function* () {
+    const id = yield* nanoid7;
+    const now = yield* Clock.currentTimeMillis;
+    const date = new Date(now).toISOString().slice(0, 10);
     return (slug ? `${id}-${date}-${slug}` : `${id}-${date}`) as MissionId;
   });

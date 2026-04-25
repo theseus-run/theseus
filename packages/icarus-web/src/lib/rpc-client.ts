@@ -11,7 +11,7 @@
  * For non-streaming RPCs, the result comes in the Exit message.
  */
 
-import type { Event as CapsuleEvent } from "@theseus.run/core/Capsule";
+import type { CapsuleEvent } from "@theseus.run/core/Capsule";
 import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 
 // ---------------------------------------------------------------------------
@@ -151,26 +151,32 @@ export class TheseusClient {
   private handleMessage(msg: unknown) {
     if (!isRecord(msg)) return;
 
-    if (msg._tag === "Chunk") {
-      const req = this.pending.get(String(msg.requestId ?? ""));
+    if (msg["_tag"] === "Chunk") {
+      const req = this.pending.get(String(msg["requestId"] ?? ""));
       if (req?.onChunk) {
-        req.onChunk(Array.isArray(msg.values) ? msg.values : []);
+        req.onChunk(Array.isArray(msg["values"]) ? msg["values"] : []);
       }
-    } else if (msg._tag === "Exit") {
-      const req = this.pending.get(String(msg.requestId ?? ""));
+    } else if (msg["_tag"] === "Exit") {
+      const req = this.pending.get(String(msg["requestId"] ?? ""));
       if (req) {
-        this.pending.delete(String(msg.requestId ?? ""));
-        const exit = isRecord(msg.exit) ? msg.exit : {};
-        if (exit._tag === "Success") {
-          req.resolve(exit.value);
+        this.pending.delete(String(msg["requestId"] ?? ""));
+        const exit = isRecord(msg["exit"]) ? msg["exit"] : {};
+        if (exit["_tag"] === "Success") {
+          req.resolve(exit["value"]);
         } else {
           // Failure — extract error
-          const cause = Array.isArray(exit.cause) ? exit.cause[0] : undefined;
-          const error = isRecord(cause) && isRecord(cause.error) ? cause.error : undefined;
-          req.reject(new Error(typeof error?.message === "string" ? error.message : "RPC failed"));
+          const cause = Array.isArray(exit["cause"]) ? exit["cause"][0] : undefined;
+          const error = isRecord(cause) && isRecord(cause["error"]) ? cause["error"] : undefined;
+          req.reject(
+            new Error(
+              isRecord(error) && typeof error["message"] === "string"
+                ? error["message"]
+                : "RPC failed",
+            ),
+          );
         }
       }
-    } else if (msg._tag === "Pong") {
+    } else if (msg["_tag"] === "Pong") {
       // ignore pongs
     }
   }
@@ -199,7 +205,7 @@ export class TheseusClient {
       this.pending.set(id, {
         resolve: (value) => {
           clearTimeout(timer);
-          resolve(value);
+          resolve(value as T);
         },
         reject: (err) => {
           clearTimeout(timer);

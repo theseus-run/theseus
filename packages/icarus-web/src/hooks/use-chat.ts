@@ -4,6 +4,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { DispatchEvent, TheseusClient } from "../lib/rpc-client";
+import { nowMillis } from "../lib/time";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,7 +65,7 @@ export function useChat(client: TheseusClient | null) {
           id: nextId.current++,
           role,
           content,
-          timestamp: Date.now(),
+          timestamp: nowMillis(),
           ...(event !== undefined ? { event } : {}),
         },
       ]);
@@ -173,7 +174,7 @@ export function useChat(client: TheseusClient | null) {
           id: nextId.current++,
           role: m.role === "user" ? "user" : "assistant",
           content: m.content,
-          timestamp: Date.now(),
+          timestamp: nowMillis(),
         });
       }
       setMessages(chatMsgs);

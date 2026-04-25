@@ -4,6 +4,7 @@
 
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
+import { makeLocalId } from "@/lib/time";
 
 export function NewMissionPage() {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ export function NewMissionPage() {
   const handleSubmit = useCallback(() => {
     if (!goal.trim()) return;
     // TODO: call client.createMission(goal) -> returns missionId
-    const stubId = `m-${Date.now()}`;
+    const stubId = makeLocalId("m-");
     navigate({ to: "/missions/$missionId/define", params: { missionId: stubId } });
   }, [goal, navigate]);
 

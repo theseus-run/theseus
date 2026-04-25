@@ -11,7 +11,19 @@
  * Uses LanguageModel from effect/unstable/ai via stepStream.
  */
 
-import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Stream } from "effect";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Match,
+  Option,
+  Queue,
+  Ref,
+  Stream,
+} from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
@@ -110,7 +122,8 @@ export const dispatch = <R = never>(
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-    const dispatchId = options?.dispatchId ?? `${blueprint.name}-${Date.now().toString(36)}`;
+    const now = yield* Clock.currentTimeMillis;
+    const dispatchId = options?.dispatchId ?? `${blueprint.name}-${now.toString(36)}`;
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();

@@ -3,6 +3,7 @@
  */
 
 import type { DispatchSummary } from "@theseus.run/core/Dispatch";
+import { nowMillis } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 interface DispatchListProps {
@@ -25,9 +26,7 @@ const statusColor: Record<string, string> = {
 };
 
 function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
+  const diffMs = nowMillis() - ts;
   const diffMins = Math.floor(diffMs / 60_000);
   if (diffMins < 1) return "just now";
   if (diffMins < 60) return `${diffMins}m ago`;

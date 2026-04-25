@@ -6,9 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { MissionSummary } from "@/lib/queries";
 import { missions } from "@/lib/queries";
+import { nowMillis } from "@/lib/time";
 
 function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = nowMillis() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;

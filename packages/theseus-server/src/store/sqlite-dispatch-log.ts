@@ -6,7 +6,7 @@
  */
 
 import * as Dispatch from "@theseus.run/core/Dispatch";
-import { Effect, Layer } from "effect";
+import { Clock, Effect, Layer } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { TheseusDb } from "./sqlite.ts";
 
@@ -55,8 +55,9 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, Theseus
 
     return {
       record: (dispatchId: string, event: Dispatch.DispatchEvent) =>
-        Effect.sync(() => {
-          insertEvent.run(dispatchId, Date.now(), event._tag, JSON.stringify(event));
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
+          insertEvent.run(dispatchId, timestamp, event._tag, JSON.stringify(event));
         }),
 
       snapshot: (
@@ -65,11 +66,12 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, Theseus
         messages: ReadonlyArray<Prompt.MessageEncoded>,
         usage: Dispatch.Usage,
       ) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
           insertSnapshot.run(
             dispatchId,
             iteration,
-            Date.now(),
+            timestamp,
             JSON.stringify(messages),
             JSON.stringify(usage),
           );

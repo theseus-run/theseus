@@ -7,7 +7,7 @@
  * Capsule is always-on — it exists from runtime start, not gated by Mission.
  */
 
-import { Effect, Layer, Ref } from "effect";
+import { Clock, Effect, Layer, Ref } from "effect";
 import {
   Capsule,
   CapsuleError,
@@ -34,10 +34,13 @@ export const CapsuleLive = (slug: string): Layer.Layer<Capsule> =>
         id,
 
         log: (input: CapsuleEventInput) =>
-          Ref.update(eventsRef, (events) => [
-            ...events,
-            { ...input, at: new Date().toISOString() },
-          ]),
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            yield* Ref.update(eventsRef, (events) => [
+              ...events,
+              { ...input, at: new Date(now).toISOString() },
+            ]);
+          }),
 
         read: () => Ref.get(eventsRef),
 

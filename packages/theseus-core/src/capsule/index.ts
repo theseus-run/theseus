@@ -10,7 +10,7 @@
  * Ship metaphor: the black box. Append-only. Survives the crash.
  */
 
-import { Context, Data, Effect } from "effect";
+import { Clock, Context, Data, Effect, Random } from "effect";
 
 // ---------------------------------------------------------------------------
 // CapsuleId — branded string
@@ -18,14 +18,15 @@ import { Context, Data, Effect } from "effect";
 
 export type CapsuleId = string & { readonly _brand: unique symbol };
 
-/** Generate a unique CapsuleId. Uses Effect.sync for testability. */
 export const makeCapsuleId = (slug: string): Effect.Effect<CapsuleId> =>
-  Effect.sync(() => {
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10).replace(/-/g, "");
-    const time = now.toISOString().slice(11, 16).replace(":", "");
-    const rand = Math.random().toString(36).slice(2, 9);
-    return `${date}-${time}-${rand}-${slug}` as CapsuleId;
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const rand = yield* Random.nextIntBetween(0, 36 ** 7 - 1);
+    const iso = new Date(now).toISOString();
+    const date = iso.slice(0, 10).replace(/-/g, "");
+    const time = iso.slice(11, 16).replace(":", "");
+    const suffix = rand.toString(36).padStart(7, "0");
+    return `${date}-${time}-${suffix}-${slug}` as CapsuleId;
   });
 
 // ---------------------------------------------------------------------------

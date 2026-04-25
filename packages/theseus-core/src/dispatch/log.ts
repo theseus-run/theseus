@@ -9,7 +9,7 @@
  * DispatchLog is the raw internal audit trail.
  */
 
-import { Context, Effect, Layer, Ref } from "effect";
+import { Clock, Context, Effect, Layer, Ref } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { DispatchEvent, DispatchOptions, Usage } from "./types.ts";
 
@@ -77,16 +77,19 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
 
     return {
       record: (dispatchId, event) =>
-        Ref.update(eventsRef, (entries) => [
-          ...entries,
-          { timestamp: Date.now(), dispatchId, event },
-        ]),
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
+          yield* Ref.update(eventsRef, (entries) => [...entries, { timestamp, dispatchId, event }]);
+        }),
 
       snapshot: (dispatchId, iteration, messages, usage) =>
-        Ref.update(snapshotsRef, (snaps) => [
-          ...snaps,
-          { timestamp: Date.now(), dispatchId, iteration, messages, usage },
-        ]),
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
+          yield* Ref.update(snapshotsRef, (snaps) => [
+            ...snaps,
+            { timestamp, dispatchId, iteration, messages, usage },
+          ]);
+        }),
 
       events: (dispatchId) =>
         Ref.get(eventsRef).pipe(

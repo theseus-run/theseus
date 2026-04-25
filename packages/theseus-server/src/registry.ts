@@ -6,7 +6,7 @@
  */
 
 import type * as Dispatch from "@theseus.run/core/Dispatch";
-import { Context, Effect, Ref } from "effect";
+import { Clock, Context, Effect, Ref } from "effect";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,17 +56,20 @@ export const DispatchRegistryLive = Effect.gen(function* () {
 
   return {
     register: (handle: Dispatch.DispatchHandle, agent: string) =>
-      Ref.update(ref, (m) => {
-        const next = new Map(m);
-        next.set(handle.dispatchId, {
-          handle,
-          agent,
-          startedAt: Date.now(),
-          iteration: 0,
-          usage: { inputTokens: 0, outputTokens: 0 },
-          state: "running",
+      Effect.gen(function* () {
+        const startedAt = yield* Clock.currentTimeMillis;
+        yield* Ref.update(ref, (m) => {
+          const next = new Map(m);
+          next.set(handle.dispatchId, {
+            handle,
+            agent,
+            startedAt,
+            iteration: 0,
+            usage: { inputTokens: 0, outputTokens: 0 },
+            state: "running",
+          });
+          return next;
         });
-        return next;
       }),
 
     get: (dispatchId: string) =>
