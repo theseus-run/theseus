@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 export type { AgentError, AgentResult as Result, Blueprint, ResultKind } from "./agent/index.ts";
+export { AgentIdentity as Identity, AgentIdentityLive as IdentityLive } from "./agent/index.ts";
 
 // ---------------------------------------------------------------------------
 // Errors (keep prefix — _tag must be globally unique)

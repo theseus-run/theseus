@@ -19,7 +19,7 @@ import { AgentCycleExceeded, AgentInterrupted } from "../agent/index.ts";
 import { decodeReportInput, report } from "../agent-comm/report.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
-import type { Presentation, ToolAny } from "../tool/index.ts";
+import type { Presentation, ToolAnyWith } from "../tool/index.ts";
 import { textPresentation } from "../tool/index.ts";
 import { interactionAtMost } from "../tool/meta.ts";
 import { DispatchLog } from "./log.ts";
@@ -62,10 +62,10 @@ const addUsage = (a: Usage, b: Usage): Usage => ({
   outputTokens: a.outputTokens + b.outputTokens,
 });
 
-const toolsAllowedByPolicy = (
-  tools: ReadonlyArray<ToolAny>,
+const toolsAllowedByPolicy = <R>(
+  tools: ReadonlyArray<ToolAnyWith<R>>,
   options?: DispatchOptions,
-): ReadonlyArray<ToolAny> => {
+): ReadonlyArray<ToolAnyWith<R>> => {
   const maxInteraction = options?.maxInteraction;
   if (!maxInteraction) return tools;
   return tools.filter((tool) => interactionAtMost(tool.policy.interaction, maxInteraction));
@@ -109,14 +109,14 @@ const drainInjections = (
 // dispatch
 // ---------------------------------------------------------------------------
 
-export const dispatch = (
-  blueprint: Blueprint,
+export const dispatch = <R = never>(
+  blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
   DispatchHandle,
   never,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
 > =>
   Effect.gen(function* () {
     const maxIter = blueprint.maxIterations ?? 20;
@@ -153,7 +153,7 @@ export const dispatch = (
     ): Effect.Effect<
       AgentResult,
       AgentError | SatelliteAbort,
-      LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+      LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
     > =>
       Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(
         Effect.gen(function* () {
@@ -325,7 +325,7 @@ export const dispatch = (
                     : tc;
 
                 // Execute tool
-                const callResult: ToolCallResult = yield* runToolCall(
+                const callResult: ToolCallResult = yield* runToolCall<R>(
                   allowedTools,
                   effectiveTc,
                 ).pipe(
@@ -490,12 +490,12 @@ export const dispatch = (
 // dispatchAwait — convenience when you only need the final result
 // ---------------------------------------------------------------------------
 
-export const dispatchAwait = (
-  blueprint: Blueprint,
+export const dispatchAwait = <R = never>(
+  blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
   AgentResult,
   AgentError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
 > => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

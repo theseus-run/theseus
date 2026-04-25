@@ -33,7 +33,7 @@ export type {
 // ---------------------------------------------------------------------------
 
 export { makeCapsuleId as makeId } from "./capsule/index.ts";
-export { makeLogTool, makeReadCapsuleTool } from "./capsule/tools.ts";
+export { logCapsuleTool as logTool, readCapsuleTool as readTool } from "./capsule/tools.ts";
 
 // ---------------------------------------------------------------------------
 // Layers

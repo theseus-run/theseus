@@ -20,4 +20,4 @@ export type { DelegateInput, ReportInput } from "./agent-comm/index.ts";
 // Tools & factories
 // ---------------------------------------------------------------------------
 
-export { makeDelegate, makeLogTool, makeReadCapsuleTool, report } from "./agent-comm/index.ts";
+export { makeDelegate, report } from "./agent-comm/index.ts";

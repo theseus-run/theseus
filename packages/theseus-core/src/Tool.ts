@@ -24,7 +24,7 @@
 // Primary types
 // ---------------------------------------------------------------------------
 
-export type { Tool, ToolAny as Any, ToolDef as Def } from "./tool/index.ts";
+export type { Tool, ToolAny as Any, ToolAnyWith as AnyWith, ToolDef as Def } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Content — multimodal wire format

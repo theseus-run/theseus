@@ -21,7 +21,7 @@ import type * as Response from "effect/unstable/ai/Response";
 import type { AgentError } from "../agent/index.ts";
 import { AgentLLMError } from "../agent/index.ts";
 import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
-import type { Content, Presentation, ToolAny } from "../tool/index.ts";
+import type { Content, Presentation, ToolAnyWith } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from "./types.ts";
 import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
@@ -134,10 +134,10 @@ export const presentationToText = (p: Presentation): string =>
 // Tool-author failures (F) are folded into the Presentation's isError flag.
 // ---------------------------------------------------------------------------
 
-export const runToolCall = (
-  tools: ReadonlyArray<ToolAny>,
+export const runToolCall = <R = never>(
+  tools: ReadonlyArray<ToolAnyWith<R>>,
   tc: ToolCall,
-): Effect.Effect<ToolCallResult, ToolCallError, never> => {
+): Effect.Effect<ToolCallResult, ToolCallError, R> => {
   const tool = tools.find((t) => t.name === tc.name);
   if (!tool) return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
@@ -158,7 +158,7 @@ export const runToolCall = (
     Effect.mapError(
       (cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause }),
     ),
-  ) as Effect.Effect<ToolCallResult, ToolCallError, never>;
+  ) as Effect.Effect<ToolCallResult, ToolCallError, R>;
 };
 
 // ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ export type StreamDelta =
  */
 export const stepStream = (
   messages: ReadonlyArray<Prompt.MessageEncoded>,
-  tools: ReadonlyArray<ToolAny>,
+  tools: ReadonlyArray<ToolAnyWith<unknown>>,
   agentName: string,
   onChunk: (chunk: StreamDelta) => Effect.Effect<void>,
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
@@ -262,7 +262,7 @@ export const stepStream = (
 
 export const step = (
   messages: ReadonlyArray<Prompt.MessageEncoded>,
-  tools: ReadonlyArray<ToolAny>,
+  tools: ReadonlyArray<ToolAnyWith<unknown>>,
   agentName: string,
 ): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {

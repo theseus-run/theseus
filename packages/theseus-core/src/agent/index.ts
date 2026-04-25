@@ -8,7 +8,9 @@
 
 import { Data } from "effect";
 import type { Usage } from "../dispatch/types.ts";
-import type { ToolAny } from "../tool/index.ts";
+import type { ToolAnyWith } from "../tool/index.ts";
+
+export { AgentIdentity, AgentIdentityLive } from "./identity.ts";
 
 // ---------------------------------------------------------------------------
 // ResultKind — routing signal for orchestrator / code consumers
@@ -20,10 +22,10 @@ export type ResultKind = "success" | "error" | "defect" | "unstructured";
 // Blueprint — agent config as data
 // ---------------------------------------------------------------------------
 
-export interface Blueprint {
+export interface Blueprint<R = never> {
   readonly name: string;
   readonly systemPrompt: string;
-  readonly tools: ReadonlyArray<ToolAny>;
+  readonly tools: ReadonlyArray<ToolAnyWith<R>>;
   readonly maxIterations?: number;
   readonly model?: string;
 }

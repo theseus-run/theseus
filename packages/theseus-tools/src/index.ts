@@ -26,10 +26,16 @@ import { shell } from "./shell.ts";
 import { writeFile } from "./write_file.ts";
 
 /** Read-only tools — safe for planner/atlas agents. */
-export const readonlyTools: ReadonlyArray<Tool.Any> = [readFile, listDir, glob, grep, outline];
+export const readonlyTools: ReadonlyArray<Tool.AnyWith<never>> = [
+  readFile,
+  listDir,
+  glob,
+  grep,
+  outline,
+];
 
 /** All tools — full access for coder/forge agents. */
-export const allTools: ReadonlyArray<Tool.Any> = [
+export const allTools: ReadonlyArray<Tool.AnyWith<never>> = [
   readFile,
   listDir,
   glob,

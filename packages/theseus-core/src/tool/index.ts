@@ -73,6 +73,9 @@ export interface Tool<I, O, F, R> {
 // biome-ignore lint/suspicious/noExplicitAny: type erasure for heterogeneous tool collections
 export type ToolAny = Tool<any, any, any, any>;
 
+// biome-ignore lint/suspicious/noExplicitAny: type erasure that preserves only the service environment
+export type ToolAnyWith<R> = Tool<any, any, any, R>;
+
 // ---------------------------------------------------------------------------
 // ToolDef<I, O, F, R> — author-facing config for defineTool
 //

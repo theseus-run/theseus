@@ -31,11 +31,15 @@ export interface GruntHandle {
 // grunt — fire-and-forget dispatch
 // ---------------------------------------------------------------------------
 
-export const grunt = (
-  blueprint: Blueprint,
+export const grunt = <R = never>(
+  blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<GruntHandle, never, LanguageModel.LanguageModel | SatelliteRing | DispatchLog> =>
+): Effect.Effect<
+  GruntHandle,
+  never,
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
+> =>
   dispatch(blueprint, task, options).pipe(
     Effect.map((handle) => ({
       events: handle.events,
@@ -47,12 +51,12 @@ export const grunt = (
 // gruntAwait — convenience when you only need the result
 // ---------------------------------------------------------------------------
 
-export const gruntAwait = (
-  blueprint: Blueprint,
+export const gruntAwait = <R = never>(
+  blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
   AgentResult,
   AgentError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog
+  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
 > => grunt(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

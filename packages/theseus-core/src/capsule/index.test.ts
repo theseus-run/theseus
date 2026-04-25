@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { AgentIdentityLive } from "../agent/index.ts";
 import * as Tool from "../Tool.ts";
 import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
 import { CapsuleLive } from "./memory.ts";
-import { makeReadCapsuleTool } from "./tools.ts";
+import { logCapsuleTool, readCapsuleTool } from "./tools.ts";
 
 const run = <A>(effect: Effect.Effect<A, unknown, Capsule>) =>
   Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
@@ -110,6 +111,24 @@ describe("Capsule.id", () => {
 });
 
 describe("Capsule tools", () => {
+  test("capsule tools use the execution-time Capsule service", async () => {
+    const output = await Effect.runPromise(
+      Effect.provide(
+        Effect.gen(function* () {
+          yield* Tool.call(logCapsuleTool, { type: "mission.note", summary: "bound at execution" });
+          const presentation = yield* Tool.call(readCapsuleTool, { tail: 10 });
+          return presentation.content
+            .map((content) => (content._tag === "text" ? content.text : ""))
+            .join("");
+        }),
+        Layer.merge(CapsuleLive("test"), AgentIdentityLive("agent")),
+      ),
+    );
+
+    expect(output).toContain("by agent");
+    expect(output).toContain("bound at execution");
+  });
+
   test("read capsule clamps tail to the documented maximum", async () => {
     const output = await run(
       Effect.gen(function* () {
@@ -118,8 +137,7 @@ describe("Capsule tools", () => {
           yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
         }
 
-        const readTool = yield* makeReadCapsuleTool();
-        const presentation = yield* Tool.call(readTool, { tail: 100 });
+        const presentation = yield* Tool.call(readCapsuleTool, { tail: 100 });
         const text = presentation.content
           .map((content) => (content._tag === "text" ? content.text : ""))
           .join("");
