@@ -10,8 +10,8 @@ import { Effect, Layer } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { TheseusDb } from "./sqlite.ts";
 
-export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> = Layer.effect(
-  Dispatch.Log,
+export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, TheseusDb> = Layer.effect(
+  Dispatch.DispatchLog,
 )(
   Effect.gen(function* () {
     const { db } = yield* TheseusDb;
@@ -54,7 +54,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> = La
       `);
 
     return {
-      record: (dispatchId: string, event: Dispatch.Event) =>
+      record: (dispatchId: string, event: Dispatch.DispatchEvent) =>
         Effect.sync(() => {
           insertEvent.run(dispatchId, Date.now(), event._tag, JSON.stringify(event));
         }),
@@ -91,7 +91,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> = La
           return rows.map((row) => ({
             dispatchId: row.dispatch_id,
             timestamp: row.timestamp,
-            event: JSON.parse(row.event_json) as Dispatch.Event,
+            event: JSON.parse(row.event_json) as Dispatch.DispatchEvent,
           }));
         }),
 
@@ -115,7 +115,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.Log, never, TheseusDb> = La
             }
           }
 
-          const opts: Dispatch.Options = {
+          const opts: Dispatch.DispatchOptions = {
             dispatchId,
             messages: JSON.parse(row.messages_json),
             iteration: row.iteration,

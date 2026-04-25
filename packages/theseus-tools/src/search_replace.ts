@@ -58,7 +58,7 @@ const fuzzyFind = (
   return undefined;
 };
 
-export const searchReplace = Tool.define<Input, string, ToolFailure>({
+export const searchReplace = Tool.defineTool<Input, string, ToolFailure>({
   name: "search_replace",
   description:
     "Replace text in a file. Exact match first, whitespace-normalized fallback. Errors if old text matches in multiple places.",

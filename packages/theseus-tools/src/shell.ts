@@ -36,7 +36,7 @@ const truncateOutput = (output: string, maxBytes: number): string => {
   return `${head}\n\n[... ${elided} bytes truncated ...]\n\n${tail}`;
 };
 
-export const shell = Tool.define<Input, string, ToolFailure>({
+export const shell = Tool.defineTool<Input, string, ToolFailure>({
   name: "shell",
   description:
     "Run a shell command. Returns stdout, stderr, exit code. Default timeout 30s (max 600s). Output capped at 8KB.",

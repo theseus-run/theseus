@@ -13,7 +13,7 @@ import { Context, Effect, Ref } from "effect";
 // ---------------------------------------------------------------------------
 
 interface RegistryEntry {
-  readonly handle: Dispatch.Handle;
+  readonly handle: Dispatch.DispatchHandle;
   readonly agent: string;
   readonly startedAt: number;
   iteration: number;
@@ -36,8 +36,8 @@ export interface StatusEntry {
 export class DispatchRegistry extends Context.Service<
   DispatchRegistry,
   {
-    readonly register: (handle: Dispatch.Handle, agent: string) => Effect.Effect<void>;
-    readonly get: (dispatchId: string) => Effect.Effect<Dispatch.Handle | null>;
+    readonly register: (handle: Dispatch.DispatchHandle, agent: string) => Effect.Effect<void>;
+    readonly get: (dispatchId: string) => Effect.Effect<Dispatch.DispatchHandle | null>;
     readonly remove: (dispatchId: string) => Effect.Effect<void>;
     readonly updateStatus: (
       dispatchId: string,
@@ -55,7 +55,7 @@ export const DispatchRegistryLive = Effect.gen(function* () {
   const ref = yield* Ref.make<Map<string, RegistryEntry>>(new Map());
 
   return {
-    register: (handle: Dispatch.Handle, agent: string) =>
+    register: (handle: Dispatch.DispatchHandle, agent: string) =>
       Ref.update(ref, (m) => {
         const next = new Map(m);
         next.set(handle.dispatchId, {

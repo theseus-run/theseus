@@ -8,17 +8,17 @@
  *   import * as Agent from "@theseus.run/core/Agent"
  *
  *   const bp: Agent.Blueprint = { name: "explorer", systemPrompt: "...", tools: [...] }
- *   const result: Agent.Result = yield* Grunt.dispatchAwait(bp, task)
+ *   const result: Agent.AgentResult = yield* Grunt.dispatchAwait(bp, task)
  */
 
 // ---------------------------------------------------------------------------
 // Types (short aliases — namespaced by `Agent.*`)
 // ---------------------------------------------------------------------------
 
-export type { AgentError, AgentResult as Result, Blueprint, ResultKind } from "./agent/index.ts";
+export type { AgentCompletion, AgentError, AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
 export {
-  AgentIdentity as Identity,
-  AgentIdentityLive as IdentityLive,
+  AgentIdentity,
+  AgentIdentityLive,
   BlueprintNotFound,
   BlueprintRegistry,
   BlueprintRegistryLive,

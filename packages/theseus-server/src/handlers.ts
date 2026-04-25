@@ -31,11 +31,11 @@ const SKIP_TAGS = new Set(["TextDelta", "ThinkingDelta", "Thinking"]);
 export const HandlersLive = TheseusRpc.toLayer({
   dispatch: ({ blueprint: bp, task, continueFrom }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.Log;
+      const log = yield* Dispatch.DispatchLog;
       const registry = yield* DispatchRegistry;
       const toolRegistry = yield* ToolRegistry;
       const lm = yield* LanguageModel.LanguageModel;
-      const ring = yield* Satellite.Ring;
+      const ring = yield* Satellite.SatelliteRing;
       const theseusDb = yield* TheseusDb;
 
       const blueprint = resolveBlueprint(bp, toolRegistry);
@@ -52,7 +52,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       }
 
       // Resolve dispatch options — restore from previous dispatch if continuing
-      let options: Dispatch.Options | undefined;
+      let options: Dispatch.DispatchOptions | undefined;
       if (continueFrom) {
         const restored = yield* log.restore(continueFrom);
         if (restored?.messages) {
@@ -80,10 +80,10 @@ export const HandlersLive = TheseusRpc.toLayer({
       // Provide ambient services for dispatch
       const depsLayer = Layer.mergeAll(
         Layer.succeed(LanguageModel.LanguageModel)(lm),
-        Layer.succeed(Satellite.Ring)(ring),
-        Layer.succeed(Dispatch.Log)(log),
+        Layer.succeed(Satellite.SatelliteRing)(ring),
+        Layer.succeed(Dispatch.DispatchLog)(log),
         capsuleLayer,
-        Agent.IdentityLive(blueprint.name),
+        Agent.AgentIdentityLive(blueprint.name),
       );
 
       const handle = yield* Effect.provide(Dispatch.dispatch(blueprint, task, options), depsLayer);
@@ -124,13 +124,13 @@ export const HandlersLive = TheseusRpc.toLayer({
 
   listDispatches: ({ limit }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.Log;
+      const log = yield* Dispatch.DispatchLog;
       return yield* log.list(limit !== undefined ? { limit } : undefined);
     }),
 
   getMessages: ({ dispatchId }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.Log;
+      const log = yield* Dispatch.DispatchLog;
       const restored = yield* log.restore(dispatchId);
       return (restored?.messages ?? []).map((m) => ({
         role: String(m.role ?? ""),

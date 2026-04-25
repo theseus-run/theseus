@@ -32,7 +32,7 @@ const Input = Schema.Struct({
 
 type Input = Schema.Schema.Type<typeof Input>;
 
-export const listDir = Tool.define<Input, string, ToolFailure>({
+export const listDir = Tool.defineTool<Input, string, ToolFailure>({
   name: "list_dir",
   description:
     "List directory contents. Dirs end with /, symlinks with @. Skips node_modules, .git, dist, build, coverage.",

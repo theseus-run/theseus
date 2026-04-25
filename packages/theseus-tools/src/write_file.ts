@@ -18,7 +18,7 @@ const Input = Schema.Struct({
 
 type Input = Schema.Schema.Type<typeof Input>;
 
-export const writeFile = Tool.define<Input, string, ToolFailure>({
+export const writeFile = Tool.defineTool<Input, string, ToolFailure>({
   name: "write_file",
   description: "Create or overwrite a file. Creates parent directories automatically.",
   input: Input as unknown as Schema.Schema<Input>,

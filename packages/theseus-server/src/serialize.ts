@@ -5,7 +5,7 @@
  * Returns a plain JSON-safe object matching DispatchEventSchema.
  */
 
-import type { Event as DispatchEvent } from "@theseus.run/core/Dispatch";
+import type { DispatchEvent } from "@theseus.run/core/Dispatch";
 
 export type SerializedDispatchEvent = DispatchEvent | Record<string, unknown>;
 

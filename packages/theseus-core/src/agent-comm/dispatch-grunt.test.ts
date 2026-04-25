@@ -9,7 +9,7 @@ import { report } from "./report.ts";
 describe("dispatchGruntTool", () => {
   test("dispatches a runtime-owned blueprint by name", async () => {
     const output = await Effect.runPromise(
-      Tool.call(dispatchGruntTool, {
+      Tool.callTool(dispatchGruntTool, {
         blueprint: "worker",
         task: "summarize",
         criteria: ["returns summary"],

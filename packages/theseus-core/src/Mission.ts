@@ -7,8 +7,8 @@
  * Usage:
  *   import * as Mission from "@theseus.run/core/Mission"
  *
- *   const id = yield* Mission.makeId("my-mission")
- *   const layer = Mission.Live({ id, goal: "...", criteria: ["..."] })
+ *   const id = yield* Mission.makeMissionId("my-mission")
+ *   const layer = Mission.MissionLive({ id, goal: "...", criteria: ["..."] })
  */
 
 // ---------------------------------------------------------------------------
@@ -21,27 +21,27 @@ export type { Mission } from "./mission/index.ts";
 // Types (short aliases — namespaced by `Mission.*`)
 // ---------------------------------------------------------------------------
 
-export type { MissionId as Id } from "./mission/id.ts";
-export type { MissionConfig as Config } from "./mission/layer.ts";
-export type { MissionStatus as Status } from "./mission/status.ts";
+export type { MissionId } from "./mission/id.ts";
+export type { MissionConfig } from "./mission/layer.ts";
+export type { MissionStatus } from "./mission/status.ts";
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-export { MissionContext as Context } from "./mission/context.ts";
+export { MissionContext } from "./mission/context.ts";
 
 // ---------------------------------------------------------------------------
 // Layer
 // ---------------------------------------------------------------------------
 
-export { MissionLive as Live } from "./mission/layer.ts";
+export { MissionLive } from "./mission/layer.ts";
 
 // ---------------------------------------------------------------------------
 // Functions
 // ---------------------------------------------------------------------------
 
-export { makeMissionId as makeId } from "./mission/id.ts";
+export { makeMissionId } from "./mission/id.ts";
 export { deriveStatus, isValidTransition } from "./mission/status.ts";
 
 // ---------------------------------------------------------------------------

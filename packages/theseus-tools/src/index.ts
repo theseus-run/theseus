@@ -26,7 +26,7 @@ import { shell } from "./shell.ts";
 import { writeFile } from "./write_file.ts";
 
 /** Read-only tools — safe for planner/atlas agents. */
-export const readonlyTools: ReadonlyArray<Tool.AnyWith<never>> = [
+export const readonlyTools: ReadonlyArray<Tool.ToolAnyWith<never>> = [
   readFile,
   listDir,
   glob,
@@ -35,7 +35,7 @@ export const readonlyTools: ReadonlyArray<Tool.AnyWith<never>> = [
 ];
 
 /** All tools — full access for coder/forge agents. */
-export const allTools: ReadonlyArray<Tool.AnyWith<never>> = [
+export const allTools: ReadonlyArray<Tool.ToolAnyWith<never>> = [
   readFile,
   listDir,
   glob,

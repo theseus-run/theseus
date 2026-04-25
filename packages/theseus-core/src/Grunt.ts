@@ -21,4 +21,4 @@ export { dispatch, dispatchAwait } from "./grunt/index.ts";
 // Types (short alias)
 // ---------------------------------------------------------------------------
 
-export type { GruntHandle as Handle } from "./grunt/index.ts";
+export type { GruntHandle } from "./grunt/index.ts";

@@ -179,7 +179,7 @@ export interface DispatchOptions {
   readonly dispatchId?: string;
   /** Maximum allowed tool interaction level for this dispatch. */
   readonly maxInteraction?: ToolInteraction;
-  /** Link to parent dispatch (for delegate → worker tracing). */
+  /** Link to parent dispatch (for dispatch tree tracing). */
   readonly parentDispatchId?: string;
   /** Restore from a previous session — replaces the default [system, user] messages. */
   readonly messages?: ReadonlyArray<Prompt.MessageEncoded>;

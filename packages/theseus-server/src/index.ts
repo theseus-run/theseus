@@ -45,7 +45,7 @@ const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
 const PersistentLog = Layer.provide(SqliteDispatchLog, DbLive);
 
 // Satellite middleware
-const RingLive = Satellite.DefaultRing;
+const RingLive = Satellite.DefaultSatelliteRing;
 
 // RPC server layer — registers WebSocket endpoint at /rpc on the HttpRouter
 const RpcLayer = RpcServer.layerHttp({

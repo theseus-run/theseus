@@ -1,10 +1,9 @@
 /**
  * SqliteCapsuleLive — persistent Capsule backed by SQLite.
  *
- * Drop-in replacement for CapsuleLive (Ref-backed in-memory).
+ * Persistent implementation of the Capsule service.
  * Requires TheseusDb in the Layer.
  *
- * Same interface: log, read, artifact, readArtifact.
  * Events and artifacts persisted in theseus.db.
  */
 
@@ -15,7 +14,7 @@ import { TheseusDb } from "./sqlite.ts";
 export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, never, TheseusDb> =>
   Layer.effect(CapsuleNs.Capsule)(
     Effect.gen(function* () {
-      const id = yield* CapsuleNs.makeId(slug);
+      const id = yield* CapsuleNs.makeCapsuleId(slug);
       const { db } = yield* TheseusDb;
 
       const insertEvent = db.prepare(
@@ -37,7 +36,7 @@ export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, 
       return CapsuleNs.Capsule.of({
         id,
 
-        log: (input: CapsuleNs.EventInput) =>
+        log: (input: CapsuleNs.CapsuleEventInput) =>
           Effect.sync(() => {
             const at = new Date().toISOString();
             insertEvent.run(id, input.type, at, input.by, JSON.stringify(input.data));
@@ -53,7 +52,7 @@ export const SqliteCapsuleLive = (slug: string): Layer.Layer<CapsuleNs.Capsule, 
                 data_json: string;
               }>
             ).map(
-              (row): CapsuleNs.Event => ({
+              (row): CapsuleNs.CapsuleEvent => ({
                 type: row.type,
                 at: row.at,
                 by: row.by,

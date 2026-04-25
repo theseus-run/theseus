@@ -29,9 +29,9 @@ export {
 // ---------------------------------------------------------------------------
 
 export type {
-  DispatchEvent as Event,
-  DispatchHandle as Handle,
-  DispatchOptions as Options,
+  DispatchEvent,
+  DispatchHandle,
+  DispatchOptions,
   Injection,
   StepResult,
   StepText,
@@ -53,10 +53,10 @@ export type {
   Snapshot,
 } from "./dispatch/index.ts";
 export {
-  DispatchDefaults as Defaults,
-  DispatchLog as Log,
-  InMemoryDispatchLog as InMemoryLog,
-  NoopDispatchLog as NoopLog,
+  DispatchDefaults,
+  DispatchLog,
+  InMemoryDispatchLog,
+  NoopDispatchLog,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------

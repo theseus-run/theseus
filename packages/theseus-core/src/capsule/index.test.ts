@@ -115,8 +115,11 @@ describe("Capsule tools", () => {
     const output = await Effect.runPromise(
       Effect.provide(
         Effect.gen(function* () {
-          yield* Tool.call(logCapsuleTool, { type: "mission.note", summary: "bound at execution" });
-          const presentation = yield* Tool.call(readCapsuleTool, { tail: 10 });
+          yield* Tool.callTool(logCapsuleTool, {
+            type: "mission.note",
+            summary: "bound at execution",
+          });
+          const presentation = yield* Tool.callTool(readCapsuleTool, { tail: 10 });
           return presentation.content
             .map((content) => (content._tag === "text" ? content.text : ""))
             .join("");
@@ -137,7 +140,7 @@ describe("Capsule tools", () => {
           yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
         }
 
-        const presentation = yield* Tool.call(readCapsuleTool, { tail: 100 });
+        const presentation = yield* Tool.callTool(readCapsuleTool, { tail: 100 });
         const text = presentation.content
           .map((content) => (content._tag === "text" ? content.text : ""))
           .join("");

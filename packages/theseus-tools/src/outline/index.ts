@@ -117,7 +117,7 @@ const parseOutlineFile = (
   );
 };
 
-export const outline = Tool.define<Input, string, ToolFailure>({
+export const outline = Tool.defineTool<Input, string, ToolFailure>({
   name: "outline",
   description:
     "Extract symbol outline (functions, classes, types, imports) from a source file. Prefer over read_file for structural understanding. Supports: .ts .tsx .js .jsx .py .go .rs",

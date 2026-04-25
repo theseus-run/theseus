@@ -78,7 +78,7 @@ const formatMatches = (matches: GrepMatch[], total: number): string => {
   return parts.join("\n");
 };
 
-export const grep = Tool.define<Input, string, ToolFailure>({
+export const grep = Tool.defineTool<Input, string, ToolFailure>({
   name: "grep",
   description:
     "Search file contents by regex. Returns matches grouped by file (file:line:content). ≤100 matches.",

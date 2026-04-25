@@ -7,7 +7,7 @@
  * Usage:
  *   import * as Tool from "@theseus.run/core/Tool"
  *
- *   const myTool = Tool.define({
+ *   const myTool = Tool.defineTool({
  *     name: "readFile",
  *     description: "Read a file by path",
  *     input: Schema.Struct({ path: Schema.String }),
@@ -17,14 +17,14 @@
  *       catch: (e) => new ReadFailed({ path, cause: e }),
  *     }),
  *   })
- *   const result = Tool.call(myTool, rawArgs)
+ *   const result = Tool.callTool(myTool, rawArgs)
  */
 
 // ---------------------------------------------------------------------------
 // Primary types
 // ---------------------------------------------------------------------------
 
-export type { Tool, ToolAny as Any, ToolAnyWith as AnyWith, ToolDef as Def } from "./tool/index.ts";
+export type { Tool, ToolAny, ToolAnyWith, ToolDef } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Content — multimodal wire format
@@ -52,7 +52,7 @@ export {
 
 export type {
   ToolInteraction,
-  ToolPolicy as Policy,
+  ToolPolicy,
 } from "./tool/index.ts";
 export {
   compareInteraction,
@@ -63,7 +63,7 @@ export {
 // Constructor
 // ---------------------------------------------------------------------------
 
-export { defineTool as define } from "./tool/index.ts";
+export { defineTool } from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Toolkit
@@ -83,7 +83,7 @@ export {
 // Execution pipeline
 // ---------------------------------------------------------------------------
 
-export { callTool as call } from "./tool/run.ts";
+export { callTool } from "./tool/run.ts";
 
 // ---------------------------------------------------------------------------
 // Runtime errors (keep prefix — _tag must be globally unique for pattern matching)

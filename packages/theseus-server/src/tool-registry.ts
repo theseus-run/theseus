@@ -16,7 +16,7 @@ import { Context } from "effect";
 export class ToolRegistry extends Context.Service<
   ToolRegistry,
   {
-    readonly resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.AnyWith<never>>;
+    readonly resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.ToolAnyWith<never>>;
   }
 >()("ToolRegistry") {}
 
@@ -25,11 +25,11 @@ export class ToolRegistry extends Context.Service<
 // ---------------------------------------------------------------------------
 
 export const makeToolRegistry = (
-  tools: ReadonlyArray<Tool.AnyWith<never>>,
-): { resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.AnyWith<never>> } => {
+  tools: ReadonlyArray<Tool.ToolAnyWith<never>>,
+): { resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.ToolAnyWith<never>> } => {
   const byName = new Map(tools.map((t) => [t.name, t]));
   return {
-    resolve: (names: ReadonlyArray<string>): ReadonlyArray<Tool.AnyWith<never>> =>
+    resolve: (names: ReadonlyArray<string>): ReadonlyArray<Tool.ToolAnyWith<never>> =>
       names.length === 0
         ? tools
         : names.flatMap((n) => {
@@ -51,7 +51,9 @@ export const resolveBlueprint = (
     readonly maxIterations?: number | undefined;
     readonly model?: string | undefined;
   },
-  toolRegistry: { resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.AnyWith<never>> },
+  toolRegistry: {
+    resolve: (names: ReadonlyArray<string>) => ReadonlyArray<Tool.ToolAnyWith<never>>;
+  },
 ): Agent.Blueprint => ({
   name: serialized.name,
   systemPrompt: serialized.systemPrompt,

@@ -19,8 +19,8 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-const callText = async (tool: Tool.Any, raw: unknown) => {
-  const effect = Tool.call(tool, raw) as Effect.Effect<
+const callText = async (tool: Tool.ToolAny, raw: unknown) => {
+  const effect = Tool.callTool(tool, raw) as Effect.Effect<
     Tool.Presentation,
     Tool.ToolInputError | Tool.ToolDefect,
     never

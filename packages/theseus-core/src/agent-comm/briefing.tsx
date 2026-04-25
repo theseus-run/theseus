@@ -6,7 +6,7 @@
  * <Briefing> renders task + criteria + context into a structured section.
  * <WorkerPrompt> composes base prompt + briefing + report instructions.
  *
- * These are rendering functions called by the runtime (inside delegate),
+ * These are rendering components called by the runtime,
  * not by the LLM. The LLM fills structured fields; the runtime renders.
  */
 

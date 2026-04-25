@@ -8,7 +8,7 @@
  * Usage:
  *   import * as Satellite from "@theseus.run/core/Satellite"
  *
- *   const ring = Satellite.RingLive([myBudget, myGuard])
+ *   const ring = Satellite.SatelliteRingLive([myBudget, myGuard])
  *   // provide ring layer to dispatch
  */
 
@@ -20,8 +20,8 @@ export type {
   Action,
   Phase,
   Satellite,
-  SatelliteAny as Any,
-  SatelliteContext as Context,
+  SatelliteAny,
+  SatelliteContext,
 } from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -29,10 +29,10 @@ export type {
 // ---------------------------------------------------------------------------
 
 export {
-  DefaultSatelliteRing as DefaultRing,
-  makeSatelliteRing as makeRing,
-  SatelliteRing as Ring,
-  SatelliteRingLive as RingLive,
+  DefaultSatelliteRing,
+  makeSatelliteRing,
+  SatelliteRing,
+  SatelliteRingLive,
 } from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +41,7 @@ export {
 
 export {
   BlockTool,
+  Complete,
   ModifyArgs,
   Pass,
   RecoverToolError,

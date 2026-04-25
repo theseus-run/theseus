@@ -22,7 +22,7 @@ const Input = Schema.Struct({
 
 type Input = Schema.Schema.Type<typeof Input>;
 
-export const glob = Tool.define<Input, string, ToolFailure>({
+export const glob = Tool.defineTool<Input, string, ToolFailure>({
   name: "glob",
   description:
     "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts). Returns ≤100 paths. Skips node_modules, .git, dist, coverage.",

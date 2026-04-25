@@ -84,7 +84,7 @@ const readTextFile = (
   }).pipe(Effect.map((content) => formatContent(content, offset, limit)));
 };
 
-export const readFile = Tool.define<Input, string, ToolFailure>({
+export const readFile = Tool.defineTool<Input, string, ToolFailure>({
   name: "read_file",
   description:
     "Read a file. Returns line-numbered text. Binary files return a type indicator. Use offset/limit for large files.",
