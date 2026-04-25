@@ -1,14 +1,37 @@
 /**
  * AgentComm — cross-agent communication protocol.
  *
- * theseus_dispatch_grunt — orchestrator dispatches a one-shot worker by blueprint name
- * theseus_report         — structured completion payload tool
- *
- * Import <Briefing>, <WorkerPrompt> from "@theseus.run/core/agent-comm/briefing.tsx"
+ * theseus_dispatch_grunt — commander issues a structured order to a grunt
+ * theseus_report         — terminal protocol report packet
  */
 
 export { DispatchGruntFailed, dispatchGruntTool } from "./dispatch-grunt.tsx";
-// Tools
-export { report } from "./report.ts";
-// Types (pure, no jsx)
-export type { DispatchGruntInput, ReportInput } from "./types.ts";
+export type { ProtocolEnvelope } from "./envelope.ts";
+export { ProtocolEnvelopeSchema } from "./envelope.ts";
+export type { Authority, Bounds, ContextBlock, DispatchGruntInput, Order } from "./order.ts";
+export {
+  AuthoritySchema,
+  BoundsSchema,
+  ContextBlockSchema,
+  DispatchGruntInputSchema,
+  OrderSchema,
+} from "./order.ts";
+export type {
+  ArtifactRef,
+  CriterionSatisfaction,
+  Evidence,
+  Followup,
+  Report,
+  ReportChannel,
+} from "./report.ts";
+export {
+  ArtifactRefSchema,
+  CriterionSatisfactionSchema,
+  EvidenceSchema,
+  FollowupSchema,
+  ReportChannelSchema,
+  ReportSchema,
+  report,
+} from "./report.ts";
+export type { DispatchGruntResult, Salvage } from "./result.ts";
+export { DispatchGruntResultSchema, SalvageSchema } from "./result.ts";

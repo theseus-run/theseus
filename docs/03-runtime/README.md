@@ -7,4 +7,5 @@ Runtime notes describe how the primitives are composed into the running system.
 - [[architecture]]
 - [[persistent-runtime]]
 - [[mission-system]]
+- [[mission-hardening]]
 - [[crew]]

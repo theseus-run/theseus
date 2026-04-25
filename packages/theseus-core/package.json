@@ -1,7 +1,7 @@
 {
   "name": "@theseus.run/core",
   "version": "0.0.1",
-  "description": "Typed primitives for LLM agent systems — Tool, Dispatch, LLM provider interface",
+  "description": "Typed primitives for LLM agent systems — Tool, Dispatch, Agent, Capsule, Satellite",
   "private": false,
   "type": "module",
   "license": "MIT",
@@ -30,10 +30,7 @@
     "./AgentComm": "./src/AgentComm.ts",
     "./Bridge": "./src/Bridge.ts",
     "./Satellite": "./src/Satellite.ts",
-    "./Rpc": "./src/rpc/index.ts",
-    "./test-utils/mock-language-model": "./src/test-utils/mock-language-model.ts",
-    "./agent-comm/dispatch-grunt": "./src/agent-comm/dispatch-grunt.tsx",
-    "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
+    "./Rpc": "./src/rpc/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

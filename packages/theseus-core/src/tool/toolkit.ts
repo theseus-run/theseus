@@ -35,8 +35,8 @@ export interface Toolkit<R = never> {
   readonly tools: ReadonlyArray<ToolAny>;
   /** O(1) lookup by tool name. */
   readonly get: (name: string) => ToolAny | undefined;
-  /** Phantom brand — the union of all tools' service requirements. */
-  readonly _R: R;
+  /** Phantom brand — the union of all tools' service requirements. Never set at runtime. */
+  readonly _R?: R;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,8 +55,6 @@ const buildToolkit = <R>(tools: ReadonlyArray<ToolAny>): Toolkit<R> => {
     _tag: "Toolkit",
     tools,
     get: (name) => index.get(name),
-    // biome-ignore lint/suspicious/noExplicitAny: phantom type — never read at runtime
-    _R: undefined as any,
   };
 };
 

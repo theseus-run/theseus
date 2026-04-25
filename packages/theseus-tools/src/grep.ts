@@ -7,7 +7,7 @@
 
 import * as Tool from "@theseus.run/core/Tool";
 import { $ } from "bun";
-import { Effect, Schedule, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
 
 const MAX_MATCHES = 100;
@@ -86,8 +86,6 @@ export const grep = Tool.defineTool({
   output: Tool.Defaults.TextOutput,
   failure: ToolFailure,
   policy: { interaction: "observe" },
-  // Retry transient ripgrep-not-found once (binary may have been installed concurrently).
-  retry: Schedule.recurs(1) as unknown as Schedule.Schedule<unknown>,
   execute: ({ pattern, path, glob: globPattern, context_lines }) => {
     // Build ripgrep args
     const args = ["rg", "--json", "--max-count", "10", "--sort", "modified"];

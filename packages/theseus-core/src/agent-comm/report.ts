@@ -1,34 +1,91 @@
-/**
- * theseus_report — worker completion payload tool.
- *
- * Raw dispatch treats this like any other tool. Agent/grunt completion semantics
- * are protocol-level behavior and should be implemented outside the dispatch
- * primitive.
- *
- * Three result channels:
- *   success — task completed, content is the deliverable
- *   error   — not completed but actionable (file missing, spec ambiguous)
- *   defect  — infrastructure broken (tool crashed, capsule corrupted)
- */
-
 import { Effect, Schema } from "effect";
-import { Defaults, defineTool } from "../tool/index.ts";
-import { type ReportInput, ReportInputSchema } from "./types.ts";
+import { defineTool, textPresentation } from "../tool/index.ts";
 
-export const decodeReportInput = (input: unknown): Effect.Effect<ReportInput, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(ReportInputSchema)(input);
+export const ReportChannelSchema = Schema.Literals(["complete", "blocked", "defect"]);
+
+export type ReportChannel = Schema.Schema.Type<typeof ReportChannelSchema>;
+
+export const EvidenceSchema = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  kind: Schema.Literals([
+    "observation",
+    "artifact",
+    "source",
+    "measurement",
+    "tool_result",
+    "log",
+    "reference",
+    "note",
+  ]),
+  text: Schema.String,
+  ref: Schema.optional(Schema.String),
+});
+
+export type Evidence = Schema.Schema.Type<typeof EvidenceSchema>;
+
+export const ArtifactRefSchema = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  name: Schema.String,
+  type: Schema.optional(Schema.String),
+  uri: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  final: Schema.optional(Schema.Boolean),
+  criteriaRefs: Schema.optional(Schema.Array(Schema.String)),
+});
+
+export type ArtifactRef = Schema.Schema.Type<typeof ArtifactRefSchema>;
+
+export const CriterionSatisfactionSchema = Schema.Struct({
+  criterion: Schema.String,
+  status: Schema.Literals(["satisfied", "unsatisfied", "unknown"]),
+  evidenceRefs: Schema.optional(Schema.Array(Schema.String)),
+  notes: Schema.optional(Schema.String),
+});
+
+export type CriterionSatisfaction = Schema.Schema.Type<typeof CriterionSatisfactionSchema>;
+
+export const FollowupSchema = Schema.Struct({
+  risks: Schema.optional(Schema.Array(Schema.String)),
+  next: Schema.optional(Schema.String),
+});
+
+export type Followup = Schema.Schema.Type<typeof FollowupSchema>;
 
 /**
- * The theseus_report tool. Add to worker Blueprint's tools array when the
- * worker should emit structured completion data.
+ * Report — terminal actor -> commander packet.
+ *
+ * complete: objective satisfied. blocked: actor operated correctly but cannot
+ * complete as ordered. defect: protocol/runtime/infrastructure broke.
+ */
+export const ReportSchema = Schema.Struct({
+  channel: ReportChannelSchema,
+  summary: Schema.String,
+  content: Schema.String,
+  evidence: Schema.optional(Schema.Array(EvidenceSchema)),
+  artifacts: Schema.optional(Schema.Array(ArtifactRefSchema)),
+  satisfaction: Schema.optional(Schema.Array(CriterionSatisfactionSchema)),
+  followup: Schema.optional(FollowupSchema),
+});
+
+export type Report = Schema.Schema.Type<typeof ReportSchema>;
+
+/**
+ * The theseus_report tool. Raw dispatch treats it like any other tool; agent
+ * communication adapters decide whether a valid report is terminal.
  */
 export const report = defineTool({
   name: "theseus_report",
   description:
-    "Report structured results. Call when done (success), stuck on a real problem (error), or infrastructure is broken (defect). After calling this tool, stop.",
-  input: ReportInputSchema,
-  output: Defaults.TextOutput,
-  failure: Defaults.NoFailure,
+    "Send the terminal protocol report: complete, blocked, or defect. Include evidence when possible. After calling this tool, stop.",
+  input: ReportSchema,
+  output: ReportSchema,
+  failure: Schema.Never,
   policy: { interaction: "pure" },
-  execute: ({ result, summary }) => Effect.succeed(`Report: ${result} — ${summary}`),
+  execute: (input) => Effect.succeed(input),
+  present: (value) =>
+    Effect.succeed(
+      textPresentation(JSON.stringify(value._tag === "Success" ? value.output : value.failure), {
+        structured: value._tag === "Success" ? value.output : value.failure,
+      }),
+    ),
 });

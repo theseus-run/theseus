@@ -1,19 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { decodeReportInput } from "../agent-comm/report.ts";
 import { runToolCall } from "../dispatch/step.ts";
 import { Defaults, defineTool } from "./index.ts";
 import { callTool } from "./run.ts";
 
 describe("tool boundary", () => {
-  test("report input decoder rejects invalid terminal payloads", async () => {
-    const error = await Effect.runPromise(
-      Effect.flip(decodeReportInput({ result: "bogus", summary: "bad", content: "bad" })),
-    );
-
-    expect(String(error)).toContain("Expected");
-  });
-
   test("callTool validates success output against the declared schema", async () => {
     const badOutput = defineTool({
       name: "bad_output",

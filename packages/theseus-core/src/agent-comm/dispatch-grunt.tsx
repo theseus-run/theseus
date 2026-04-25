@@ -1,19 +1,22 @@
 /** @jsxImportSource @theseus.run/jsx-md */
 
 /**
- * theseus_dispatch_grunt - dispatch a one-shot LLM worker from a runtime-owned blueprint.
+ * theseus_dispatch_grunt — issue a structured order to a runtime-owned grunt.
  */
 
 import { render } from "@theseus.run/jsx-md";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Fiber, Ref, Schema, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { BlueprintRegistry } from "../agent/index.ts";
-import { DispatchDefaults } from "../dispatch/defaults.ts";
-import { dispatchAwait } from "../grunt/index.ts";
-import { Defaults, defineTool, type Tool } from "../tool/index.ts";
-import { WorkerPrompt } from "./briefing.tsx";
-import { report } from "./report.ts";
-import { type DispatchGruntInput, DispatchGruntInputSchema } from "./types.ts";
+import { dispatch as dispatchLoop } from "../dispatch/index.ts";
+import type { DispatchStore } from "../dispatch/store.ts";
+import type { DispatchEvent } from "../dispatch/types.ts";
+import type { SatelliteRing } from "../satellite/ring.ts";
+import { defineTool, type Tool, textPresentation } from "../tool/index.ts";
+import { GruntPrompt } from "./briefing.tsx";
+import { type DispatchGruntInput, DispatchGruntInputSchema } from "./order.ts";
+import { type Report, ReportSchema, report } from "./report.ts";
+import { type DispatchGruntResult, DispatchGruntResultSchema } from "./result.ts";
 
 export class DispatchGruntFailed extends Schema.TaggedErrorClass<DispatchGruntFailed>()(
   "DispatchGruntFailed",
@@ -22,63 +25,132 @@ export class DispatchGruntFailed extends Schema.TaggedErrorClass<DispatchGruntFa
   },
 ) {}
 
+const parseJson = (content: string): unknown | undefined => {
+  try {
+    return JSON.parse(content) as unknown;
+  } catch {
+    return undefined;
+  }
+};
+
+const decodeReportContent = (content: string): Effect.Effect<Report | undefined> => {
+  const parsed = parseJson(content);
+  if (parsed === undefined) return Effect.succeed(undefined);
+  return Schema.decodeUnknownEffect(ReportSchema)(parsed).pipe(
+    Effect.matchEffect({
+      onFailure: () => Effect.succeed(undefined),
+      onSuccess: (decoded) => Effect.succeed(decoded),
+    }),
+  );
+};
+
+const captureReport = (
+  event: DispatchEvent,
+  reportRef: Ref.Ref<Report | undefined>,
+): Effect.Effect<void> =>
+  event._tag === "ToolResult" && event.tool === report.name && !event.isError
+    ? Effect.gen(function* () {
+        const existing = yield* Ref.get(reportRef);
+        if (existing !== undefined) return;
+        const decoded = yield* decodeReportContent(event.content);
+        if (decoded !== undefined) yield* Ref.set(reportRef, decoded);
+      })
+    : Effect.void;
+
+const presentDispatchGruntResult = (result: DispatchGruntResult): string => {
+  if (result._tag === "Reported") {
+    const { report: packet } = result;
+    const evidence =
+      packet.evidence && packet.evidence.length > 0
+        ? `\n\nEvidence:\n${packet.evidence.map((e) => `- ${e.ref ? `${e.ref}: ` : ""}${e.text}`).join("\n")}`
+        : "";
+    return `[${packet.channel}] ${packet.summary}\n\n${packet.content}${evidence}`;
+  }
+
+  return `[unstructured] ${result.salvage.summary}\n\n${result.salvage.content}`;
+};
+
 export const dispatchGruntTool: Tool<
   DispatchGruntInput,
-  string,
+  DispatchGruntResult,
   DispatchGruntFailed,
-  BlueprintRegistry | LanguageModel.LanguageModel
+  BlueprintRegistry | LanguageModel.LanguageModel | SatelliteRing | DispatchStore
 > = defineTool({
   name: "theseus_dispatch_grunt",
   description:
-    "Dispatch a one-shot grunt from a runtime-owned blueprint. Provide a blueprint name, task, criteria, and context.",
+    "Dispatch a runtime-owned grunt with a structured order. Returns a protocol report or explicit unstructured salvage.",
   input: DispatchGruntInputSchema,
-  output: Defaults.TextOutput,
+  output: DispatchGruntResultSchema,
   failure: DispatchGruntFailed,
   policy: { interaction: "write" },
-  execute: ({ blueprint, task, criteria, context }) =>
+  execute: ({ target, order }) =>
     Effect.gen(function* () {
       const registry = yield* BlueprintRegistry;
-      const workerBlueprint = yield* registry
-        .get(blueprint)
+      const gruntBlueprint = yield* registry
+        .get(target)
         .pipe(
-          Effect.mapError(
-            () => new DispatchGruntFailed({ reason: `Unknown blueprint: ${blueprint}` }),
-          ),
+          Effect.mapError(() => new DispatchGruntFailed({ reason: `Unknown target: ${target}` })),
         );
+
       const systemPrompt = render(
-        <WorkerPrompt
-          basePrompt={workerBlueprint.systemPrompt}
-          briefing={{
-            task,
-            criteria,
-            ...(context !== undefined ? { context } : {}),
-          }}
-        />,
+        <GruntPrompt basePrompt={gruntBlueprint.systemPrompt} order={order} />,
       );
       const briefedBlueprint = {
-        ...workerBlueprint,
+        ...gruntBlueprint,
         systemPrompt,
-        tools: [...workerBlueprint.tools, report],
+        tools: [...gruntBlueprint.tools, report],
       };
 
-      const result = yield* dispatchAwait(briefedBlueprint, task).pipe(
-        Effect.provide(DispatchDefaults),
-        Effect.catchTags({
-          AgentInterrupted: (e) =>
-            Effect.fail(
-              new DispatchGruntFailed({ reason: `Grunt interrupted: ${e.reason ?? "unknown"}` }),
-            ),
-          AgentCycleExceeded: (e) =>
-            Effect.fail(
-              new DispatchGruntFailed({ reason: `Grunt exceeded cycle cap (${e.max} iterations)` }),
-            ),
-          AgentLLMError: (e) =>
-            Effect.fail(new DispatchGruntFailed({ reason: `Grunt LLM failed: ${e.message}` })),
-          AgentToolFailed: (e) =>
-            Effect.fail(new DispatchGruntFailed({ reason: `Grunt tool failed: ${e.tool}` })),
-        }),
+      const handle = yield* dispatchLoop(briefedBlueprint, order.objective);
+      const reportRef = yield* Ref.make<Report | undefined>(undefined);
+      const drainFiber = yield* handle.events.pipe(
+        Stream.runForEach((event) => captureReport(event, reportRef)),
+        Effect.forkChild,
       );
 
-      return `[${result.result}] ${result.summary}\n\n${result.content}`;
+      const exit = yield* Effect.exit(handle.result);
+      yield* Fiber.join(drainFiber).pipe(Effect.catch(() => Effect.void));
+
+      const captured = yield* Ref.get(reportRef);
+
+      if (Exit.isSuccess(exit)) {
+        if (captured !== undefined) {
+          return {
+            _tag: "Reported" as const,
+            target,
+            dispatchId: exit.value.dispatchId,
+            report: captured,
+            usage: exit.value.usage,
+          };
+        }
+
+        return {
+          _tag: "Unstructured" as const,
+          target,
+          dispatchId: exit.value.dispatchId,
+          reason: `No valid ${report.name} packet was captured before the grunt stopped.`,
+          salvage: {
+            summary: "No valid protocol report",
+            content: exit.value.content,
+          },
+          usage: exit.value.usage,
+        };
+      }
+
+      return yield* Effect.fail(
+        new DispatchGruntFailed({
+          reason: `Grunt dispatch failed: ${String(exit.cause)}`,
+        }),
+      );
     }),
+  present: (value) =>
+    Effect.succeed(
+      textPresentation(
+        value._tag === "Success" ? presentDispatchGruntResult(value.output) : value.failure.reason,
+        {
+          ...(value._tag === "Failure" ? { isError: true } : {}),
+          structured: value._tag === "Success" ? value.output : value.failure,
+        },
+      ),
+    ),
 });

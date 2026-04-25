@@ -1,88 +1,122 @@
 /** @jsxImportSource @theseus.run/jsx-md */
 
 /**
- * Briefing — jsx-md components for rendering the worker's system prompt.
+ * Briefing — jsx-md components for rendering agent-comm orders.
  *
- * <Briefing> renders task + criteria + context into a structured section.
- * <WorkerPrompt> composes base prompt + briefing + report instructions.
- *
- * These are rendering components called by the runtime,
- * not by the LLM. The LLM fills structured fields; the runtime renders.
+ * These are runtime rendering components. The protocol packet is structured;
+ * this layer turns it into clear instructions for an LLM actor.
  */
 
 import type { VNode } from "@theseus.run/jsx-md";
-import { Bold, Code, H2, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
+import { Bold, Code, H2, H3, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
+import type { Order } from "./order.ts";
 import { report } from "./report.ts";
-import type { DispatchGruntInput } from "./types.ts";
 
-type BriefingInput = Omit<DispatchGruntInput, "blueprint">;
+const ListSection = ({
+  title,
+  items,
+}: {
+  readonly title: string;
+  readonly items?: ReadonlyArray<string> | undefined;
+}): VNode =>
+  items && items.length > 0 ? (
+    <>
+      <P>
+        <Bold>{title}:</Bold>
+      </P>
+      <Ul>
+        {items.map((item) => (
+          <Li>{item}</Li>
+        ))}
+      </Ul>
+    </>
+  ) : null;
 
-// ---------------------------------------------------------------------------
-// <Briefing> — renders task + criteria + context
-// ---------------------------------------------------------------------------
-
-export function Briefing({ task, criteria, context }: BriefingInput): VNode {
+export function OrderBriefing({ order }: { readonly order: Order }): VNode {
   return (
     <>
-      <H2>Briefing</H2>
+      <H2>Order</H2>
       <P>
-        <Bold>Task:</Bold> {task}
+        <Bold>Objective:</Bold> {order.objective}
       </P>
-      {criteria.length > 0 && (
+      {order.intent && (
+        <P>
+          <Bold>Intent:</Bold> {order.intent}
+        </P>
+      )}
+      <ListSection title="Success criteria" items={order.successCriteria} />
+      {order.bounds && (
         <>
-          <P>
-            <Bold>Done when:</Bold>
-          </P>
+          <H3>Bounds</H3>
+          <ListSection title="Scope" items={order.bounds.scope} />
+          <ListSection title="Constraints" items={order.bounds.constraints} />
+        </>
+      )}
+      {order.authority && (
+        <>
+          <H3>Authority</H3>
+          <ListSection title="Runtime grant refs" items={order.authority.grantRefs} />
+          <ListSection title="Actions" items={order.authority.actions} />
+          <ListSection title="Tools" items={order.authority.tools} />
+          <ListSection title="Limits" items={order.authority.limits} />
+          <ListSection title="Escalation" items={order.authority.escalation} />
+        </>
+      )}
+      {order.context && order.context.length > 0 && (
+        <>
+          <H3>Context</H3>
           <Ul>
-            {criteria.map((c) => (
-              <Li>{c}</Li>
+            {order.context.map((block) => (
+              <Li>
+                <Bold>{block.label ?? block.kind}:</Bold> {block.text}
+              </Li>
             ))}
           </Ul>
         </>
       )}
-      {context && (
-        <>
-          <P>
-            <Bold>Context:</Bold>
-          </P>
-          <P>{context}</P>
-        </>
+      {order.expectedReport && (
+        <P>
+          <Bold>Expected report:</Bold> {order.expectedReport}
+        </P>
       )}
     </>
   );
 }
 
-// ---------------------------------------------------------------------------
-// <WorkerPrompt> — full system prompt for a briefed worker
-// ---------------------------------------------------------------------------
-
-export function WorkerPrompt({
+export function GruntPrompt({
   basePrompt,
-  briefing,
+  order,
 }: {
   readonly basePrompt: string;
-  readonly briefing: BriefingInput;
+  readonly order: Order;
 }): VNode {
   return (
     <>
       <Md>{basePrompt}</Md>
       <Hr />
-      <Briefing {...briefing} />
+      <OrderBriefing order={order} />
       <Hr />
+      <H2>Terminal Protocol</H2>
       <P>
-        When done, call the <Code>{report.name}</Code> tool:
+        When the order is complete, blocked, or defective, call <Code>{report.name}</Code> exactly
+        once and then stop.
       </P>
       <Ul>
         <Li>
-          <Bold>success</Bold> — task completed, content is the deliverable
+          <Bold>complete</Bold> — objective satisfied under the success criteria
         </Li>
         <Li>
-          <Bold>error</Bold> — not completed but you found actionable information
+          <Bold>blocked</Bold> — you operated correctly but cannot complete as ordered
         </Li>
         <Li>
-          <Bold>defect</Bold> — infrastructure broken, tools not working
+          <Bold>defect</Bold> — protocol, runtime, tool, or infrastructure failure
         </Li>
       </Ul>
+      <P>Include evidence when possible. Do not claim completion without evidence.</P>
+      <P>
+        If success criteria are supplied, report whether each criterion is satisfied, unsatisfied,
+        or unknown, and link supporting evidence when possible.
+      </P>
     </>
   );
 }

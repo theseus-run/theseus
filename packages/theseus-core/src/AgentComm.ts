@@ -1,8 +1,8 @@
 /**
  * AgentComm — namespace barrel for `import * as AgentComm from "@theseus.run/core/AgentComm"`
  *
- * Cross-agent communication protocol. dispatchGruntTool dispatches one-shot
- * workers by blueprint name; report defines a structured completion payload.
+ * Cross-agent communication protocol. dispatchGruntTool issues structured
+ * orders to runtime-owned grunts; report defines the terminal packet.
  *
  * Usage:
  *   import * as AgentComm from "@theseus.run/core/AgentComm"
@@ -10,14 +10,41 @@
  *   const tool = AgentComm.dispatchGruntTool
  */
 
-// ---------------------------------------------------------------------------
-// Types (already clean — no prefix to drop)
-// ---------------------------------------------------------------------------
+// Protocol types
 
-export type { DispatchGruntInput, ReportInput } from "./agent-comm/index.ts";
+export type {
+  ArtifactRef,
+  Authority,
+  Bounds,
+  ContextBlock,
+  CriterionSatisfaction,
+  DispatchGruntInput,
+  DispatchGruntResult,
+  Evidence,
+  Followup,
+  Order,
+  ProtocolEnvelope,
+  Report,
+  ReportChannel,
+  Salvage,
+} from "./agent-comm/index.ts";
+export {
+  ArtifactRefSchema,
+  AuthoritySchema,
+  BoundsSchema,
+  ContextBlockSchema,
+  CriterionSatisfactionSchema,
+  DispatchGruntInputSchema,
+  DispatchGruntResultSchema,
+  EvidenceSchema,
+  FollowupSchema,
+  OrderSchema,
+  ProtocolEnvelopeSchema,
+  ReportChannelSchema,
+  ReportSchema,
+  SalvageSchema,
+} from "./agent-comm/index.ts";
 
-// ---------------------------------------------------------------------------
-// Tools & factories
-// ---------------------------------------------------------------------------
+// Tools
 
 export { DispatchGruntFailed, dispatchGruntTool, report } from "./agent-comm/index.ts";
