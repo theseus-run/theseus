@@ -15,13 +15,13 @@
   --panel-gap: calc(var(--lh) / 2);
 }
 
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+@media (min-resolution: 2dppx) {
   :root {
     --border: 0.5px;
   }
 }
 
-@media (-webkit-min-device-pixel-ratio: 3), (min-resolution: 3dppx) {
+@media (min-resolution: 3dppx) {
   :root {
     --border: 0.333333px;
   }
@@ -1165,6 +1165,12 @@ details[open] ::marker {
   content: "\25BC\0020"; /* ▼  */
 }
 
+/* ── Lists (square markers) ──────────────────────────────────── */
+
+ul {
+  list-style-type: square;
+}
+
 /* ── Tree (monospace-web) ────────────────────────────────────── */
 /* CSS-only tree lines using border-left + border-bottom.        */
 
@@ -1203,12 +1209,6 @@ details[open] ::marker {
   content: "";
   height: calc(var(--lh) / 2);
   border-left: var(--border) solid var(--color-border);
-}
-
-/* ── Lists (square markers) ──────────────────────────────────── */
-
-ul {
-  list-style-type: square;
 }
 
 /* ── Keyframes ────────────────────────────────────────────────── */

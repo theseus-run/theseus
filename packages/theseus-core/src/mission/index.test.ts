@@ -164,13 +164,21 @@ const makeFullLayer = Effect.gen(function* () {
   return Layer.merge(capsuleLayer, missionLayer);
 });
 
-const runMission = <A>(effect: Effect.Effect<A, any, MissionContext | Capsule>) =>
+const runMission = <A>(effect: Effect.Effect<A, unknown, MissionContext | Capsule>) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fullLayer = yield* makeFullLayer;
       return yield* Effect.provide(effect, fullLayer);
     }),
   );
+
+const expectEvent = <T>(items: ReadonlyArray<T>, index: number): T => {
+  const item = items[index];
+  expect(item).toBeDefined();
+  return item as T;
+};
+
+const recordData = (value: unknown): Record<string, unknown> => value as Record<string, unknown>;
 
 describe("MissionLive — creation", () => {
   test("mission starts in pending status", async () => {
@@ -194,9 +202,10 @@ describe("MissionLive — creation", () => {
       }),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.type).toBe("mission.create");
-    expect(events[0]!.by).toBe("runtime");
-    expect((events[0]!.data as any).goal).toBe("Test the mission system");
+    const event = expectEvent(events, 0);
+    expect(event.type).toBe("mission.create");
+    expect(event.by).toBe("runtime");
+    expect(recordData(event.data)["goal"]).toBe("Test the mission system");
   });
 });
 
@@ -224,8 +233,9 @@ describe("MissionLive — transitions", () => {
     );
     const transitionEvents = events.filter((e) => e.type === "mission.transition");
     expect(transitionEvents).toHaveLength(1);
-    expect((transitionEvents[0]!.data as any).from).toBe("pending");
-    expect((transitionEvents[0]!.data as any).to).toBe("running");
+    const event = expectEvent(transitionEvents, 0);
+    expect(recordData(event.data)["from"]).toBe("pending");
+    expect(recordData(event.data)["to"]).toBe("running");
   });
 
   test("invalid transition fails with MissionErrorInvalidTransition", async () => {

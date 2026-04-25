@@ -17,7 +17,7 @@ import type { DispatchEvent } from "@/lib/rpc-client";
 import { cn } from "@/lib/utils";
 
 /** Narrowed type for tool-related events (ToolCalling, ToolResult, ToolError). */
-type ToolMergedEvent = Extract<MergedEvent, { readonly tool: string }>;
+type ToolMergedEvent = MergedEvent & { readonly tool: string };
 
 import { TOOL_META } from "@theseus.run/tools/metadata";
 
@@ -304,7 +304,7 @@ export function ToolEvent({
               {result?._tag === "ToolResult" && result.content && (
                 <OutputSection content={result.content} />
               )}
-              {result?._tag === "ToolError" && result.error && (
+              {result?._tag === "ToolError" && Boolean(result.error) && (
                 <ErrorSection error={result.error as { _tag?: string; message?: string }} />
               )}
             </div>

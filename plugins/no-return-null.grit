@@ -1,6 +1,8 @@
 engine biome(1.0)
 language js
 
-`return null` as $m where {
-  register_diagnostic(span=$m, message="Avoid returning null. Use Option.none() for absence, Effect.fail for errors, or a tagged union.", severity="warning")
+`Effect.gen($fn)` as $outer where {
+  $fn <: contains `return null` as $m where {
+    register_diagnostic(span=$m, message="Avoid returning null from Effect.gen. Use Option.none() for absence, Effect.fail for errors, or a tagged union.", severity="warning")
+  }
 }

@@ -7,8 +7,8 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { cn } from "@/lib/utils";
 
 interface ChatContainerContext {
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  contentRef: React.RefObject<HTMLDivElement | null>;
+  scrollRef: React.RefObject<HTMLElement | null>;
+  contentRef: React.RefObject<HTMLElement | null>;
   isAtBottom: boolean;
   scrollToBottom: () => void;
 }
@@ -47,8 +47,11 @@ export function ChatContainerContent({
   const { scrollRef, contentRef } = useChatContainer();
 
   return (
-    <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
-      <div ref={contentRef} className="w-full">
+    <div
+      ref={scrollRef as React.Ref<HTMLDivElement>}
+      className={cn("flex-1 overflow-y-auto", className)}
+    >
+      <div ref={contentRef as React.Ref<HTMLDivElement>} className="w-full">
         {children}
       </div>
     </div>

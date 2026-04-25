@@ -2,8 +2,8 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  Link,
   Outlet,
+  Link as RouterLink,
   RouterProvider,
 } from "@tanstack/react-router";
 import { StatusMark } from "@/components/ui/status-mark";
@@ -16,6 +16,10 @@ import { ShowcaseStatusPage } from "./routes/showcase-status-page";
 import { ShowcaseTypographyPage } from "./routes/showcase-typography-page";
 import { useRedesignState } from "./state";
 import { ToolDetailsSheet } from "./tool-details-sheet";
+
+function Link({ to, children }: { readonly to: string; readonly children: React.ReactNode }) {
+  return <RouterLink to={to as never}>{children}</RouterLink>;
+}
 
 function RedesignLayout() {
   const { selectedTool, closeTool, liveFrame } = useRedesignState();
@@ -97,12 +101,6 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 const redesignRouter = createRouter({ routeTree });
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    redesignRouter: typeof redesignRouter;
-  }
-}
 
 export function RedesignRouterProvider() {
   return <RouterProvider router={redesignRouter} />;

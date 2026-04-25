@@ -46,7 +46,7 @@ const envInt = (key: string, fallback: number): number => {
 // RuntimeConfigLive — reads from process.env with defaults
 // ---------------------------------------------------------------------------
 
-export const RuntimeConfigLive = Layer.succeed(RuntimeConfig, {
+export const RuntimeConfigLive = Layer.succeed(RuntimeConfig)({
   model: env("THESEUS_MODEL") ?? "gpt-5.4",
   maxTokens: envInt("THESEUS_MAX_TOKENS", 4096),
   shellMaxOutput: envInt("THESEUS_SHELL_MAX_OUTPUT", 8192),

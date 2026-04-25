@@ -37,7 +37,7 @@
         "noInvalidBuiltinInstantiation": "error"
       },
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noConsole": "warn",
         "noDoubleEquals": "error",
         "noAsyncPromiseExecutor": "error",
@@ -45,7 +45,7 @@
         "useAwait": "error"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "error",
         "useConst": "error",
         "useTemplate": "error",
         "noUnusedTemplateLiteral": "error",

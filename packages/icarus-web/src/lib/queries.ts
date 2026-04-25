@@ -123,7 +123,7 @@ export const missions = {
   list: () =>
     queryOptions({
       queryKey: ["missions"],
-      queryFn: async (): Promise<MissionSummary[]> => {
+      queryFn: (): MissionSummary[] => {
         // TODO: replace with client.listMissions() when RPC exists
         return STUB_MISSIONS;
       },
@@ -133,7 +133,7 @@ export const missions = {
   detail: (missionId: string) =>
     queryOptions({
       queryKey: ["missions", missionId],
-      queryFn: async (): Promise<Mission> => {
+      queryFn: (): Mission => {
         // TODO: replace with client.getMission(missionId) when RPC exists
         return { ...STUB_MISSION_DETAIL, id: missionId };
       },

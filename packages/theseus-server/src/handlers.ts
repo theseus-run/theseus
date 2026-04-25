@@ -63,7 +63,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       }
 
       // Create per-dispatch Capsule backed by SQLite
-      const dbLayer = Layer.succeed(TheseusDb, theseusDb);
+      const dbLayer = Layer.succeed(TheseusDb)(theseusDb);
       const capsuleLayer = Layer.provide(SqliteCapsuleLive(blueprint.name), dbLayer);
       const getCapsule = Effect.gen(function* () {
         return yield* CapsuleNs.Capsule;
@@ -78,9 +78,9 @@ export const HandlersLive = TheseusRpc.toLayer({
 
       // Provide ambient services for dispatch
       const depsLayer = Layer.mergeAll(
-        Layer.succeed(LanguageModel.LanguageModel, lm),
-        Layer.succeed(Satellite.Ring, ring),
-        Layer.succeed(Dispatch.Log, log),
+        Layer.succeed(LanguageModel.LanguageModel)(lm),
+        Layer.succeed(Satellite.Ring)(ring),
+        Layer.succeed(Dispatch.Log)(log),
       );
 
       const handle = yield* Effect.provide(Dispatch.dispatch(blueprint, task, options), depsLayer);
@@ -89,8 +89,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       // Return the event stream — RPC framework handles serialization + backpressure
       return handle.events.pipe(
         Stream.filter((e) => !SKIP_TAGS.has(e._tag)),
-        Stream.map((e) => serializeEvent(e)),
-        Stream.tap((e: any) =>
+        Stream.tap((e) =>
           e._tag === "Calling"
             ? registry.updateStatus(handle.dispatchId, { iteration: e.iteration })
             : e._tag === "Done"
@@ -116,7 +115,8 @@ export const HandlersLive = TheseusRpc.toLayer({
                 })
               : Effect.void,
         ),
-      ) as any;
+        Stream.map((e) => serializeEvent(e)),
+      ) as unknown as never;
     }),
 
   listDispatches: ({ limit }) =>
@@ -129,7 +129,7 @@ export const HandlersLive = TheseusRpc.toLayer({
     Effect.gen(function* () {
       const log = yield* Dispatch.Log;
       const restored = yield* log.restore(dispatchId);
-      return (restored?.messages ?? []).map((m: any) => ({
+      return (restored?.messages ?? []).map((m) => ({
         role: String(m.role ?? ""),
         content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
       }));
@@ -178,7 +178,11 @@ export const HandlersLive = TheseusRpc.toLayer({
         Effect.fail(
           new RpcError({
             code: "INTERNAL",
-            message: `Agent error: ${(agentErr as any)?._tag ?? "unknown"}`,
+            message: `Agent error: ${
+              typeof agentErr === "object" && agentErr !== null && "_tag" in agentErr
+                ? String(agentErr._tag)
+                : "unknown"
+            }`,
           }),
         ),
       );

@@ -48,7 +48,8 @@ function mergeToolEvents(messages: ChatMessage[]): DisplayMessage[] {
       const callingIdx = pending.get(msg.event.tool);
       if (callingIdx !== undefined) {
         // Fold result into the calling card
-        const calling = out[callingIdx]!;
+        const calling = out[callingIdx];
+        if (calling === undefined) continue;
         out[callingIdx] = {
           ...calling,
           event: { ...(calling.event as MergedEvent), resultEvent: msg.event },

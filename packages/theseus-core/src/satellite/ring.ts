@@ -100,9 +100,9 @@ export const makeSatelliteRing = (
         let currentPhase = phase;
         let lastAction: Action = Pass;
 
-        for (let i = 0; i < satellites.length; i++) {
-          const satellite = satellites[i]!;
-          const ref = stateRefs[i]!;
+        for (const [i, satellite] of satellites.entries()) {
+          const ref = stateRefs[i];
+          if (ref === undefined) continue;
           const state = yield* Ref.get(ref);
 
           const { action, state: nextState } = yield* satellite.handle(currentPhase, ctx, state);

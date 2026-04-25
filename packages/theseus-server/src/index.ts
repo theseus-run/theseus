@@ -35,7 +35,7 @@ const port = Number(process.env["THESEUS_PORT"] ?? 4800);
 // ---------------------------------------------------------------------------
 
 // Tools
-const ToolRegistryLive = Layer.succeed(ToolRegistry, makeToolRegistry(allTools));
+const ToolRegistryLive = Layer.succeed(ToolRegistry)(makeToolRegistry(allTools));
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
@@ -101,7 +101,9 @@ Effect.runFork(
   program.pipe(
     Effect.provide(HttpLive),
     Effect.scoped,
-    Effect.tapCause((cause) => Effect.sync(() => console.error("[theseus-server] fatal:", cause))),
+    Effect.tapCause(
+      (cause): Effect.Effect<void> => Effect.logError("[theseus-server] fatal", cause),
+    ),
   ),
 );
 

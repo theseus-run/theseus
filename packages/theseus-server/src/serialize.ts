@@ -7,7 +7,9 @@
 
 import type { Event as DispatchEvent } from "@theseus.run/core/Dispatch";
 
-export const serializeEvent = (event: DispatchEvent): any => {
+export type SerializedDispatchEvent = DispatchEvent | Record<string, unknown>;
+
+export const serializeEvent = (event: DispatchEvent): SerializedDispatchEvent => {
   if (event._tag === "ToolError") {
     const { error, ...rest } = event;
     return {

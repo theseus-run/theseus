@@ -73,9 +73,9 @@ export type { Toolkit, ToolRequirements } from "./tool/toolkit.ts";
 export {
   emptyToolkit,
   hasTool,
+  interactions,
   makeToolkit,
   mergeToolkits,
-  interactions,
   withMaxInteraction,
 } from "./tool/toolkit.ts";
 

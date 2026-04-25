@@ -37,8 +37,8 @@ function DefinitionPanel({ mission }: { mission: Mission }) {
           <p className="text-zinc-600">-- none yet --</p>
         ) : (
           <ul className="space-y-1">
-            {mission.criteria.map((c, i) => (
-              <li key={i} className="flex items-start gap-1">
+            {mission.criteria.map((c) => (
+              <li key={c.text} className="flex items-start gap-1">
                 <span className="shrink-0">
                   {c.status === "met" ? (
                     <span className="text-green-400">[x]</span>
@@ -66,8 +66,8 @@ function DefinitionPanel({ mission }: { mission: Mission }) {
           <p className="text-zinc-600">-- none --</p>
         ) : (
           <ul className="space-y-1">
-            {mission.artifacts.map((a, i) => (
-              <li key={i}>
+            {mission.artifacts.map((a) => (
+              <li key={`${a.source}:${a.ref}`}>
                 <span className="text-zinc-600">[{a.direction === "input" ? "in" : "out"}]</span>{" "}
                 <span className="text-muted-foreground">{a.source}:</span>{" "}
                 <span className="text-foreground">{a.title || a.ref}</span>
@@ -150,7 +150,7 @@ function DefineChat({
             className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           {lockReady && (
-            <button onClick={onLock} className="btn btn-confirm">
+            <button type="button" onClick={onLock} className="btn btn-confirm">
               lock
             </button>
           )}

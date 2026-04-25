@@ -2,7 +2,7 @@ engine biome(1.0)
 language js
 
 `Effect.gen($fn)` as $outer where {
-  $fn <: contains `$a ? $b : $c` as $ternary where {
-    register_diagnostic(span=$ternary, message="Avoid ternary expressions inside Effect.gen. Use Match.value for branching or Effect.if for conditional Effects.", severity="warning")
+  $fn <: contains `yield* ($cond ? $onTrue : $onFalse)` as $ternary where {
+    register_diagnostic(span=$ternary, message="Avoid ternaries that choose yielded Effects inside Effect.gen. Use Match.value for branching or Effect.if for conditional Effects.", severity="warning")
   }
 }

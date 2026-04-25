@@ -133,20 +133,7 @@ export function useChat(client: TheseusClient | null) {
       const continueFrom = sessionRef.current.lastCompletedId;
 
       try {
-        // Track the dispatch ID from the Done event
-        let lastDispatchResult: DispatchEvent | undefined;
-
-        await client.dispatch(
-          BLUEPRINT,
-          text,
-          (event) => {
-            handleEvent(event);
-            if (event._tag === "Done") {
-              lastDispatchResult = event;
-            }
-          },
-          continueFrom,
-        );
+        await client.dispatch(BLUEPRINT, text, (event) => handleEvent(event), continueFrom);
 
         // TODO: we don't get the dispatchId from the RPC stream yet.
         // For now, session continuity works through the server-side

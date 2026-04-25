@@ -22,6 +22,17 @@ const makeUsage = (input: number, output: number) => ({
   outputTokens: { total: output, text: undefined, reasoning: undefined },
 });
 
+const finishPart = (reason: Response.FinishPartEncoded["reason"], input: number, output: number) =>
+  ({
+    type: "finish",
+    reason,
+    usage: makeUsage(input, output),
+    response: undefined,
+  }) as Response.FinishPartEncoded;
+
+const streamPart = (part: unknown): Response.StreamPartEncoded =>
+  part as Response.StreamPartEncoded;
+
 // ---------------------------------------------------------------------------
 // Response builders (produce PartEncoded[])
 // ---------------------------------------------------------------------------
@@ -32,12 +43,7 @@ export const textParts = (
   outputTokens = 5,
 ): Response.PartEncoded[] => [
   { type: "text", text: content } as Response.TextPartEncoded,
-  {
-    type: "finish",
-    reason: "stop",
-    usage: makeUsage(inputTokens, outputTokens),
-    response: undefined,
-  } as any,
+  finishPart("stop", inputTokens, outputTokens),
 ];
 
 export const toolCallParts = (
@@ -54,12 +60,7 @@ export const toolCallParts = (
     }
     return { type: "tool-call", id: tc.id, name: tc.name, params } as Response.ToolCallPartEncoded;
   }),
-  {
-    type: "finish",
-    reason: "tool-calls",
-    usage: makeUsage(inputTokens, outputTokens),
-    response: undefined,
-  } as any,
+  finishPart("tool-calls", inputTokens, outputTokens),
 ];
 
 // ---------------------------------------------------------------------------
@@ -74,19 +75,21 @@ const partEncodedToStreamParts = (parts: Response.PartEncoded[]): Response.Strea
   parts.forEach((part) => {
     if (part.type === "text") {
       const id = `text_${textIdx++}`;
-      stream.push({ type: "text-start", id } as any);
-      stream.push({ type: "text-delta", id, delta: (part as any).text } as any);
-      stream.push({ type: "text-end", id } as any);
+      const textPart = part as Response.TextPartEncoded;
+      stream.push(streamPart({ type: "text-start", id }));
+      stream.push(streamPart({ type: "text-delta", id, delta: textPart.text }));
+      stream.push(streamPart({ type: "text-end", id }));
     } else if (part.type === "reasoning") {
       const id = `reasoning_${reasonIdx++}`;
-      stream.push({ type: "reasoning-start", id } as any);
-      stream.push({ type: "reasoning-delta", id, delta: (part as any).text } as any);
-      stream.push({ type: "reasoning-end", id } as any);
+      const reasoningPart = part as Response.PartEncoded & { readonly text?: string };
+      stream.push(streamPart({ type: "reasoning-start", id }));
+      stream.push(streamPart({ type: "reasoning-delta", id, delta: reasoningPart.text ?? "" }));
+      stream.push(streamPart({ type: "reasoning-end", id }));
     } else if (part.type === "tool-call") {
       // tool-call is valid as StreamPartEncoded
-      stream.push(part as any);
+      stream.push(streamPart(part));
     } else if (part.type === "finish") {
-      stream.push(part as any);
+      stream.push(streamPart(part));
     }
   });
 

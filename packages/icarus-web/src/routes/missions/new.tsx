@@ -38,14 +38,13 @@ export function NewMissionPage() {
           onChange={(e) => setGoal(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="what needs to be done?"
-          autoFocus
           rows={4}
           className="input"
         />
 
         <div className="flex items-center justify-between mt-2">
           <p className="text-zinc-600">paste links to issues, docs, etc.</p>
-          <button onClick={handleSubmit} disabled={!goal.trim()} className="btn">
+          <button type="button" onClick={handleSubmit} disabled={!goal.trim()} className="btn">
             start
           </button>
         </div>

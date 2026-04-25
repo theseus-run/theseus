@@ -80,7 +80,7 @@ const drainInjections = (
   injectionQueue: Queue.Queue<Injection>,
   messages: ReadonlyArray<Prompt.MessageEncoded>,
   onInjection: (injection: Injection) => Effect.Effect<void>,
-): Effect.Effect<ReadonlyArray<Prompt.MessageEncoded> | null> =>
+): Effect.Effect<ReadonlyArray<Prompt.MessageEncoded> | undefined> =>
   Effect.gen(function* () {
     let current = messages;
     let opt = yield* Queue.poll(injectionQueue);
@@ -88,7 +88,7 @@ const drainInjections = (
       yield* onInjection(opt.value);
       const prev = current;
       const next = Match.value(opt.value).pipe(
-        Match.tag("Interrupt", () => null as ReadonlyArray<Prompt.MessageEncoded> | null),
+        Match.tag("Interrupt", () => undefined),
         Match.tag("AppendMessages", (i) => [...prev, ...i.messages]),
         Match.tag("ReplaceMessages", (i) => i.messages),
         Match.tag("Redirect", (i) => [
@@ -98,7 +98,7 @@ const drainInjections = (
         Match.tag("CollapseContext", () => prev),
         Match.exhaustive,
       );
-      if (next === null) return null;
+      if (next === undefined) return undefined;
       current = next;
       opt = yield* Queue.poll(injectionQueue);
     }
@@ -176,7 +176,7 @@ export const dispatch = (
           };
 
           const next = yield* drainInjections(injectionQueue, messages, logInjection);
-          if (next === null)
+          if (next === undefined)
             return yield* Effect.fail(
               new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
             );
@@ -406,15 +406,12 @@ export const dispatch = (
 
           const assistantMsg: Prompt.MessageEncoded = {
             role: "assistant" as const,
-            content: result.toolCalls.map((tc) => {
-              let params: unknown;
-              try {
-                params = JSON.parse(tc.arguments);
-              } catch {
-                params = {};
-              }
-              return { type: "tool-call" as const, id: tc.id, name: tc.name, params };
-            }),
+            content: result.toolCalls.map((tc) => ({
+              type: "tool-call" as const,
+              id: tc.id,
+              name: tc.name,
+              params: tryParseArgs(tc),
+            })),
           };
 
           return yield* loop(

@@ -119,6 +119,42 @@ interface ResponsesSSEEvent {
   item?: { type?: string; call_id?: string; name?: string; id?: string };
 }
 
+interface PromptMessageLike {
+  readonly role: string;
+  readonly text?: string;
+  readonly content?: unknown;
+  readonly toolCallId?: string;
+}
+
+interface PromptPartLike {
+  readonly type?: string;
+  readonly text?: string;
+  readonly id?: string;
+  readonly name?: string;
+  readonly params?: unknown;
+  readonly result?: unknown;
+}
+
+interface ToolLike {
+  readonly name: string;
+  readonly description?: string;
+  readonly inputSchema?: Record<string, unknown>;
+}
+
+const asPromptMessage = (msg: unknown): PromptMessageLike => msg as PromptMessageLike;
+
+const promptParts = (msg: PromptMessageLike): PromptPartLike[] =>
+  Array.isArray(msg.content) ? (msg.content as PromptPartLike[]) : [msg];
+
+const textFromParts = (parts: ReadonlyArray<PromptPartLike>): string =>
+  parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("");
+
+const streamPart = (part: unknown): Response.StreamPartEncoded =>
+  part as Response.StreamPartEncoded;
+
 // ---------------------------------------------------------------------------
 // Prompt → wire format converters
 // ---------------------------------------------------------------------------
@@ -127,25 +163,22 @@ interface ResponsesSSEEvent {
 const promptToChatCompletions = (prompt: Prompt.Prompt): unknown[] =>
   prompt.content.map((msg) =>
     Match.value(msg.role).pipe(
-      Match.when("system", () => ({ role: "system", content: (msg as any).text ?? "" })),
+      Match.when("system", () => ({ role: "system", content: asPromptMessage(msg).text ?? "" })),
       Match.when("user", () => {
-        const parts = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
-        const text = parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("");
-        return { role: "user", content: text || (msg as any).text || "" };
+        const message = asPromptMessage(msg);
+        const text = textFromParts(promptParts(message));
+        return { role: "user", content: text || message.text || "" };
       }),
       Match.when("assistant", () => {
-        const parts: any[] = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
+        const parts = promptParts(asPromptMessage(msg));
         const textParts = parts.filter((p) => p.type === "text");
         const toolCallParts = parts.filter((p) => p.type === "tool-call");
-        const content = textParts.map((p: any) => p.text).join("") || null;
+        const content = textFromParts(textParts) || null;
         if (toolCallParts.length > 0) {
           return {
             role: "assistant",
             content,
-            tool_calls: toolCallParts.map((tc: any) => ({
+            tool_calls: toolCallParts.map((tc) => ({
               id: tc.id,
               type: "function",
               function: { name: tc.name, arguments: JSON.stringify(tc.params ?? {}) },
@@ -155,11 +188,11 @@ const promptToChatCompletions = (prompt: Prompt.Prompt): unknown[] =>
         return { role: "assistant", content };
       }),
       Match.when("tool", () => {
-        const parts: any[] = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
-        const result = parts.find((p: any) => p.type === "tool-result");
+        const message = asPromptMessage(msg);
+        const result = promptParts(message).find((p) => p.type === "tool-result");
         return {
           role: "tool",
-          tool_call_id: result?.id ?? (msg as any).toolCallId ?? "",
+          tool_call_id: result?.id ?? message.toolCallId ?? "",
           content:
             typeof result?.result === "string"
               ? result.result
@@ -174,24 +207,21 @@ const promptToChatCompletions = (prompt: Prompt.Prompt): unknown[] =>
 const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
   prompt.content.flatMap((msg) =>
     Match.value(msg.role).pipe(
-      Match.when("system", () => [{ role: "system", content: (msg as any).text ?? "" }]),
+      Match.when("system", () => [{ role: "system", content: asPromptMessage(msg).text ?? "" }]),
       Match.when("user", () => {
-        const parts = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
-        const text = parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("");
-        return [{ role: "user", content: text || (msg as any).text || "" }];
+        const message = asPromptMessage(msg);
+        const text = textFromParts(promptParts(message));
+        return [{ role: "user", content: text || message.text || "" }];
       }),
       Match.when("assistant", () => {
-        const parts: any[] = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
+        const parts = promptParts(asPromptMessage(msg));
         const textParts = parts.filter((p) => p.type === "text");
         const toolCallParts = parts.filter((p) => p.type === "tool-call");
         const items: unknown[] = [];
-        const text = textParts.map((p: any) => p.text).join("");
+        const text = textFromParts(textParts);
         if (text) items.push({ role: "assistant", content: text });
         items.push(
-          ...toolCallParts.map((tc: any) => ({
+          ...toolCallParts.map((tc) => ({
             type: "function_call",
             call_id: tc.id,
             name: tc.name,
@@ -201,12 +231,12 @@ const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
         return items;
       }),
       Match.when("tool", () => {
-        const parts: any[] = Array.isArray((msg as any).content) ? (msg as any).content : [msg];
-        return parts
-          .filter((p: any) => p.type === "tool-result")
-          .map((r: any) => ({
+        const message = asPromptMessage(msg);
+        return promptParts(message)
+          .filter((p) => p.type === "tool-result")
+          .map((r) => ({
             type: "function_call_output",
-            call_id: r.id ?? (msg as any).toolCallId ?? "",
+            call_id: r.id ?? message.toolCallId ?? "",
             output: typeof r.result === "string" ? r.result : JSON.stringify(r.result ?? ""),
           }));
       }),
@@ -216,7 +246,7 @@ const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
 
 /** Get the JSON schema for a tool — reads inputSchema (set by bridge) or falls back to getJsonSchema. */
 const getToolSchema = (t: AiTool.Any): Record<string, unknown> =>
-  (t as any).inputSchema ?? AiTool.getJsonSchema(t) ?? { type: "object", properties: {} };
+  (t as ToolLike).inputSchema ?? AiTool.getJsonSchema(t) ?? { type: "object", properties: {} };
 
 /** Convert AI Tool definitions to /chat/completions tools format. */
 const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
@@ -224,7 +254,7 @@ const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknow
     type: "function",
     function: {
       name: t.name,
-      description: (t as any).description ?? "",
+      description: (t as ToolLike).description ?? "",
       parameters: getToolSchema(t),
     },
   }));
@@ -234,7 +264,7 @@ const aiToolsToResponsesTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
   tools.map((t) => ({
     type: "function",
     name: t.name,
-    description: (t as any).description ?? "",
+    description: (t as ToolLike).description ?? "",
     parameters: getToolSchema(t),
   }));
 
@@ -255,7 +285,7 @@ const makeFinishPart = (
   output: number,
 ): Response.FinishPartEncoded => ({
   type: "finish",
-  reason: reason as any,
+  reason: reason as Response.FinishPartEncoded["reason"],
   usage: makeUsage(input, output),
   response: undefined,
 });
@@ -322,7 +352,7 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
         const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
         const text = content
           .filter((p) => p.type === "reasoning_text" && p.text)
-          .map((p) => p.text!)
+          .map((p) => p.text ?? "")
           .join("");
         return text ? [{ type: "reasoning" as const, text }] : [];
       }),
@@ -330,7 +360,7 @@ const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.Pa
         const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
         const text = content
           .filter((p) => p.type === "output_text" && p.text)
-          .map((p) => p.text!)
+          .map((p) => p.text ?? "")
           .join("");
         return text ? [{ type: "text" as const, text }] : [];
       }),
@@ -415,7 +445,7 @@ class StreamAccumulator {
             type: "reasoning-delta",
             id: this.reasoningId,
             delta: delta.reasoning_content,
-          } as any;
+          } as unknown as Response.StreamPartEncoded;
         },
       ),
       Match.when(
@@ -425,9 +455,9 @@ class StreamAccumulator {
             this.textId = `text_${Date.now()}`;
             // Emit as text-delta directly — text-start has no delta field
             // and would lose the first chunk's content
-            return { type: "text-delta", id: this.textId, delta: delta.content } as any;
+            return streamPart({ type: "text-delta", id: this.textId, delta: delta.content });
           }
-          return { type: "text-delta", id: this.textId, delta: delta.content } as any;
+          return streamPart({ type: "text-delta", id: this.textId, delta: delta.content });
         },
       ),
       Match.orElse(() => null),
@@ -466,7 +496,7 @@ class StreamAccumulator {
             id: entry.id,
             name: entry.name || data.name || "",
             params,
-          } as any;
+          } as unknown as Response.StreamPartEncoded;
         }
         return null;
       }),
@@ -475,14 +505,14 @@ class StreamAccumulator {
         if (!this.textId) {
           this.textId = `text_${Date.now()}`;
         }
-        return { type: "text-delta", id: this.textId, delta: data.delta } as any;
+        return streamPart({ type: "text-delta", id: this.textId, delta: data.delta });
       }),
       Match.when("response.reasoning_text.delta", () => {
         if (!data.delta) return null;
         if (!this.reasoningId) {
           this.reasoningId = `reasoning_${Date.now()}`;
         }
-        return { type: "reasoning-delta", id: this.reasoningId, delta: data.delta } as any;
+        return streamPart({ type: "reasoning-delta", id: this.reasoningId, delta: data.delta });
       }),
       Match.orElse(() => null),
     );
@@ -492,8 +522,8 @@ class StreamAccumulator {
     const final: Response.StreamPartEncoded[] = [];
 
     // Close open text/reasoning streams
-    if (this.textId) final.push({ type: "text-end", id: this.textId } as any);
-    if (this.reasoningId) final.push({ type: "reasoning-end", id: this.reasoningId } as any);
+    if (this.textId) final.push(streamPart({ type: "text-end", id: this.textId }));
+    if (this.reasoningId) final.push(streamPart({ type: "reasoning-end", id: this.reasoningId }));
 
     // Finalize chat/completions tool calls from index map
     final.push(
@@ -506,7 +536,7 @@ class StreamAccumulator {
               id: tc.id,
               name: tc.name,
               params: safeParseJson(tc.args),
-            }) as any,
+            }) as unknown as Response.StreamPartEncoded,
         ),
     );
 
@@ -522,7 +552,7 @@ class StreamAccumulator {
               id: tc.id,
               name: tc.name,
               params: safeParseJson(tc.args),
-            }) as any,
+            }) as unknown as Response.StreamPartEncoded,
         ),
     );
 

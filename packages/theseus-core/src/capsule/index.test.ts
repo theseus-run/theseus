@@ -5,7 +5,7 @@ import { Capsule, CapsuleError, makeCapsuleId } from "./index.ts";
 import { CapsuleLive } from "./memory.ts";
 import { makeReadCapsuleTool } from "./tools.ts";
 
-const run = <A>(effect: Effect.Effect<A, any, Capsule>) =>
+const run = <A>(effect: Effect.Effect<A, unknown, Capsule>) =>
   Effect.runPromise(Effect.provide(effect, CapsuleLive("test")));
 
 describe("makeCapsuleId", () => {
@@ -40,7 +40,9 @@ describe("Capsule.log + read", () => {
     ]);
     expect(events.map((e) => e.by)).toEqual(["runtime", "theseus", "forge"]);
     // All events have auto-set timestamps
-    events.forEach((e) => expect(e.at).toBeTruthy());
+    for (const event of events) {
+      expect(event.at).toBeTruthy();
+    }
   });
 
   test("empty capsule reads as empty array", async () => {

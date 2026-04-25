@@ -32,13 +32,20 @@ import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 
 const extractUsage = (parts: ReadonlyArray<Response.PartEncoded>): Usage =>
   parts.reduce<Usage>(
-    (acc, part) =>
-      part.type === "finish"
+    (acc, part) => {
+      const finish = part as Response.FinishPartEncoded & {
+        readonly usage?: {
+          readonly inputTokens?: { readonly total?: number };
+          readonly outputTokens?: { readonly total?: number };
+        };
+      };
+      return part.type === "finish"
         ? {
-            inputTokens: (part as any).usage?.inputTokens?.total ?? acc.inputTokens,
-            outputTokens: (part as any).usage?.outputTokens?.total ?? acc.outputTokens,
+            inputTokens: finish.usage?.inputTokens?.total ?? acc.inputTokens,
+            outputTokens: finish.usage?.outputTokens?.total ?? acc.outputTokens,
           }
-        : acc,
+        : acc;
+    },
     { inputTokens: 0, outputTokens: 0 },
   );
 
@@ -130,7 +137,7 @@ export const presentationToText = (p: Presentation): string =>
 export const runToolCall = (
   tools: ReadonlyArray<ToolAny>,
   tc: ToolCall,
-): Effect.Effect<ToolCallResult, ToolCallError, any> => {
+): Effect.Effect<ToolCallResult, ToolCallError, never> => {
   const tool = tools.find((t) => t.name === tc.name);
   if (!tool) return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
@@ -151,7 +158,7 @@ export const runToolCall = (
     Effect.mapError(
       (cause) => new ToolCallFailed({ callId: tc.id, name: tc.name, args: parsed, cause }),
     ),
-  );
+  ) as Effect.Effect<ToolCallResult, ToolCallError, never>;
 };
 
 // ---------------------------------------------------------------------------
@@ -162,33 +169,33 @@ export const runToolCall = (
 const foldStreamParts = (
   streamParts: ReadonlyArray<Response.StreamPartEncoded>,
 ): Response.PartEncoded[] => {
-  const acc = streamParts.reduce(
-    (state, part) =>
-      Match.value(part.type).pipe(
-        Match.when("text-delta", () => ({ ...state, text: state.text + (part as any).delta })),
-        Match.when("reasoning-delta", () => ({
-          ...state,
-          reasoning: state.reasoning + (part as any).delta,
-        })),
-        Match.when("tool-call", () => ({
-          ...state,
-          parts: [...state.parts, part as Response.PartEncoded],
-        })),
-        Match.when("finish", () => ({
-          ...state,
-          parts: [...state.parts, part as Response.PartEncoded],
-        })),
-        Match.when("error", () => ({
-          ...state,
-          parts: [...state.parts, part as Response.PartEncoded],
-        })),
-        Match.orElse(() => state),
-      ),
-    { text: "", reasoning: "", parts: [] as Response.PartEncoded[] },
-  );
+  const acc = { text: "", reasoning: "", parts: [] as Response.PartEncoded[] };
+  for (const part of streamParts) {
+    const deltaPart = part as Response.StreamPartEncoded & { readonly delta?: string };
+    Match.value(part.type).pipe(
+      Match.when("text-delta", () => {
+        acc.text += deltaPart.delta ?? "";
+      }),
+      Match.when("reasoning-delta", () => {
+        acc.reasoning += deltaPart.delta ?? "";
+      }),
+      Match.when("tool-call", () => {
+        acc.parts.push(part as Response.PartEncoded);
+      }),
+      Match.when("finish", () => {
+        acc.parts.push(part as Response.PartEncoded);
+      }),
+      Match.when("error", () => {
+        acc.parts.push(part as Response.PartEncoded);
+      }),
+      Match.orElse(() => undefined),
+    );
+  }
 
   return [
-    ...(acc.reasoning ? [{ type: "reasoning", text: acc.reasoning } as any] : []),
+    ...(acc.reasoning
+      ? ([{ type: "reasoning", text: acc.reasoning }] as Response.PartEncoded[])
+      : []),
     ...(acc.text ? [{ type: "text", text: acc.text } as Response.TextPartEncoded] : []),
     ...acc.parts,
   ];
@@ -229,13 +236,15 @@ export const stepStream = (
         disableToolCallResolution: true,
       }).pipe(
         Stream.tap((part) => {
-          allParts.push(part as any);
-          return Match.value(part.type).pipe(
+          const encodedPart = part as unknown as Response.StreamPartEncoded;
+          allParts.push(encodedPart);
+          const deltaPart = encodedPart as Response.StreamPartEncoded & { readonly delta?: string };
+          return Match.value(encodedPart.type).pipe(
             Match.when("text-delta", () =>
-              onChunk({ type: "text-delta", delta: (part as any).delta }),
+              onChunk({ type: "text-delta", delta: deltaPart.delta ?? "" }),
             ),
             Match.when("reasoning-delta", () =>
-              onChunk({ type: "reasoning-delta", delta: (part as any).delta }),
+              onChunk({ type: "reasoning-delta", delta: deltaPart.delta ?? "" }),
             ),
             Match.orElse(() => Effect.void),
           );
@@ -270,19 +279,28 @@ export const step = (
     );
 
     return responsePartsToStepResult(
-      response.content.map((p: any) =>
-        Match.value(p.type).pipe(
-          Match.when("text", () => ({ type: "text" as const, text: p.text })),
-          Match.when("reasoning", () => ({ type: "reasoning" as const, text: p.text })),
+      response.content.map((p) => {
+        const encodedPart = p as unknown as Response.PartEncoded & {
+          readonly text?: string;
+          readonly id?: string;
+          readonly name?: string;
+          readonly params?: unknown;
+        };
+        return Match.value(encodedPart.type).pipe(
+          Match.when("text", () => ({ type: "text" as const, text: encodedPart.text ?? "" })),
+          Match.when("reasoning", () => ({
+            type: "reasoning" as const,
+            text: encodedPart.text ?? "",
+          })),
           Match.when("tool-call", () => ({
             type: "tool-call" as const,
-            id: p.id,
-            name: p.name,
-            params: p.params,
+            id: encodedPart.id ?? "",
+            name: encodedPart.name ?? "",
+            params: encodedPart.params,
           })),
-          Match.when("finish", () => p),
-          Match.orElse(() => p),
-        ),
-      ),
+          Match.when("finish", () => encodedPart),
+          Match.orElse(() => encodedPart),
+        );
+      }),
     );
   });

@@ -23,15 +23,20 @@ type RedesignStateValue = {
 const RedesignStateContext = createContext<RedesignStateValue | null>(null);
 
 export function RedesignStateProvider({ children }: { children: ReactNode }) {
-  const [selectedMissionId, setSelectedMissionId] = useState(missions[0]!.id);
+  const initialMission = missions[0];
+  if (!initialMission) {
+    throw new Error("Redesign fixtures must include at least one mission");
+  }
+
+  const [selectedMissionId, setSelectedMissionId] = useState(initialMission.id);
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState(missions[0]!.title);
-  const [draftBrief, setDraftBrief] = useState(missions[0]!.brief);
+  const [draftTitle, setDraftTitle] = useState(initialMission.title);
+  const [draftBrief, setDraftBrief] = useState(initialMission.brief);
   const [prompt, setPrompt] = useState("");
   const [liveFrameIndex, setLiveFrameIndex] = useState(0);
 
   const mission = useMemo(
-    () => missions.find((entry) => entry.id === selectedMissionId) ?? missions[0]!,
+    () => missions.find((entry) => entry.id === selectedMissionId) ?? initialMission,
     [selectedMissionId],
   );
 
@@ -52,7 +57,7 @@ export function RedesignStateProvider({ children }: { children: ReactNode }) {
     mission,
     missions,
     selectedTool,
-    liveFrame: liveFrames[liveFrameIndex]!,
+    liveFrame: liveFrames[liveFrameIndex] ?? "",
     draftTitle,
     draftBrief,
     prompt,

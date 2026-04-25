@@ -1,6 +1,22 @@
-import { Link } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { StackItem } from "@/components/ui/stack-item";
+
+function Link({
+  to,
+  children,
+  className,
+}: {
+  readonly to: string;
+  readonly children: React.ReactNode;
+  readonly className?: string;
+}) {
+  return (
+    <RouterLink to={to as never} className={className}>
+      {children}
+    </RouterLink>
+  );
+}
 
 const pages = [
   { to: "/showcase/typography", label: "Typography" },

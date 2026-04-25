@@ -100,7 +100,8 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
           const snaps = yield* Ref.get(snapshotsRef);
           const matching = snaps.filter((s) => s.dispatchId === dispatchId);
           if (matching.length === 0) return undefined;
-          const latest = matching[matching.length - 1]!;
+          const latest = matching[matching.length - 1];
+          if (latest === undefined) return undefined;
 
           // Look for parent link in events
           const entries = yield* Ref.get(eventsRef);
@@ -133,8 +134,9 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
             }
             const summaries: DispatchSummary[] = [];
             for (const [dispatchId, evts] of byId) {
-              const first = evts[0]!;
-              const last = evts[evts.length - 1]!;
+              const first = evts[0];
+              const last = evts[evts.length - 1];
+              if (first === undefined || last === undefined) continue;
               const done = evts.find((e) => e.event._tag === "Done");
               summaries.push({
                 dispatchId,
@@ -161,7 +163,7 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
 // NoopDispatchLog — no-op for when logging is not needed
 // ---------------------------------------------------------------------------
 
-export const NoopDispatchLog: Layer.Layer<DispatchLog> = Layer.succeed(DispatchLog, {
+export const NoopDispatchLog: Layer.Layer<DispatchLog> = Layer.succeed(DispatchLog)({
   record: () => Effect.void,
   snapshot: () => Effect.void,
   events: () => Effect.succeed([]),

@@ -56,10 +56,13 @@ let reqCounter = 0;
 const makeId = () => `${++reqCounter}`;
 
 interface PendingRequest {
-  resolve: (value: any) => void;
+  resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   onChunk?: (values: unknown[]) => void;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 // ---------------------------------------------------------------------------
 // TheseusClient
@@ -145,22 +148,26 @@ export class TheseusClient {
     this.setState("disconnected");
   }
 
-  private handleMessage(msg: any) {
+  private handleMessage(msg: unknown) {
+    if (!isRecord(msg)) return;
+
     if (msg._tag === "Chunk") {
-      const req = this.pending.get(msg.requestId);
+      const req = this.pending.get(String(msg.requestId ?? ""));
       if (req?.onChunk) {
-        req.onChunk(msg.values);
+        req.onChunk(Array.isArray(msg.values) ? msg.values : []);
       }
     } else if (msg._tag === "Exit") {
-      const req = this.pending.get(msg.requestId);
+      const req = this.pending.get(String(msg.requestId ?? ""));
       if (req) {
-        this.pending.delete(msg.requestId);
-        if (msg.exit._tag === "Success") {
-          req.resolve(msg.exit.value);
+        this.pending.delete(String(msg.requestId ?? ""));
+        const exit = isRecord(msg.exit) ? msg.exit : {};
+        if (exit._tag === "Success") {
+          req.resolve(exit.value);
         } else {
           // Failure — extract error
-          const cause = msg.exit.cause?.[0];
-          req.reject(new Error(cause?.error?.message ?? "RPC failed"));
+          const cause = Array.isArray(exit.cause) ? exit.cause[0] : undefined;
+          const error = isRecord(cause) && isRecord(cause.error) ? cause.error : undefined;
+          req.reject(new Error(typeof error?.message === "string" ? error.message : "RPC failed"));
         }
       }
     } else if (msg._tag === "Pong") {
@@ -177,7 +184,7 @@ export class TheseusClient {
       payload,
       headers: [],
     };
-    this.ws?.send(JSON.stringify(msg) + "\n");
+    this.ws?.send(`${JSON.stringify(msg)}\n`);
     return id;
   }
 

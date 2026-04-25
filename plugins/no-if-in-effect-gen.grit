@@ -3,6 +3,7 @@ language js
 
 `Effect.gen($fn)` as $outer where {
   $fn <: contains `if ($cond) { $body }` as $ifstmt where {
-    register_diagnostic(span=$ifstmt, message="Avoid if-statements inside Effect.gen. Use Match.value for branching, Effect.when for conditional execution, or push guards into the error channel.", severity="warning")
+    $ifstmt <: contains `yield* $effect`,
+    register_diagnostic(span=$ifstmt, message="Avoid effectful if-statements inside Effect.gen. Use Match.value for branching, Effect.when for conditional execution, or push guards into the error channel.", severity="warning")
   }
 }

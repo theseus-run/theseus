@@ -54,15 +54,10 @@ export const callTool = <I, O, F, R>(
 
   // Schema.Schema<I> has unconstrained decoding services at the type level;
   // we cast to keep callTool's R channel clean. In practice the schema is pure.
-  const decodeStep: Effect.Effect<I, ToolInputError, never> =
-    (
-      // biome-ignore lint/suspicious/noExplicitAny: Schema decoding-service type erasure
-      Schema.decodeUnknownEffect(tool.input as any)(raw) as Effect.Effect<
-        I,
-        Schema.SchemaError,
-        never
-      >
-    ).pipe(Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })));
+  const inputSchema = tool.input as unknown as Schema.Schema<I>;
+  const decodeStep: Effect.Effect<I, ToolInputError, never> = (
+    Schema.decodeUnknownEffect(inputSchema)(raw) as Effect.Effect<I, Schema.SchemaError, never>
+  ).pipe(Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })));
 
   const executeStep = (input: I): Effect.Effect<O, F, R> => {
     const run = tool.execute(input);
