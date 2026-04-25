@@ -1,8 +1,9 @@
 /**
  * Grunt — namespace barrel for `import * as Grunt from "@theseus.run/core/Grunt"`
  *
- * Stateless, ephemeral LLM agent. Fire and forget. Fresh context per task,
- * no accumulated history. Default choice for getting work done.
+ * Lightweight semantic adapter over raw Dispatch. A grunt runs an
+ * Agent.Blueprint through Dispatch and maps raw dispatch output/errors into
+ * AgentResult/AgentError.
  *
  * Usage:
  *   import * as Grunt from "@theseus.run/core/Grunt"

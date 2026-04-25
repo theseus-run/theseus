@@ -3,19 +3,21 @@
  */
 
 import { Effect } from "effect";
+import { textPresentation } from "../tool/index.ts";
 import type { Satellite } from "./types.ts";
 import { BlockTool, Pass } from "./types.ts";
 
 export const toolGuard = (blocked: ReadonlyArray<string>): Satellite => ({
   name: "tool-guard",
-  initial: undefined,
-  handle: (phase) => {
-    if (phase._tag !== "BeforeTool") return Effect.succeed({ action: Pass, state: undefined });
+  open: () => Effect.succeed(undefined),
+  beforeTool: (phase) => {
     return blocked.includes(phase.tool.name)
       ? Effect.succeed({
-          action: BlockTool(`Tool "${phase.tool.name}" is blocked by policy`),
+          decision: BlockTool(
+            textPresentation(`Tool "${phase.tool.name}" is blocked by policy`, { isError: true }),
+          ),
           state: undefined,
         })
-      : Effect.succeed({ action: Pass, state: undefined });
+      : Effect.succeed({ decision: Pass, state: undefined });
   },
 });

@@ -1,17 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Duration, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Response from "effect/unstable/ai/Response";
-import { report } from "../agent-comm/report.ts";
 import {
   makeMockLanguageModel,
   textParts,
   toolCallParts,
 } from "../test-utils/mock-language-model.ts";
+import { Defaults, defineTool } from "../tool/index.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
 import type { DispatchSpec } from "./types.ts";
+
+const CompleteInput = Schema.Struct({
+  result: Schema.Literal("success"),
+  summary: Schema.String,
+});
+
+const completeTool = defineTool({
+  name: "test_complete",
+  description: "Test-only completion marker for raw dispatch tests.",
+  input: CompleteInput,
+  output: Defaults.TextOutput,
+  failure: Defaults.NoFailure,
+  policy: { interaction: "pure" },
+  execute: ({ summary }) => Effect.succeed(`Complete: ${summary}`),
+});
+
+const OrderInput = Schema.Struct({
+  label: Schema.String,
+});
 
 const textAndToolCallParts = (
   content: string,
@@ -26,7 +45,7 @@ describe("dispatch loop", () => {
   test("generates dispatch id from Effect Clock", async () => {
     const now = Date.UTC(2024, 0, 2, 3, 4, 5);
     const spec: DispatchSpec = {
-      name: "worker",
+      name: "runner",
       systemPrompt: "Return text.",
       tools: [],
       maxIterations: 1,
@@ -46,14 +65,14 @@ describe("dispatch loop", () => {
       }).pipe(Effect.provide(layer), Effect.scoped),
     );
 
-    expect(dispatchId).toBe(`worker-${now.toString(36)}`);
+    expect(dispatchId).toBe(`runner-${now.toString(36)}`);
   });
 
-  test("invalid report input cannot become terminal success", async () => {
+  test("invalid tool input cannot become terminal success", async () => {
     const spec: DispatchSpec = {
-      name: "worker",
-      systemPrompt: "Report when done.",
-      tools: [report],
+      name: "runner",
+      systemPrompt: "Call the completion tool when done.",
+      tools: [completeTool],
       maxIterations: 3,
     };
 
@@ -61,12 +80,11 @@ describe("dispatch loop", () => {
       makeMockLanguageModel([
         toolCallParts([
           {
-            id: "report-1",
-            name: report.name,
+            id: "complete-1",
+            name: completeTool.name,
             arguments: JSON.stringify({
-              result: "bogus",
+              result: "invalid",
               summary: "bad",
-              content: "bad",
             }),
           },
         ]),
@@ -88,9 +106,9 @@ describe("dispatch loop", () => {
   test("continues on tool calls while preserving assistant text in replay", async () => {
     const prompts: LanguageModel.ProviderOptions[] = [];
     const spec: DispatchSpec = {
-      name: "worker",
-      systemPrompt: "Report when done.",
-      tools: [report],
+      name: "runner",
+      systemPrompt: "Call the completion tool when done.",
+      tools: [completeTool],
       maxIterations: 3,
     };
 
@@ -99,12 +117,11 @@ describe("dispatch loop", () => {
         [
           textAndToolCallParts("I will report now.", [
             {
-              id: "report-1",
-              name: report.name,
+              id: "complete-1",
+              name: completeTool.name,
               arguments: JSON.stringify({
                 result: "success",
                 summary: "done",
-                content: "summary text",
               }),
             },
           ]),
@@ -129,5 +146,66 @@ describe("dispatch loop", () => {
         typeof value === "bigint" ? value.toString() : value,
       ),
     ).toContain("I will report now.");
+  });
+
+  test("executes tool calls sequentially in model order", async () => {
+    const order: string[] = [];
+    const firstTool = defineTool({
+      name: "first_tool",
+      description: "Records first execution.",
+      input: OrderInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execute: ({ label }) =>
+        Effect.sleep(Duration.millis(20)).pipe(
+          Effect.flatMap(() => Effect.sync(() => order.push(label))),
+          Effect.as(`ok ${label}`),
+        ),
+    });
+    const secondTool = defineTool({
+      name: "second_tool",
+      description: "Records second execution.",
+      input: OrderInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execute: ({ label }) => Effect.sync(() => order.push(label)).pipe(Effect.as(`ok ${label}`)),
+    });
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Call both tools.",
+      tools: [firstTool, secondTool],
+      maxIterations: 3,
+    };
+
+    const layer = Layer.merge(
+      makeMockLanguageModel([
+        toolCallParts([
+          {
+            id: "first-1",
+            name: firstTool.name,
+            arguments: JSON.stringify({ label: "first" }),
+          },
+          {
+            id: "second-1",
+            name: secondTool.name,
+            arguments: JSON.stringify({ label: "second" }),
+          },
+        ]),
+        textParts("done"),
+      ]),
+      DispatchDefaults,
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it");
+        return yield* handle.result;
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(result.content).toBe("done");
+    expect(order).toEqual(["first", "second"]);
   });
 });

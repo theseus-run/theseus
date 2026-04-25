@@ -1,5 +1,5 @@
 /**
- * Dispatch — the reusable LLM dispatch primitive.
+ * Dispatch — raw LLM/tool loop primitive.
  *
  * step()          — one LLM call (pure, no tool execution, no fiber/events)
  * dispatch()      — full machine: loop + events + injection + fiber handle

@@ -8,9 +8,8 @@ import { Pass, SatelliteAbort } from "./types.ts";
 
 export const tokenBudget = (maxTokens: number): Satellite<number> => ({
   name: "token-budget",
-  initial: 0,
-  handle: (phase, _ctx, used) => {
-    if (phase._tag !== "AfterCall") return Effect.succeed({ action: Pass, state: used });
+  open: () => Effect.succeed(0),
+  afterCall: (phase, _ctx, used) => {
     const next = used + phase.stepResult.usage.inputTokens + phase.stepResult.usage.outputTokens;
     return next > maxTokens
       ? Effect.fail(
@@ -19,6 +18,6 @@ export const tokenBudget = (maxTokens: number): Satellite<number> => ({
             reason: `${next}/${maxTokens} tokens used`,
           }),
         )
-      : Effect.succeed({ action: Pass, state: next });
+      : Effect.succeed({ decision: Pass, state: next });
   },
 });

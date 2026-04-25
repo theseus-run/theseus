@@ -10,6 +10,7 @@ export { backgroundSatellite } from "./background.ts";
 export type { SatelliteActionCallback } from "./ring.ts";
 export {
   DefaultSatelliteRing,
+  EmptySatelliteRing,
   makeSatelliteRing,
   SatelliteRing,
   SatelliteRingLive,
@@ -17,13 +18,32 @@ export {
 export { tokenBudget } from "./token-budget.ts";
 export { toolGuard } from "./tool-guard.ts";
 export { toolRecovery } from "./tool-recovery.ts";
-export type { Action, Phase, Satellite, SatelliteAny, SatelliteContext } from "./types.ts";
+export type {
+  AfterCall,
+  AfterCallDecision,
+  AfterTool,
+  AfterToolDecision,
+  BeforeCall,
+  BeforeCallDecision,
+  BeforeTool,
+  BeforeToolDecision,
+  CheckpointDecision,
+  Satellite,
+  SatelliteAny,
+  SatelliteCheckpoint,
+  SatelliteContext,
+  SatelliteDecision,
+  SatelliteScope,
+  SatelliteStartContext,
+  ToolError,
+  ToolErrorDecision,
+} from "./types.ts";
 export {
   BlockTool,
   ModifyArgs,
   Pass,
   RecoverToolError,
-  ReplaceResult,
+  ReplaceToolResult,
   SatelliteAbort,
   TransformMessages,
   TransformStepResult,

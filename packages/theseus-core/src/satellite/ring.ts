@@ -1,141 +1,279 @@
 /**
- * SatelliteRing — composed middleware chain for the dispatch loop.
+ * SatelliteRing — ordered dispatch middleware composition.
  *
- * The ring is an Effect service. The dispatch loop calls it at each phase.
- * Individual satellites compose in order — each satellite's output feeds
- * the next. SatelliteAbort short-circuits the chain via Effect error channel.
- *
- * Usage:
- *   const ring = makeSatelliteRing([tokenBudget(50_000), toolGuard(["shell"])])
- *   const layer = Layer.succeed(SatelliteRing, ring)
- *   // provide to dispatch
+ * The ring is static configuration. `openScope` creates one live
+ * SatelliteScope per dispatch; all satellite state is scoped to that dispatch.
  */
 
 import { Context, Effect, Layer, Match, Ref } from "effect";
-import { textPresentation } from "../tool/index.ts";
 import { toolRecovery } from "./tool-recovery.ts";
-import type { Phase, SatelliteAbort, SatelliteAny, SatelliteContext } from "./types.ts";
-import { type Action, Pass } from "./types.ts";
+import type {
+  AfterCall,
+  AfterCallDecision,
+  AfterTool,
+  AfterToolDecision,
+  BeforeCall,
+  BeforeCallDecision,
+  BeforeTool,
+  BeforeToolDecision,
+  CheckpointDecision,
+  SatelliteAbort,
+  SatelliteAny,
+  SatelliteContext,
+  SatelliteDecision,
+  SatelliteRequirements,
+  SatelliteScope,
+  SatelliteStartContext,
+  ToolError,
+  ToolErrorDecision,
+} from "./types.ts";
+import { Pass } from "./types.ts";
 
-// ---------------------------------------------------------------------------
-// SatelliteRing — service definition
-// ---------------------------------------------------------------------------
-
-/** Callback for observing individual satellite decisions. */
 export type SatelliteActionCallback = (
   satellite: string,
   phase: string,
   action: string,
 ) => Effect.Effect<void>;
 
-export class SatelliteRing extends Context.Service<
-  SatelliteRing,
-  {
-    /** Run all satellites for a phase, returning the final action. */
-    readonly run: (
-      phase: Phase,
-      ctx: SatelliteContext,
-      onAction?: SatelliteActionCallback,
-    ) => Effect.Effect<Action, SatelliteAbort>;
-  }
->()("SatelliteRing") {}
+export interface SatelliteRingService<R = never> {
+  readonly openScope: (ctx: SatelliteStartContext) => Effect.Effect<SatelliteScope<R>, never, R>;
+}
 
-// ---------------------------------------------------------------------------
-// applyAction — fold an action back into the phase for the next satellite
-// ---------------------------------------------------------------------------
+export class SatelliteRing extends Context.Service<SatelliteRing, SatelliteRingService<unknown>>()(
+  "SatelliteRing",
+) {}
 
-const applyActionToPhase = (phase: Phase, action: Action): Phase =>
-  Match.value(action).pipe(
+const isTerminalDecision = (decision: SatelliteDecision): boolean =>
+  decision._tag === "BlockTool" || decision._tag === "RecoverToolError";
+
+const phaseName = (phase: string) => phase;
+
+type StateCell = {
+  readonly name: string;
+  readonly ref: Ref.Ref<unknown>;
+  readonly satellite: SatelliteAny;
+};
+
+const closeCells = (cells: ReadonlyArray<StateCell>): Effect.Effect<void, never, unknown> =>
+  Effect.forEach(
+    cells,
+    (cell) =>
+      Effect.gen(function* () {
+        if (!cell.satellite.close) return;
+        const state = yield* Ref.get(cell.ref);
+        yield* cell.satellite.close(state);
+      }),
+    { discard: true },
+  );
+
+const runHook = <Phase, Decision extends SatelliteDecision>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Phase,
+  phaseLabel: string,
+  ctx: SatelliteContext,
+  getHook: (
+    satellite: SatelliteAny,
+  ) =>
+    | ((
+        phase: Phase,
+        ctx: SatelliteContext,
+        state: unknown,
+      ) => Effect.Effect<
+        { readonly decision: Decision; readonly state: unknown },
+        SatelliteAbort,
+        unknown
+      >)
+    | undefined,
+  applyDecision: (phase: Phase, decision: Decision) => Phase,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<Decision, SatelliteAbort, unknown> =>
+  Effect.gen(function* () {
+    let currentPhase = phase;
+    let lastDecision: SatelliteDecision = Pass;
+
+    for (const cell of cells) {
+      const hook = getHook(cell.satellite);
+      if (!hook) continue;
+
+      const state = yield* Ref.get(cell.ref);
+      const { decision, state: nextState } = yield* hook(currentPhase, ctx, state);
+      yield* Ref.set(cell.ref, nextState);
+
+      if (decision._tag === "Pass") continue;
+      if (onAction) yield* onAction(cell.name, phaseName(phaseLabel), decision._tag);
+
+      lastDecision = decision;
+      if (isTerminalDecision(decision)) break;
+      currentPhase = applyDecision(currentPhase, decision);
+    }
+
+    return lastDecision as Decision;
+  });
+
+const applyCheckpointDecision = <Phase extends string>(
+  phase: Phase,
+  _decision: CheckpointDecision,
+): Phase => phase;
+
+const applyBeforeCallDecision = (phase: BeforeCall, decision: BeforeCallDecision): BeforeCall =>
+  Match.value(decision).pipe(
     Match.tag("Pass", () => phase),
-    Match.tag("TransformMessages", (a) =>
-      phase._tag === "BeforeCall" ? { ...phase, messages: a.messages } : phase,
-    ),
-    Match.tag("TransformStepResult", (a) =>
-      phase._tag === "AfterCall" ? { ...phase, stepResult: a.stepResult } : phase,
-    ),
-    Match.tag("ModifyArgs", (a) =>
-      phase._tag === "BeforeTool"
-        ? { ...phase, tool: { ...phase.tool, arguments: JSON.stringify(a.args) } }
-        : phase,
-    ),
-    Match.tag("BlockTool", () => phase),
-    Match.tag("ReplaceResult", (a) => {
-      if (phase._tag !== "AfterTool") return phase;
-      const presentation = textPresentation(a.content);
-      return {
-        ...phase,
-        result: { ...phase.result, presentation, textContent: a.content },
-      };
-    }),
-    Match.tag("RecoverToolError", () => phase),
+    Match.tag("TransformMessages", (d) => ({ messages: d.messages })),
     Match.exhaustive,
   );
 
-// ---------------------------------------------------------------------------
-// isTerminalAction — actions that short-circuit the chain
-// ---------------------------------------------------------------------------
+const applyAfterCallDecision = (phase: AfterCall, decision: AfterCallDecision): AfterCall =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => phase),
+    Match.tag("TransformStepResult", (d) => ({ stepResult: d.stepResult })),
+    Match.exhaustive,
+  );
 
-const isTerminalAction = (action: Action): boolean =>
-  action._tag === "BlockTool" || action._tag === "RecoverToolError";
+const applyBeforeToolDecision = (phase: BeforeTool, decision: BeforeToolDecision): BeforeTool =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => phase),
+    Match.tag("ModifyArgs", (d) => ({
+      tool: { ...phase.tool, arguments: JSON.stringify(d.args) },
+    })),
+    Match.tag("BlockTool", () => phase),
+    Match.exhaustive,
+  );
 
-// ---------------------------------------------------------------------------
-// makeSatelliteRing — compose satellites into a ring
-// ---------------------------------------------------------------------------
+const applyAfterToolDecision = (phase: AfterTool, _decision: AfterToolDecision): AfterTool => phase;
 
-export const makeSatelliteRing = (
-  satellites: ReadonlyArray<SatelliteAny>,
-): Effect.Effect<{
-  readonly run: (
-    phase: Phase,
-    ctx: SatelliteContext,
-    onAction?: SatelliteActionCallback,
-  ) => Effect.Effect<Action, SatelliteAbort>;
-}> =>
-  Effect.gen(function* () {
-    // Each satellite gets its own Ref for state persistence across iterations
-    const stateRefs = yield* Effect.all(satellites.map((s) => Ref.make(s.initial)));
+const applyToolErrorDecision = (phase: ToolError, _decision: ToolErrorDecision): ToolError => phase;
 
-    const run = (
-      phase: Phase,
-      ctx: SatelliteContext,
-      onAction?: SatelliteActionCallback,
-    ): Effect.Effect<Action, SatelliteAbort> =>
+export const makeSatelliteRing = <const Satellites extends ReadonlyArray<SatelliteAny>>(
+  satellites: Satellites,
+): Effect.Effect<
+  SatelliteRingService<SatelliteRequirements<Satellites[number]>>,
+  never,
+  SatelliteRequirements<Satellites[number]>
+> =>
+  Effect.succeed({
+    openScope: (startContext) =>
       Effect.gen(function* () {
-        let currentPhase = phase;
-        let lastAction: Action = Pass;
+        const cells = yield* Effect.forEach(satellites, (satellite) =>
+          Effect.gen(function* () {
+            const state = yield* satellite.open(startContext);
+            const ref = yield* Ref.make<unknown>(state);
+            return { name: satellite.name, ref, satellite };
+          }),
+        );
 
-        for (const [i, satellite] of satellites.entries()) {
-          const ref = stateRefs[i];
-          if (ref === undefined) continue;
-          const state = yield* Ref.get(ref);
+        const scope: SatelliteScope<SatelliteRequirements<Satellites[number]>> = {
+          checkpoint: (checkpoint, ctx, onAction) =>
+            runHook(
+              cells,
+              checkpoint,
+              `checkpoint:${checkpoint}`,
+              ctx,
+              (satellite) => satellite.checkpoint,
+              applyCheckpointDecision,
+              onAction,
+            ) as Effect.Effect<
+              CheckpointDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
 
-          const { action, state: nextState } = yield* satellite.handle(currentPhase, ctx, state);
+          beforeCall: (phase, ctx, onAction) =>
+            runHook(
+              cells,
+              phase,
+              "beforeCall",
+              ctx,
+              (satellite) => satellite.beforeCall,
+              applyBeforeCallDecision,
+              onAction,
+            ) as Effect.Effect<
+              BeforeCallDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
 
-          yield* Ref.set(ref, nextState);
+          afterCall: (phase, ctx, onAction) =>
+            runHook(
+              cells,
+              phase,
+              "afterCall",
+              ctx,
+              (satellite) => satellite.afterCall,
+              applyAfterCallDecision,
+              onAction,
+            ) as Effect.Effect<
+              AfterCallDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
 
-          if (action._tag !== "Pass") {
-            if (onAction) yield* onAction(satellite.name, phase._tag, action._tag);
-            lastAction = action;
-            if (isTerminalAction(action)) break;
-            currentPhase = applyActionToPhase(currentPhase, action);
-          }
-        }
+          beforeTool: (phase, ctx, onAction) =>
+            runHook(
+              cells,
+              phase,
+              "beforeTool",
+              ctx,
+              (satellite) => satellite.beforeTool,
+              applyBeforeToolDecision,
+              onAction,
+            ) as Effect.Effect<
+              BeforeToolDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
 
-        return lastAction;
-      });
+          afterTool: (phase, ctx, onAction) =>
+            runHook(
+              cells,
+              phase,
+              "afterTool",
+              ctx,
+              (satellite) => satellite.afterTool,
+              applyAfterToolDecision,
+              onAction,
+            ) as Effect.Effect<
+              AfterToolDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
 
-    return { run };
+          toolError: (phase, ctx, onAction) =>
+            runHook(
+              cells,
+              phase,
+              "toolError",
+              ctx,
+              (satellite) => satellite.toolError,
+              applyToolErrorDecision,
+              onAction,
+            ) as Effect.Effect<
+              ToolErrorDecision,
+              SatelliteAbort,
+              SatelliteRequirements<Satellites[number]>
+            >,
+
+          close: closeCells(cells) as Effect.Effect<
+            void,
+            never,
+            SatelliteRequirements<Satellites[number]>
+          >,
+        };
+
+        return scope;
+      }) as Effect.Effect<
+        SatelliteScope<SatelliteRequirements<Satellites[number]>>,
+        never,
+        SatelliteRequirements<Satellites[number]>
+      >,
   });
 
-// ---------------------------------------------------------------------------
-// Layers
-// ---------------------------------------------------------------------------
+export const EmptySatelliteRing = Layer.effect(SatelliteRing)(makeSatelliteRing([]));
 
-/** Default ring — includes tool error recovery. */
+/** Default ring — explicit preset with built-in tool error recovery. */
 export const DefaultSatelliteRing = Layer.effect(SatelliteRing)(makeSatelliteRing([toolRecovery]));
 
-/** Build a ring Layer from a list of satellites. Appends toolRecovery as fallback. */
-export const SatelliteRingLive = (
-  satellites: ReadonlyArray<SatelliteAny>,
-): Layer.Layer<SatelliteRing> =>
-  Layer.effect(SatelliteRing)(makeSatelliteRing([...satellites, toolRecovery]));
+/** Build exactly the requested ring. Append built-ins explicitly at the call site if needed. */
+export const SatelliteRingLive = <const Satellites extends ReadonlyArray<SatelliteAny>>(
+  satellites: Satellites,
+): Layer.Layer<SatelliteRing, never, SatelliteRequirements<Satellites[number]>> =>
+  Layer.effect(SatelliteRing)(makeSatelliteRing(satellites));

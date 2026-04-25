@@ -1,14 +1,16 @@
 /**
  * Dispatch — namespace barrel for `import * as Dispatch from "@theseus.run/core/Dispatch"`
  *
- * The atomic AI invocation unit. Give it a context, a task, and tools —
- * get a result back. The tool-calling loop lives inside.
+ * Raw LLM/tool loop. Give it a DispatchSpec, a task, and tools; it calls the
+ * model, executes requested tools, and returns final assistant content when the
+ * model stops requesting tools.
  *
  * Usage:
  *   import * as Dispatch from "@theseus.run/core/Dispatch"
  *
- *   const handle = Dispatch.dispatch(blueprint, task)
- *   const result = Dispatch.dispatchAwait(blueprint, task)
+ *   const spec: Dispatch.DispatchSpec = { name, systemPrompt, tools }
+ *   const handle = Dispatch.dispatch(spec, task)
+ *   const result = Dispatch.dispatchAwait(spec, task)
  */
 
 // ---------------------------------------------------------------------------

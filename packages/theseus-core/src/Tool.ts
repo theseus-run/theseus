@@ -1,8 +1,8 @@
 /**
  * Tool — namespace barrel for `import * as Tool from "@theseus.run/core/Tool"`
  *
- * The boundary between AI reasoning and the world. Every step of the
- * pipeline (decode, execute, present) is an Effect.
+ * Primitive executable capability. A tool declares schemas for input,
+ * success output, and known failure, then runs as an Effect.
  *
  * Usage:
  *   import * as Tool from "@theseus.run/core/Tool"

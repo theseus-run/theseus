@@ -1,15 +1,15 @@
 /**
  * Capsule — namespace barrel for `import * as Capsule from "@theseus.run/core/Capsule"`
  *
- * The mission's append-only log. Exists for the human reviewing the voyage —
- * debugging, extracting improvement patterns, feeding the next mission.
+ * Memory/log substrate for missions and runtimes. Capsule is append-only event
+ * history plus artifacts; higher-level protocols decide what to record.
  *
  * Usage:
  *   import * as Capsule from "@theseus.run/core/Capsule"
  *
  *   const layer = Capsule.CapsuleLive("my-mission")
  *   const capsule = yield* Capsule.Capsule
- *   yield* capsule.log({ type: "agent.note", by: "forge", data: { ... } })
+ *   yield* capsule.log({ type: "mission.note", by: "runtime", data: { ... } })
  */
 
 // ---------------------------------------------------------------------------

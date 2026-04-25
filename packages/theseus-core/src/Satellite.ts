@@ -1,9 +1,9 @@
 /**
  * Satellite — namespace barrel for `import * as Satellite from "@theseus.run/core/Satellite"`
  *
- * Pipeline middleware for the dispatch loop. Satellites intercept at
- * well-defined phases (BeforeCall, AfterCall, BeforeTool, AfterTool, ToolError)
- * and can transform, block, or abort the pipeline.
+ * Middleware/observation/policy substrate for the dispatch loop. Satellites
+ * intercept at well-defined phases and can transform, block, recover, or abort
+ * the pipeline.
  *
  * Usage:
  *   import * as Satellite from "@theseus.run/core/Satellite"
@@ -17,11 +17,24 @@
 // ---------------------------------------------------------------------------
 
 export type {
-  Action,
-  Phase,
+  AfterCall,
+  AfterCallDecision,
+  AfterTool,
+  AfterToolDecision,
+  BeforeCall,
+  BeforeCallDecision,
+  BeforeTool,
+  BeforeToolDecision,
+  CheckpointDecision,
   Satellite,
   SatelliteAny,
+  SatelliteCheckpoint,
   SatelliteContext,
+  SatelliteDecision,
+  SatelliteScope,
+  SatelliteStartContext,
+  ToolError,
+  ToolErrorDecision,
 } from "./satellite/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +43,7 @@ export type {
 
 export {
   DefaultSatelliteRing,
+  EmptySatelliteRing,
   makeSatelliteRing,
   SatelliteRing,
   SatelliteRingLive,
@@ -44,7 +58,7 @@ export {
   ModifyArgs,
   Pass,
   RecoverToolError,
-  ReplaceResult,
+  ReplaceToolResult,
   TransformMessages,
   TransformStepResult,
 } from "./satellite/index.ts";

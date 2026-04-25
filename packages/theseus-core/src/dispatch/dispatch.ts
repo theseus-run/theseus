@@ -27,9 +27,8 @@ import {
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
-import type { SatelliteAbort } from "../satellite/types.ts";
+import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
-import { textPresentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, step, tryParseArgs } from "./step.ts";
 import type {
@@ -46,24 +45,17 @@ import type {
 } from "./types.ts";
 import { DispatchCycleExceeded, DispatchInterrupted, DispatchToolFailed } from "./types.ts";
 
-// Build a synthetic ToolCallResult from a plain text string (used by satellites).
-const syntheticResult = (
+const presentationResult = (
   tc: { id: string; name: string },
   args: unknown,
-  content: string,
-  isError = false,
-): ToolCallResult => {
-  const presentation: Presentation = isError
-    ? textPresentation(content, { isError: true })
-    : textPresentation(content);
-  return {
-    callId: tc.id,
-    name: tc.name,
-    args,
-    presentation,
-    textContent: presentationToText(presentation),
-  };
-};
+  presentation: Presentation,
+): ToolCallResult => ({
+  callId: tc.id,
+  name: tc.name,
+  args,
+  presentation,
+  textContent: presentationToText(presentation),
+});
 
 // ---------------------------------------------------------------------------
 // addUsage — accumulate token counts
@@ -132,6 +124,12 @@ export const dispatch = <R = never>(
     const resultDeferred = yield* Deferred.make<DispatchOutput, DispatchError>();
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
     const log = yield* DispatchLog;
+    const ring = yield* SatelliteRing;
+    const satelliteScope = yield* ring.openScope({
+      dispatchId,
+      name: spec.name,
+      task,
+    }) as Effect.Effect<SatelliteScope<R>, never, R>;
 
     const emit = (event: DispatchEvent): Effect.Effect<void> =>
       Queue.offer(eventQueue, event).pipe(
@@ -196,8 +194,7 @@ export const dispatch = <R = never>(
           yield* Ref.set(messagesRef, next);
           yield* log.snapshot(dispatchId, iterations, next, usage);
 
-          const ring = yield* SatelliteRing;
-          const satCtx = { name: spec.name, iteration: iterations };
+          const satCtx = { dispatchId, name: spec.name, task, iteration: iterations };
           const onSatAction = (satellite: string, phase: string, action: string) =>
             emit({
               _tag: "SatelliteAction",
@@ -208,14 +205,24 @@ export const dispatch = <R = never>(
               action,
             });
 
+          const iterationStart = yield* satelliteScope.checkpoint(
+            "iteration-start",
+            satCtx,
+            onSatAction,
+          );
+          const checkpointMessages =
+            iterationStart._tag === "TransformMessages" ? iterationStart.messages : next;
+
           // --- Phase: BeforeCall ---
-          const beforeCallAction = yield* ring.run(
-            { _tag: "BeforeCall", messages: next },
+          const beforeCallAction = yield* satelliteScope.beforeCall(
+            { messages: checkpointMessages },
             satCtx,
             onSatAction,
           );
           const callMessages =
-            beforeCallAction._tag === "TransformMessages" ? beforeCallAction.messages : next;
+            beforeCallAction._tag === "TransformMessages"
+              ? beforeCallAction.messages
+              : checkpointMessages;
 
           yield* emit({ _tag: "Calling", name: spec.name, iteration: iterations });
 
@@ -245,8 +252,8 @@ export const dispatch = <R = never>(
           }
 
           // --- Phase: AfterCall ---
-          const afterCallAction = yield* ring.run(
-            { _tag: "AfterCall", stepResult: rawResult },
+          const afterCallAction = yield* satelliteScope.afterCall(
+            { stepResult: rawResult },
             satCtx,
             onSatAction,
           );
@@ -270,84 +277,71 @@ export const dispatch = <R = never>(
             args: tryParseArgs(tc),
           }));
 
-          // --- Phase: BeforeTool + execute + ToolError + AfterTool (per tool) ---
-          const calls = yield* Effect.all(
-            result.toolCalls.map((tc) =>
-              Effect.gen(function* () {
-                // BeforeTool
-                const beforeAction = yield* ring.run(
-                  { _tag: "BeforeTool", tool: tc },
-                  satCtx,
-                  onSatAction,
-                );
+          yield* satelliteScope.checkpoint("before-tools", satCtx, onSatAction);
 
-                if (beforeAction._tag === "BlockTool") {
-                  return syntheticResult(tc, undefined, beforeAction.content);
-                }
+          // Sequential by design: satellite state, tool effects, and events follow model order.
+          const calls: ToolCallResult[] = [];
+          for (const tc of result.toolCalls) {
+            const beforeAction = yield* satelliteScope.beforeTool(
+              { tool: tc },
+              satCtx,
+              onSatAction,
+            );
 
-                const effectiveTc =
-                  beforeAction._tag === "ModifyArgs"
-                    ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
-                    : tc;
-
-                // Execute tool
-                const callResult: ToolCallResult = yield* runToolCall<R>(
-                  spec.tools,
-                  effectiveTc,
-                ).pipe(
-                  Effect.catch((err: ToolCallError) =>
-                    emit({
-                      _tag: "ToolError",
-                      name: spec.name,
-                      iteration: iterations,
-                      tool: tc.name,
-                      error: err,
-                    }).pipe(
-                      Effect.flatMap(() =>
-                        ring
-                          .run({ _tag: "ToolError", tool: tc, error: err }, satCtx, onSatAction)
-                          .pipe(
-                            Effect.flatMap((action) =>
-                              action._tag === "RecoverToolError"
-                                ? Effect.succeed(action.result)
-                                : Effect.fail(
-                                    new DispatchToolFailed({
-                                      dispatchId,
-                                      name: spec.name,
-                                      tool: tc.name,
-                                      error: err,
-                                    }),
-                                  ),
+            const callResult: ToolCallResult =
+              beforeAction._tag === "BlockTool"
+                ? presentationResult(tc, tryParseArgs(tc), beforeAction.presentation)
+                : yield* runToolCall<R>(
+                    spec.tools,
+                    beforeAction._tag === "ModifyArgs"
+                      ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
+                      : tc,
+                  ).pipe(
+                    Effect.catch((err: ToolCallError) =>
+                      emit({
+                        _tag: "ToolError",
+                        name: spec.name,
+                        iteration: iterations,
+                        tool: tc.name,
+                        error: err,
+                      }).pipe(
+                        Effect.flatMap(() =>
+                          satelliteScope
+                            .toolError({ tool: tc, error: err }, satCtx, onSatAction)
+                            .pipe(
+                              Effect.flatMap((action) =>
+                                action._tag === "RecoverToolError"
+                                  ? Effect.succeed(action.result)
+                                  : Effect.fail(
+                                      new DispatchToolFailed({
+                                        dispatchId,
+                                        name: spec.name,
+                                        tool: tc.name,
+                                        error: err,
+                                      }),
+                                    ),
+                              ),
                             ),
-                          ),
+                        ),
                       ),
                     ),
-                  ),
-                );
+                  );
 
-                // AfterTool
-                const afterAction = yield* ring.run(
-                  { _tag: "AfterTool", tool: tc, result: callResult },
-                  satCtx,
-                  onSatAction,
-                );
+            const afterAction = yield* satelliteScope.afterTool(
+              { tool: tc, result: callResult },
+              satCtx,
+              onSatAction,
+            );
 
-                return afterAction._tag === "ReplaceResult"
-                  ? syntheticResult(
-                      tc,
-                      callResult.args,
-                      afterAction.content,
-                      callResult.presentation.isError ?? false,
-                    )
-                  : callResult;
-              }).pipe(
-                Effect.withSpan("tool-call", {
-                  attributes: { "tool.name": tc.name, "tool.id": tc.id },
-                }),
-              ),
-            ),
-            { concurrency: "unbounded" },
-          );
+            const finalResult =
+              afterAction._tag === "ReplaceToolResult"
+                ? presentationResult(tc, callResult.args, afterAction.presentation)
+                : callResult;
+
+            calls.push(finalResult);
+          }
+
+          yield* satelliteScope.checkpoint("after-tools", satCtx, onSatAction);
 
           yield* emitAll(calls, (c) => ({
             _tag: "ToolResult" as const,
@@ -449,6 +443,7 @@ export const dispatch = <R = never>(
         }),
         Effect.annotateLogs("dispatchId", dispatchId),
         Effect.annotateLogs("dispatchName", spec.name),
+        Effect.ensuring(satelliteScope.close),
       ),
     );
 
