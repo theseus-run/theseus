@@ -46,16 +46,17 @@ class CopilotParseError extends Data.TaggedError("CopilotParseError")<{
   readonly cause?: unknown;
 }> {}
 
-type CopilotError = CopilotAuthError | CopilotHttpError | CopilotParseError;
+class CopilotEncodeError extends Data.TaggedError("CopilotEncodeError")<{
+  readonly cause?: unknown;
+}> {}
 
-/** Best-effort JSON parse with fallback. */
-const safeParseJson = (raw: string, fallback: unknown = {}): unknown => {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
-};
+type CopilotError = CopilotAuthError | CopilotHttpError | CopilotParseError | CopilotEncodeError;
+
+const parseToolParams = (raw: string): Effect.Effect<unknown, CopilotParseError> =>
+  Effect.try({
+    try: () => JSON.parse(raw),
+    catch: (cause) => new CopilotParseError({ cause }),
+  });
 
 // ---------------------------------------------------------------------------
 // Token cache
@@ -119,34 +120,7 @@ interface ResponsesSSEEvent {
   item?: { type?: string; call_id?: string; name?: string; id?: string };
 }
 
-interface PromptMessageLike {
-  readonly role: string;
-  readonly text?: string;
-  readonly content?: unknown;
-  readonly toolCallId?: string;
-}
-
-interface PromptPartLike {
-  readonly type?: string;
-  readonly text?: string;
-  readonly id?: string;
-  readonly name?: string;
-  readonly params?: unknown;
-  readonly result?: unknown;
-}
-
-interface ToolLike {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Record<string, unknown>;
-}
-
-const asPromptMessage = (msg: unknown): PromptMessageLike => msg as PromptMessageLike;
-
-const promptParts = (msg: PromptMessageLike): PromptPartLike[] =>
-  Array.isArray(msg.content) ? (msg.content as PromptPartLike[]) : [msg];
-
-const textFromParts = (parts: ReadonlyArray<PromptPartLike>): string =>
+const textFromParts = (parts: ReadonlyArray<Prompt.Part>): string =>
   parts
     .filter((part) => part.type === "text")
     .map((part) => part.text ?? "")
@@ -155,98 +129,164 @@ const textFromParts = (parts: ReadonlyArray<PromptPartLike>): string =>
 const streamPart = (part: unknown): Response.StreamPartEncoded =>
   part as Response.StreamPartEncoded;
 
+const encodeJson = (value: unknown, fallback: unknown): Effect.Effect<string, CopilotEncodeError> =>
+  Effect.try({
+    try: () => JSON.stringify(value ?? fallback) ?? "null",
+    catch: (cause) => new CopilotEncodeError({ cause }),
+  });
+
+const unsupportedPromptPart = (
+  role: Prompt.Message["role"],
+  part: Prompt.Part,
+): CopilotEncodeError =>
+  new CopilotEncodeError({ cause: `Unsupported ${role} prompt part: ${part.type}` });
+
 // ---------------------------------------------------------------------------
 // Prompt → wire format converters
 // ---------------------------------------------------------------------------
 
 /** Convert Prompt messages to /chat/completions wire format. */
-const promptToChatCompletions = (prompt: Prompt.Prompt): unknown[] =>
-  prompt.content.map((msg) =>
-    Match.value(msg.role).pipe(
-      Match.when("system", () => ({ role: "system", content: asPromptMessage(msg).text ?? "" })),
-      Match.when("user", () => {
-        const message = asPromptMessage(msg);
-        const text = textFromParts(promptParts(message));
-        return { role: "user", content: text || message.text || "" };
+const promptToChatCompletions = (
+  prompt: Prompt.Prompt,
+): Effect.Effect<unknown[], CopilotEncodeError> =>
+  Effect.forEach(prompt.content, (msg) =>
+    Match.value(msg).pipe(
+      Match.when({ role: "system" }, (message) =>
+        Effect.succeed({ role: "system", content: message.content }),
+      ),
+      Match.when({ role: "user" }, (message) => {
+        const unsupported = message.content.find((part) => part.type !== "text");
+        if (unsupported) return Effect.fail(unsupportedPromptPart(message.role, unsupported));
+        return Effect.succeed({ role: "user", content: textFromParts(message.content) });
       }),
-      Match.when("assistant", () => {
-        const parts = promptParts(asPromptMessage(msg));
-        const textParts = parts.filter((p) => p.type === "text");
-        const toolCallParts = parts.filter((p) => p.type === "tool-call");
-        const content = textFromParts(textParts) || null;
-        if (toolCallParts.length > 0) {
-          return {
-            role: "assistant",
-            content,
-            tool_calls: toolCallParts.map((tc) => ({
-              id: tc.id,
-              type: "function",
-              function: { name: tc.name, arguments: JSON.stringify(tc.params ?? {}) },
-            })),
-          };
-        }
-        return { role: "assistant", content };
-      }),
-      Match.when("tool", () => {
-        const message = asPromptMessage(msg);
-        const result = promptParts(message).find((p) => p.type === "tool-result");
-        return {
-          role: "tool",
-          tool_call_id: result?.id ?? message.toolCallId ?? "",
-          content:
+      Match.when({ role: "assistant" }, (message) =>
+        Effect.gen(function* () {
+          const unsupported = message.content.find(
+            (part) => part.type !== "text" && part.type !== "tool-call",
+          );
+          if (unsupported) {
+            return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+          }
+          const parts = message.content;
+          const textParts = parts.filter((p) => p.type === "text");
+          const toolCallParts = parts.filter((p) => p.type === "tool-call");
+          const content = textFromParts(textParts) || null;
+          if (toolCallParts.length > 0) {
+            const toolCalls = yield* Effect.forEach(toolCallParts, (tc) =>
+              encodeJson(tc.params, {}).pipe(
+                Effect.map((args) => ({
+                  id: tc.id,
+                  type: "function",
+                  function: { name: tc.name, arguments: args },
+                })),
+              ),
+            );
+            return {
+              role: "assistant",
+              content,
+              tool_calls: toolCalls,
+            };
+          }
+          return { role: "assistant", content };
+        }),
+      ),
+      Match.when({ role: "tool" }, (message) =>
+        Effect.gen(function* () {
+          const result = message.content.find((p) => p.type === "tool-result");
+          if (!result) {
+            const unsupported = message.content[0];
+            if (unsupported) {
+              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+            }
+          }
+          const content =
             typeof result?.result === "string"
               ? result.result
-              : JSON.stringify(result?.result ?? ""),
-        };
-      }),
-      Match.orElse(() => ({ role: "user", content: "" })),
+              : yield* encodeJson(result?.result, "");
+          return {
+            role: "tool",
+            tool_call_id: result?.id ?? "",
+            content,
+          };
+        }),
+      ),
+      Match.exhaustive,
     ),
   );
 
 /** Convert Prompt messages to /responses wire format. */
-const promptToResponsesInput = (prompt: Prompt.Prompt): unknown[] =>
-  prompt.content.flatMap((msg) =>
-    Match.value(msg.role).pipe(
-      Match.when("system", () => [{ role: "system", content: asPromptMessage(msg).text ?? "" }]),
-      Match.when("user", () => {
-        const message = asPromptMessage(msg);
-        const text = textFromParts(promptParts(message));
-        return [{ role: "user", content: text || message.text || "" }];
-      }),
-      Match.when("assistant", () => {
-        const parts = promptParts(asPromptMessage(msg));
-        const textParts = parts.filter((p) => p.type === "text");
-        const toolCallParts = parts.filter((p) => p.type === "tool-call");
-        const items: unknown[] = [];
-        const text = textFromParts(textParts);
-        if (text) items.push({ role: "assistant", content: text });
-        items.push(
-          ...toolCallParts.map((tc) => ({
-            type: "function_call",
-            call_id: tc.id,
-            name: tc.name,
-            arguments: JSON.stringify(tc.params ?? {}),
-          })),
-        );
-        return items;
-      }),
-      Match.when("tool", () => {
-        const message = asPromptMessage(msg);
-        return promptParts(message)
-          .filter((p) => p.type === "tool-result")
-          .map((r) => ({
-            type: "function_call_output",
-            call_id: r.id ?? message.toolCallId ?? "",
-            output: typeof r.result === "string" ? r.result : JSON.stringify(r.result ?? ""),
-          }));
-      }),
-      Match.orElse(() => []),
-    ),
-  );
+const promptToResponsesInput = (
+  prompt: Prompt.Prompt,
+): Effect.Effect<unknown[], CopilotEncodeError> =>
+  Effect.gen(function* () {
+    const itemGroups = yield* Effect.forEach(prompt.content, (msg) =>
+      Match.value(msg).pipe(
+        Match.when({ role: "system" }, (message) =>
+          Effect.succeed([{ role: "system", content: message.content }]),
+        ),
+        Match.when({ role: "user" }, (message) => {
+          const unsupported = message.content.find((part) => part.type !== "text");
+          if (unsupported) return Effect.fail(unsupportedPromptPart(message.role, unsupported));
+          return Effect.succeed([{ role: "user", content: textFromParts(message.content) }]);
+        }),
+        Match.when({ role: "assistant" }, (message) =>
+          Effect.gen(function* () {
+            const unsupported = message.content.find(
+              (part) => part.type !== "text" && part.type !== "tool-call",
+            );
+            if (unsupported) {
+              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+            }
+            const parts = message.content;
+            const textParts = parts.filter((p) => p.type === "text");
+            const toolCallParts = parts.filter((p) => p.type === "tool-call");
+            const items: unknown[] = [];
+            const text = textFromParts(textParts);
+            if (text) items.push({ role: "assistant", content: text });
+            const toolCalls = yield* Effect.forEach(toolCallParts, (tc) =>
+              encodeJson(tc.params, {}).pipe(
+                Effect.map((args) => ({
+                  type: "function_call",
+                  call_id: tc.id,
+                  name: tc.name,
+                  arguments: args,
+                })),
+              ),
+            );
+            items.push(...toolCalls);
+            return items;
+          }),
+        ),
+        Match.when({ role: "tool" }, (message) =>
+          Effect.gen(function* () {
+            const unsupported = message.content.find((part) => part.type !== "tool-result");
+            if (unsupported) {
+              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+            }
+            return yield* Effect.forEach(
+              message.content.filter((p) => p.type === "tool-result"),
+              (r) =>
+                Effect.gen(function* () {
+                  const output =
+                    typeof r.result === "string" ? r.result : yield* encodeJson(r.result, "");
+                  return {
+                    type: "function_call_output",
+                    call_id: r.id,
+                    output,
+                  };
+                }),
+            );
+          }),
+        ),
+        Match.exhaustive,
+      ),
+    );
+    return itemGroups.flat();
+  });
 
-/** Get the JSON schema for a tool — reads inputSchema (set by bridge) or falls back to getJsonSchema. */
+/** Get the JSON schema for a tool through Effect/AI's public schema accessor. */
 const getToolSchema = (t: AiTool.Any): Record<string, unknown> =>
-  (t as ToolLike).inputSchema ?? AiTool.getJsonSchema(t) ?? { type: "object", properties: {} };
+  AiTool.getJsonSchema(t) ?? { type: "object", properties: {} };
 
 /** Convert AI Tool definitions to /chat/completions tools format. */
 const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
@@ -254,7 +294,7 @@ const aiToolsToChatCompletionsTools = (tools: ReadonlyArray<AiTool.Any>): unknow
     type: "function",
     function: {
       name: t.name,
-      description: (t as ToolLike).description ?? "",
+      description: AiTool.getDescription(t) ?? "",
       parameters: getToolSchema(t),
     },
   }));
@@ -264,7 +304,7 @@ const aiToolsToResponsesTools = (tools: ReadonlyArray<AiTool.Any>): unknown[] =>
   tools.map((t) => ({
     type: "function",
     name: t.name,
-    description: (t as ToolLike).description ?? "",
+    description: AiTool.getDescription(t) ?? "",
     parameters: getToolSchema(t),
   }));
 
@@ -290,95 +330,111 @@ const makeFinishPart = (
   response: undefined,
 });
 
-const parseChatCompletionsToResponseParts = (data: ChatCompletionsWire): Response.PartEncoded[] => {
-  const choice = data.choices?.[0];
-  const message = choice?.message;
-  const finishReason = choice?.finish_reason ?? "stop";
-  const rawUsage = data.usage;
-  const parts: Response.PartEncoded[] = [];
+const parseChatCompletionsToResponseParts = (
+  data: ChatCompletionsWire,
+): Effect.Effect<Response.PartEncoded[], CopilotParseError> =>
+  Effect.gen(function* () {
+    const choice = data.choices?.[0];
+    const message = choice?.message;
+    const finishReason = choice?.finish_reason ?? "stop";
+    const rawUsage = data.usage;
+    const parts: Response.PartEncoded[] = [];
 
-  if (message?.reasoning_content) {
-    parts.push({ type: "reasoning", text: message.reasoning_content });
-  }
+    if (message?.reasoning_content) {
+      parts.push({ type: "reasoning", text: message.reasoning_content });
+    }
 
-  if (finishReason === "tool_calls" && message?.tool_calls) {
-    parts.push(
-      ...message.tool_calls.map(
-        (tc) =>
-          ({
+    if (message?.content) {
+      parts.push({ type: "text", text: message.content });
+    }
+
+    if (finishReason === "tool_calls" && message?.tool_calls) {
+      const toolCalls = yield* Effect.forEach(message.tool_calls, (tc) =>
+        Effect.gen(function* () {
+          const params = yield* parseToolParams(tc.function.arguments);
+          return {
             type: "tool-call" as const,
             id: tc.id,
             name: tc.function.name,
-            params: safeParseJson(tc.function.arguments),
-          }) as Response.ToolCallPartEncoded,
+            params,
+          } satisfies Response.ToolCallPartEncoded;
+        }),
+      );
+      parts.push(...toolCalls);
+    } else if (!message?.content) {
+      parts.push({ type: "text", text: "" });
+    }
+
+    parts.push(
+      makeFinishPart(
+        finishReason === "tool_calls" ? "tool-calls" : "stop",
+        rawUsage?.prompt_tokens ?? 0,
+        rawUsage?.completion_tokens ?? 0,
       ),
     );
-  } else {
-    parts.push({ type: "text", text: message?.content ?? "" });
-  }
 
-  parts.push(
-    makeFinishPart(
-      finishReason === "tool_calls" ? "tool-calls" : "stop",
-      rawUsage?.prompt_tokens ?? 0,
-      rawUsage?.completion_tokens ?? 0,
-    ),
-  );
+    return parts;
+  });
 
-  return parts;
-};
+const parseResponsesResponseToResponseParts = (
+  data: ResponsesWire,
+): Effect.Effect<Response.PartEncoded[], CopilotParseError> =>
+  Effect.gen(function* () {
+    const output = data.output ?? [];
+    const rawUsage = data.usage;
+    const parts: Response.PartEncoded[] = [];
+    let hasToolCalls = false;
 
-const parseResponsesResponseToResponseParts = (data: ResponsesWire): Response.PartEncoded[] => {
-  const output = data.output ?? [];
-  const rawUsage = data.usage;
-  const parts: Response.PartEncoded[] = [];
-  let hasToolCalls = false;
+    const itemGroups = yield* Effect.forEach(
+      output,
+      (item): Effect.Effect<Response.PartEncoded[], CopilotParseError> =>
+        Match.value(item.type).pipe(
+          Match.when("function_call", () =>
+            Effect.gen(function* () {
+              hasToolCalls = true;
+              const params = yield* parseToolParams((item["arguments"] as string) ?? "{}");
+              return [
+                {
+                  type: "tool-call" as const,
+                  id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
+                  name: (item["name"] as string) ?? "",
+                  params,
+                } satisfies Response.ToolCallPartEncoded,
+              ];
+            }),
+          ),
+          Match.when("reasoning", () => {
+            const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
+            const text = content
+              .filter((p) => p.type === "reasoning_text" && p.text)
+              .map((p) => p.text ?? "")
+              .join("");
+            return Effect.succeed(text ? [{ type: "reasoning" as const, text }] : []);
+          }),
+          Match.when("message", () => {
+            const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
+            const text = content
+              .filter((p) => p.type === "output_text" && p.text)
+              .map((p) => p.text ?? "")
+              .join("");
+            return Effect.succeed(text ? [{ type: "text" as const, text }] : []);
+          }),
+          Match.orElse(() => Effect.succeed([])),
+        ),
+    );
+    const items = itemGroups.flat();
+    parts.push(...items);
 
-  const items = output.flatMap((item): Response.PartEncoded[] =>
-    Match.value(item.type).pipe(
-      Match.when("function_call", (): Response.PartEncoded[] => {
-        hasToolCalls = true;
-        const params = safeParseJson((item["arguments"] as string) ?? "{}");
-        return [
-          {
-            type: "tool-call" as const,
-            id: sanitizeCallId((item["call_id"] as string) || (item["id"] as string) || ""),
-            name: (item["name"] as string) ?? "",
-            params,
-          } as Response.ToolCallPartEncoded,
-        ];
-      }),
-      Match.when("reasoning", (): Response.PartEncoded[] => {
-        const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
-        const text = content
-          .filter((p) => p.type === "reasoning_text" && p.text)
-          .map((p) => p.text ?? "")
-          .join("");
-        return text ? [{ type: "reasoning" as const, text }] : [];
-      }),
-      Match.when("message", (): Response.PartEncoded[] => {
-        const content = (item["content"] as Array<{ type: string; text?: string }>) ?? [];
-        const text = content
-          .filter((p) => p.type === "output_text" && p.text)
-          .map((p) => p.text ?? "")
-          .join("");
-        return text ? [{ type: "text" as const, text }] : [];
-      }),
-      Match.orElse((): Response.PartEncoded[] => []),
-    ),
-  );
-  parts.push(...items);
+    parts.push(
+      makeFinishPart(
+        hasToolCalls ? "tool-calls" : "stop",
+        rawUsage?.input_tokens ?? 0,
+        rawUsage?.output_tokens ?? 0,
+      ),
+    );
 
-  parts.push(
-    makeFinishPart(
-      hasToolCalls ? "tool-calls" : "stop",
-      rawUsage?.input_tokens ?? 0,
-      rawUsage?.output_tokens ?? 0,
-    ),
-  );
-
-  return parts;
-};
+    return parts;
+  });
 
 // ---------------------------------------------------------------------------
 // SSE parsing
@@ -466,11 +522,13 @@ class StreamAccumulator {
     );
   }
 
-  addResponsesEvent(data: ResponsesSSEEvent): Response.StreamPartEncoded | null {
+  addResponsesEvent(
+    data: ResponsesSSEEvent,
+  ): Effect.Effect<Response.StreamPartEncoded | null, CopilotParseError> {
     const eventType = data.type ?? "";
     return Match.value(eventType).pipe(
       Match.when("response.output_item.added", () => {
-        if (data.item?.type !== "function_call") return null;
+        if (data.item?.type !== "function_call") return Effect.succeed(null);
         const callId = sanitizeCallId(data.item.call_id ?? data.item.id ?? `call_${this.now()}`);
         this.responsesCallMap.set(callId, {
           id: callId,
@@ -479,7 +537,7 @@ class StreamAccumulator {
           done: false,
         });
         this.responsesCallOrder.push(callId);
-        return null;
+        return Effect.succeed(null);
       }),
       Match.when("response.function_call_arguments.done", () => {
         const callId = data.call_id ? sanitizeCallId(data.call_id) : undefined;
@@ -489,79 +547,91 @@ class StreamAccumulator {
             .map((key) => this.responsesCallMap.get(key))
             .find((candidate) => candidate && !candidate.done);
         }
-        if (entry) {
-          entry.args = data.arguments ?? entry.args;
-          entry.done = true;
-          const params = safeParseJson(entry.args);
-          return {
-            type: "tool-call",
-            id: entry.id,
-            name: entry.name || data.name || "",
-            params,
-          } as unknown as Response.StreamPartEncoded;
-        }
-        return null;
+        if (!entry) return Effect.succeed(null);
+        entry.args = data.arguments ?? entry.args;
+        entry.done = true;
+        return parseToolParams(entry.args).pipe(
+          Effect.map(
+            (params) =>
+              ({
+                type: "tool-call",
+                id: entry.id,
+                name: entry.name || data.name || "",
+                params,
+              }) as unknown as Response.StreamPartEncoded,
+          ),
+        );
       }),
       Match.when("response.output_text.delta", () => {
-        if (!data.delta) return null;
+        if (!data.delta) return Effect.succeed(null);
         if (!this.textId) {
           this.textId = `text_${this.now()}`;
         }
-        return streamPart({ type: "text-delta", id: this.textId, delta: data.delta });
+        return Effect.succeed(
+          streamPart({ type: "text-delta", id: this.textId, delta: data.delta }),
+        );
       }),
       Match.when("response.reasoning_text.delta", () => {
-        if (!data.delta) return null;
+        if (!data.delta) return Effect.succeed(null);
         if (!this.reasoningId) {
           this.reasoningId = `reasoning_${this.now()}`;
         }
-        return streamPart({ type: "reasoning-delta", id: this.reasoningId, delta: data.delta });
+        return Effect.succeed(
+          streamPart({ type: "reasoning-delta", id: this.reasoningId, delta: data.delta }),
+        );
       }),
-      Match.orElse(() => null),
+      Match.orElse(() => Effect.succeed(null)),
     );
   }
 
-  buildFinalParts(): Response.StreamPartEncoded[] {
-    const final: Response.StreamPartEncoded[] = [];
+  buildFinalParts(): Effect.Effect<Response.StreamPartEncoded[], CopilotParseError> {
+    const acc = this;
+    return Effect.gen(function* () {
+      const final: Response.StreamPartEncoded[] = [];
 
-    // Close open text/reasoning streams
-    if (this.textId) final.push(streamPart({ type: "text-end", id: this.textId }));
-    if (this.reasoningId) final.push(streamPart({ type: "reasoning-end", id: this.reasoningId }));
+      // Close open text/reasoning streams
+      if (acc.textId) final.push(streamPart({ type: "text-end", id: acc.textId }));
+      if (acc.reasoningId) final.push(streamPart({ type: "reasoning-end", id: acc.reasoningId }));
 
-    // Finalize chat/completions tool calls from index map
-    final.push(
-      ...[...this.indexMap.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(
-          ([, tc]) =>
-            ({
+      // Finalize chat/completions tool calls from index map
+      const chatToolCalls = yield* Effect.forEach(
+        [...acc.indexMap.entries()].sort(([a], [b]) => a - b),
+        ([, tc]) =>
+          Effect.gen(function* () {
+            const params = yield* parseToolParams(tc.args);
+            return {
               type: "tool-call" as const,
               id: tc.id,
               name: tc.name,
-              params: safeParseJson(tc.args),
-            }) as unknown as Response.StreamPartEncoded,
-        ),
-    );
+              params,
+            } as unknown as Response.StreamPartEncoded;
+          }),
+      );
+      final.push(...chatToolCalls);
 
-    // Flush unfinished responses tool calls
-    final.push(
-      ...this.responsesCallOrder
-        .map((key) => this.responsesCallMap.get(key))
-        .filter((tc): tc is NonNullable<typeof tc> => !!tc && !tc.done)
-        .map(
-          (tc) =>
-            ({
+      // Flush unfinished responses tool calls
+      const responseToolCalls = yield* Effect.forEach(
+        acc.responsesCallOrder
+          .map((key) => acc.responsesCallMap.get(key))
+          .filter((tc): tc is NonNullable<typeof tc> => !!tc && !tc.done),
+        (tc) =>
+          Effect.gen(function* () {
+            const params = yield* parseToolParams(tc.args);
+            return {
               type: "tool-call" as const,
               id: tc.id,
               name: tc.name,
-              params: safeParseJson(tc.args),
-            }) as unknown as Response.StreamPartEncoded,
-        ),
-    );
+              params,
+            } as unknown as Response.StreamPartEncoded;
+          }),
+      );
+      final.push(...responseToolCalls);
 
-    const hasToolCalls = this.indexMap.size > 0 || this.responsesCallOrder.length > 0;
-    final.push(makeFinishPart(hasToolCalls ? "tool-calls" : "stop", 0, 0));
+      const hasToolCalls = acc.indexMap.size > 0 || acc.responsesCallOrder.length > 0;
+      final.push(makeFinishPart(hasToolCalls ? "tool-calls" : "stop", 0, 0));
 
-    return final;
+      return final;
+    });
   }
 }
 
@@ -569,12 +639,14 @@ const processSSEChunkToStreamPart = (
   data: string,
   acc: StreamAccumulator,
   useResponses: boolean,
-): Response.StreamPartEncoded | null => {
+): Effect.Effect<Response.StreamPartEncoded | null, CopilotParseError> => {
+  if (data.trim() === "") return Effect.succeed(null);
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(data);
-  } catch {
-    return null;
+  } catch (cause) {
+    return Effect.fail(new CopilotParseError({ cause }));
   }
 
   if (useResponses) {
@@ -582,10 +654,9 @@ const processSSEChunkToStreamPart = (
   }
   const wire = parsed as ChatCompletionsWire;
   const choice = wire.choices?.[0];
-  if (choice?.delta) return acc.addChatCompletionsDelta(choice.delta);
-  return null;
+  if (choice?.delta) return Effect.succeed(acc.addChatCompletionsDelta(choice.delta));
+  return Effect.succeed(null);
 };
-
 // ---------------------------------------------------------------------------
 // Error mapping — internal → AiError
 // ---------------------------------------------------------------------------
@@ -604,6 +675,13 @@ const mapError = (e: CopilotError): AiError.AiError =>
         module: "CopilotProvider",
         method: "parse",
         reason: new AiError.InternalProviderError({ description: "Failed to parse LLM response" }),
+      }),
+    ),
+    Match.tag("CopilotEncodeError", () =>
+      AiError.make({
+        module: "CopilotProvider",
+        method: "encode",
+        reason: new AiError.InternalProviderError({ description: "Failed to encode LLM request" }),
       }),
     ),
     Match.tag("CopilotHttpError", (e) =>
@@ -705,7 +783,7 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
       streaming: boolean,
     ): Effect.Effect<
       { req: HttpClientRequest.HttpClientRequest; useResponses: boolean },
-      CopilotAuthError | CopilotParseError
+      CopilotAuthError | CopilotParseError | CopilotEncodeError
     > =>
       Effect.gen(function* () {
         const model = config.model;
@@ -725,14 +803,14 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
         const body: Record<string, unknown> = useResponses
           ? {
               model,
-              input: promptToResponsesInput(prompt),
+              input: yield* promptToResponsesInput(prompt),
               max_output_tokens: maxTokens,
               stream: streaming,
               ...(tools.length > 0 ? { tools: aiToolsToResponsesTools(tools) } : {}),
             }
           : {
               model,
-              messages: promptToChatCompletions(prompt),
+              messages: yield* promptToChatCompletions(prompt),
               max_tokens: maxTokens,
               stream: streaming,
               ...(tools.length > 0 ? { tools: aiToolsToChatCompletionsTools(tools) } : {}),
@@ -775,7 +853,7 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
             Effect.mapError((cause) => new CopilotParseError({ cause })),
           ) as Effect.Effect<ChatCompletionsWire | ResponsesWire, CopilotParseError>;
 
-          return useResponses
+          return yield* useResponses
             ? parseResponsesResponseToResponseParts(data as ResponsesWire)
             : parseChatCompletionsToResponseParts(data as ChatCompletionsWire);
         }).pipe(Effect.mapError(mapError)),
@@ -796,9 +874,17 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
 
             return sseLines.pipe(
               Stream.mapError(mapError),
-              Stream.map((data) => processSSEChunkToStreamPart(data, acc, useResponses)),
+              Stream.mapEffect((data) =>
+                processSSEChunkToStreamPart(data, acc, useResponses).pipe(
+                  Effect.mapError(mapError),
+                ),
+              ),
               Stream.filter((c): c is Response.StreamPartEncoded => c !== null),
-              Stream.concat(Stream.fromIterable(acc.buildFinalParts())),
+              Stream.concat(
+                Stream.suspend(() =>
+                  Stream.fromIterableEffect(acc.buildFinalParts().pipe(Effect.mapError(mapError))),
+                ),
+              ),
             );
           }).pipe(Effect.mapError(mapError)),
         ),
