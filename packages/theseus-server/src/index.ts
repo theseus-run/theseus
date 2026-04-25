@@ -9,6 +9,7 @@
 
 import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { allTools } from "@theseus.run/tools";
@@ -61,6 +62,7 @@ const HttpLive = BunHttpServer.layer({ port });
 const ServicesLayer = Layer.mergeAll(
   CopilotLanguageModelLive,
   PersistentLog,
+  Dispatch.InMemoryDispatchStore,
   RingLive,
   ToolRegistryLive,
   RegistryLive,

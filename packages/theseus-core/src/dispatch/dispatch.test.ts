@@ -11,6 +11,7 @@ import {
 import { Defaults, defineTool } from "../tool/index.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
+import { CurrentDispatch } from "./store.ts";
 import type { DispatchSpec } from "./types.ts";
 
 const CompleteInput = Schema.Struct({
@@ -42,7 +43,7 @@ const textAndToolCallParts = (
 ];
 
 describe("dispatch loop", () => {
-  test("generates dispatch id from Effect Clock", async () => {
+  test("generates dispatch id through DispatchStore", async () => {
     const now = Date.UTC(2024, 0, 2, 3, 4, 5);
     const spec: DispatchSpec = {
       name: "runner",
@@ -65,7 +66,7 @@ describe("dispatch loop", () => {
       }).pipe(Effect.provide(layer), Effect.scoped),
     );
 
-    expect(dispatchId).toBe(`runner-${now.toString(36)}`);
+    expect(dispatchId.startsWith(`runner-${now.toString(36)}-`)).toBe(true);
   });
 
   test("invalid tool input cannot become terminal success", async () => {
@@ -207,5 +208,50 @@ describe("dispatch loop", () => {
 
     expect(result.content).toBe("done");
     expect(order).toEqual(["first", "second"]);
+  });
+
+  test("provides CurrentDispatch to tools", async () => {
+    const currentTool = defineTool({
+      name: "current_dispatch",
+      description: "Reads the current dispatch context.",
+      input: Defaults.NoInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execute: () =>
+        Effect.gen(function* () {
+          const current = yield* CurrentDispatch;
+          return `${current.name}:${current.task}:${current.id}`;
+        }),
+    });
+    const spec: DispatchSpec<CurrentDispatch> = {
+      name: "runner",
+      systemPrompt: "Call current dispatch.",
+      tools: [currentTool],
+      maxIterations: 3,
+    };
+
+    const layer = Layer.merge(
+      makeMockLanguageModel([
+        toolCallParts([
+          {
+            id: "current-1",
+            name: currentTool.name,
+            arguments: JSON.stringify({}),
+          },
+        ]),
+        textParts("done"),
+      ]),
+      DispatchDefaults,
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch(spec, "inspect me");
+        return yield* handle.result;
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(result.content).toBe("done");
   });
 });

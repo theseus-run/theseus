@@ -30,11 +30,14 @@ export {
 // ---------------------------------------------------------------------------
 
 export type {
+  DispatchCreate,
   DispatchError,
   DispatchEvent,
   DispatchHandle,
+  DispatchId,
   DispatchOptions,
   DispatchOutput,
+  DispatchRecord,
   DispatchSpec,
   Injection,
   StepResult,
@@ -54,9 +57,12 @@ export type {
   Snapshot,
 } from "./dispatch/index.ts";
 export {
+  CurrentDispatch,
   DispatchDefaults,
   DispatchLog,
+  DispatchStore,
   InMemoryDispatchLog,
+  InMemoryDispatchStore,
   NoopDispatchLog,
 } from "./dispatch/index.ts";
 

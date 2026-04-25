@@ -51,24 +51,27 @@ export interface CapsuleEvent {
 export type CapsuleEventInput = Omit<CapsuleEvent, "at">;
 
 // ---------------------------------------------------------------------------
-// Capsule — the Effect service
+// CapsuleRecord — one current capsule instance
 // ---------------------------------------------------------------------------
 
-export class Capsule extends Context.Service<
-  Capsule,
-  {
-    /** Capsule identifier. */
-    readonly id: CapsuleId;
-    /** Append an event. Timestamp is auto-set. Always succeeds. */
-    readonly log: (event: CapsuleEventInput) => Effect.Effect<void>;
-    /** Read all events in order. */
-    readonly read: () => Effect.Effect<ReadonlyArray<CapsuleEvent>>;
-    /** Write a named artifact (plan.md, mission.md, etc.). Overwrites if exists. */
-    readonly artifact: (name: string, content: string) => Effect.Effect<void>;
-    /** Read a named artifact back. Fails if not found. */
-    readonly readArtifact: (name: string) => Effect.Effect<string, CapsuleError>;
-  }
->()("Capsule") {}
+export interface CapsuleRecord {
+  /** Capsule identifier. */
+  readonly id: CapsuleId;
+  /** Append an event. Timestamp is auto-set. Always succeeds. */
+  readonly log: (event: CapsuleEventInput) => Effect.Effect<void>;
+  /** Read all events in order. */
+  readonly read: () => Effect.Effect<ReadonlyArray<CapsuleEvent>>;
+  /** Write a named artifact (plan.md, mission.md, etc.). Overwrites if exists. */
+  readonly artifact: (name: string, content: string) => Effect.Effect<void>;
+  /** Read a named artifact back. Fails if not found. */
+  readonly readArtifact: (name: string) => Effect.Effect<string, CapsuleError>;
+}
+
+// ---------------------------------------------------------------------------
+// Capsule — current capsule Effect service
+// ---------------------------------------------------------------------------
+
+export class Capsule extends Context.Service<Capsule, CapsuleRecord>()("Capsule") {}
 
 // ---------------------------------------------------------------------------
 // CapsuleError

@@ -11,19 +11,7 @@
  * Uses LanguageModel from effect/unstable/ai via generateText.
  */
 
-import {
-  Cause,
-  Clock,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Match,
-  Option,
-  Queue,
-  Ref,
-  Stream,
-} from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
@@ -31,6 +19,7 @@ import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, step, tryParseArgs } from "./step.ts";
+import { CurrentDispatch, DispatchStore } from "./store.ts";
 import type {
   DispatchError,
   DispatchEvent,
@@ -111,13 +100,34 @@ export const dispatch = <R = never>(
 ): Effect.Effect<
   DispatchHandle,
   never,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
+  | LanguageModel.LanguageModel
+  | SatelliteRing
+  | DispatchLog
+  | DispatchStore
+  | Exclude<R, CurrentDispatch>
 > =>
   Effect.gen(function* () {
     const maxIter = spec.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-    const now = yield* Clock.currentTimeMillis;
-    const dispatchId = options?.dispatchId ?? `${spec.name}-${now.toString(36)}`;
+    const store = yield* DispatchStore;
+    const record = yield* store.create({
+      name: spec.name,
+      task,
+      ...(options?.parentDispatchId !== undefined
+        ? { parentDispatchId: options.parentDispatchId }
+        : {}),
+      ...(options?.dispatchId !== undefined ? { requestedId: options.dispatchId } : {}),
+    });
+    const dispatchId = record.id;
+    const currentDispatch = {
+      id: dispatchId,
+      name: spec.name,
+      task,
+      ...(options?.parentDispatchId !== undefined
+        ? { parentDispatchId: options.parentDispatchId }
+        : {}),
+      record,
+    };
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -125,11 +135,13 @@ export const dispatch = <R = never>(
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
     const log = yield* DispatchLog;
     const ring = yield* SatelliteRing;
-    const satelliteScope = yield* ring.openScope({
-      dispatchId,
-      name: spec.name,
-      task,
-    }) as Effect.Effect<SatelliteScope<R>, never, R>;
+    const satelliteScope = yield* (
+      ring.openScope({
+        dispatchId,
+        name: spec.name,
+        task,
+      }) as Effect.Effect<SatelliteScope<R>, never, R>
+    ).pipe(Effect.provideService(CurrentDispatch, currentDispatch));
 
     const emit = (event: DispatchEvent): Effect.Effect<void> =>
       Queue.offer(eventQueue, event).pipe(
@@ -443,6 +455,7 @@ export const dispatch = <R = never>(
         }),
         Effect.annotateLogs("dispatchId", dispatchId),
         Effect.annotateLogs("dispatchName", spec.name),
+        Effect.provideService(CurrentDispatch, currentDispatch),
         Effect.ensuring(satelliteScope.close),
       ),
     );
@@ -457,7 +470,15 @@ export const dispatch = <R = never>(
       result,
       messages: Ref.get(messagesRef),
     };
-  });
+  }) as Effect.Effect<
+    DispatchHandle,
+    never,
+    | LanguageModel.LanguageModel
+    | SatelliteRing
+    | DispatchLog
+    | DispatchStore
+    | Exclude<R, CurrentDispatch>
+  >;
 
 // ---------------------------------------------------------------------------
 // dispatchAwait — convenience when you only need the final result
@@ -470,5 +491,9 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   DispatchOutput,
   DispatchError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
+  | LanguageModel.LanguageModel
+  | SatelliteRing
+  | DispatchLog
+  | DispatchStore
+  | Exclude<R, CurrentDispatch>
 > => dispatch(spec, task, options).pipe(Effect.flatMap((handle) => handle.result));

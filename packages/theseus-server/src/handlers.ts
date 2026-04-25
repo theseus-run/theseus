@@ -36,6 +36,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       const toolRegistry = yield* ToolRegistry;
       const lm = yield* LanguageModel.LanguageModel;
       const ring = yield* Satellite.SatelliteRing;
+      const store = yield* Dispatch.DispatchStore;
       const theseusDb = yield* TheseusDb;
 
       const blueprint = resolveBlueprint(bp, toolRegistry);
@@ -82,6 +83,7 @@ export const HandlersLive = TheseusRpc.toLayer({
         Layer.succeed(LanguageModel.LanguageModel)(lm),
         Layer.succeed(Satellite.SatelliteRing)(ring),
         Layer.succeed(Dispatch.DispatchLog)(log),
+        Layer.succeed(Dispatch.DispatchStore)(store),
         capsuleLayer,
         Agent.AgentIdentityLive(blueprint.name),
       );

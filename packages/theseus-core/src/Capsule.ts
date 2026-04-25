@@ -22,7 +22,8 @@ export { Capsule } from "./capsule/index.ts";
 // Types (short aliases — namespaced by `Capsule.*`)
 // ---------------------------------------------------------------------------
 
-export type { CapsuleEvent, CapsuleEventInput, CapsuleId } from "./capsule/index.ts";
+export type { CapsuleEvent, CapsuleEventInput, CapsuleId, CapsuleRecord } from "./capsule/index.ts";
+export type { CapsuleCreate } from "./capsule/store.ts";
 
 // ---------------------------------------------------------------------------
 // Functions
@@ -35,7 +36,12 @@ export { logCapsuleTool, readCapsuleTool } from "./capsule/tools.ts";
 // Layers
 // ---------------------------------------------------------------------------
 
-export { CapsuleLive } from "./capsule/memory.ts";
+export {
+  CapsuleLive,
+  CapsuleStore,
+  InMemoryCapsuleStore,
+  makeInMemoryCapsule,
+} from "./capsule/store.ts";
 
 // ---------------------------------------------------------------------------
 // Errors (keep prefix)

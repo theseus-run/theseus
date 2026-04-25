@@ -21,21 +21,24 @@ export type { Mission } from "./mission/index.ts";
 // Types (short aliases — namespaced by `Mission.*`)
 // ---------------------------------------------------------------------------
 
+export type { MissionRecord } from "./mission/context.ts";
 export type { MissionId } from "./mission/id.ts";
 export type { MissionConfig } from "./mission/layer.ts";
 export type { MissionStatus } from "./mission/status.ts";
+export type { MissionCreate } from "./mission/store.ts";
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
 export { MissionContext } from "./mission/context.ts";
+export { InMemoryMissionStore, MissionStore } from "./mission/store.ts";
 
 // ---------------------------------------------------------------------------
 // Layer
 // ---------------------------------------------------------------------------
 
-export { MissionLive } from "./mission/layer.ts";
+export { MissionLive, makeMissionRecord } from "./mission/layer.ts";
 
 // ---------------------------------------------------------------------------
 // Functions

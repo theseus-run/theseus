@@ -16,13 +16,14 @@ export type { DispatchSummary, EventEntry, Snapshot } from "./log.ts";
 
 // Log — append-only audit/replay/restore
 export { DispatchLog, InMemoryDispatchLog, NoopDispatchLog } from "./log.ts";
-
 // Step — pure, reusable independently
 export {
   runToolCall,
   step,
   tryParseArgs,
 } from "./step.ts";
+export type { DispatchCreate, DispatchId, DispatchRecord } from "./store.ts";
+export { CurrentDispatch, DispatchStore, InMemoryDispatchStore } from "./store.ts";
 // Types
 export type {
   DispatchError,
