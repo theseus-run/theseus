@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
-import type { Blueprint } from "../agent/index.ts";
 import { report } from "../agent-comm/report.ts";
 import {
   makeMockLanguageModel,
@@ -10,11 +9,12 @@ import {
 } from "../test-utils/mock-language-model.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
+import type { DispatchSpec } from "./types.ts";
 
 describe("dispatch loop", () => {
   test("generates dispatch id from Effect Clock", async () => {
     const now = Date.UTC(2024, 0, 2, 3, 4, 5);
-    const blueprint: Blueprint = {
+    const spec: DispatchSpec = {
       name: "worker",
       systemPrompt: "Return text.",
       tools: [],
@@ -30,7 +30,7 @@ describe("dispatch loop", () => {
     const dispatchId = await Effect.runPromise(
       Effect.gen(function* () {
         yield* TestClock.setTime(now);
-        const handle = yield* dispatch<never>(blueprint, "do it");
+        const handle = yield* dispatch<never>(spec, "do it");
         return handle.dispatchId;
       }).pipe(Effect.provide(layer), Effect.scoped),
     );
@@ -39,7 +39,7 @@ describe("dispatch loop", () => {
   });
 
   test("invalid report input cannot become terminal success", async () => {
-    const blueprint: Blueprint = {
+    const spec: DispatchSpec = {
       name: "worker",
       systemPrompt: "Report when done.",
       tools: [report],
@@ -65,7 +65,7 @@ describe("dispatch loop", () => {
 
     const error = await Effect.runPromise(
       Effect.gen(function* () {
-        const handle = yield* dispatch<never>(blueprint, "do it");
+        const handle = yield* dispatch<never>(spec, "do it");
         return yield* Effect.flip(handle.result);
       }).pipe(Effect.provide(layer)),
     );

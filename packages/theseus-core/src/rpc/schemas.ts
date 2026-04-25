@@ -7,15 +7,13 @@
  */
 
 import { Schema } from "effect";
+import { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
+
+export { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
 
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
-
-export const UsageSchema = Schema.Struct({
-  inputTokens: Schema.Number,
-  outputTokens: Schema.Number,
-});
 
 export const MessageSchema = Schema.Struct({
   role: Schema.String,
@@ -23,7 +21,7 @@ export const MessageSchema = Schema.Struct({
 });
 
 // ---------------------------------------------------------------------------
-// Blueprint (serialized — tool references, not implementations)
+// DispatchSpec (serialized — tool references, not implementations)
 // ---------------------------------------------------------------------------
 
 export const SerializedToolRefSchema = Schema.Struct({
@@ -32,22 +30,12 @@ export const SerializedToolRefSchema = Schema.Struct({
   inputSchema: Schema.optional(Schema.Unknown),
 });
 
-export const BlueprintSchema = Schema.Struct({
+export const DispatchSpecSchema = Schema.Struct({
   name: Schema.String,
   systemPrompt: Schema.String,
   tools: Schema.Array(SerializedToolRefSchema),
   maxIterations: Schema.optional(Schema.Number),
   model: Schema.optional(Schema.String),
-});
-
-// ---------------------------------------------------------------------------
-// DispatchOutput (serialized)
-// ---------------------------------------------------------------------------
-
-export const DispatchOutputSchema = Schema.Struct({
-  dispatchId: Schema.String,
-  content: Schema.String,
-  usage: UsageSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -75,51 +63,51 @@ export const SerializedToolCallErrorSchema = Schema.Struct({
 export const DispatchEventSchema = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal("Calling"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
   }),
   Schema.Struct({
     _tag: Schema.Literal("TextDelta"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     content: Schema.String,
   }),
   Schema.Struct({
     _tag: Schema.Literal("ThinkingDelta"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     content: Schema.String,
   }),
   Schema.Struct({
     _tag: Schema.Literal("Thinking"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     content: Schema.String,
   }),
   Schema.Struct({
     _tag: Schema.Literal("ToolCalling"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     args: Schema.Unknown,
   }),
   Schema.Struct({
     _tag: Schema.Literal("ToolResult"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     content: Schema.String,
   }),
   Schema.Struct({
     _tag: Schema.Literal("ToolError"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     error: SerializedToolCallErrorSchema,
   }),
   Schema.Struct({
     _tag: Schema.Literal("SatelliteAction"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     satellite: Schema.String,
     phase: Schema.String,
@@ -127,14 +115,14 @@ export const DispatchEventSchema = Schema.Union([
   }),
   Schema.Struct({
     _tag: Schema.Literal("Injected"),
-    agent: Schema.String,
+    name: Schema.String,
     iteration: Schema.Number,
     injection: Schema.String,
     detail: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     _tag: Schema.Literal("Done"),
-    agent: Schema.String,
+    name: Schema.String,
     result: DispatchOutputSchema,
   }),
 ]);
@@ -145,7 +133,7 @@ export const DispatchEventSchema = Schema.Union([
 
 export const DispatchSummarySchema = Schema.Struct({
   dispatchId: Schema.String,
-  agent: Schema.String,
+  name: Schema.String,
   task: Schema.String,
   startedAt: Schema.Number,
   completedAt: Schema.NullOr(Schema.Number),

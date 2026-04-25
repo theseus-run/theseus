@@ -21,7 +21,7 @@ import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 /** Serialized dispatch event matching DispatchEventSchema */
 export interface DispatchEvent {
   readonly _tag: string;
-  readonly agent?: string;
+  readonly name?: string;
   readonly iteration?: number;
   readonly tool?: string;
   readonly content?: string;
@@ -34,6 +34,7 @@ export interface DispatchEvent {
   readonly detail?: string;
   readonly result?: {
     readonly dispatchId: string;
+    readonly name: string;
     readonly content: string;
     readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   };
@@ -223,7 +224,7 @@ export class TheseusClient {
    * Returns a promise that resolves when the dispatch completes.
    */
   dispatch(
-    blueprint: {
+    spec: {
       name: string;
       systemPrompt: string;
       tools: Array<{ name: string }>;
@@ -234,7 +235,7 @@ export class TheseusClient {
     continueFrom?: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const id = this.send("dispatch", { blueprint, task, continueFrom });
+      const id = this.send("dispatch", { spec, task, continueFrom });
       this.pending.set(id, {
         resolve: () => resolve(),
         reject,

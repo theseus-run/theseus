@@ -26,7 +26,6 @@ import {
 } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { Blueprint } from "../agent/index.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
@@ -39,12 +38,13 @@ import type {
   DispatchHandle,
   DispatchOptions,
   DispatchOutput,
+  DispatchSpec,
   Injection,
   ToolCallError,
   ToolCallResult,
   Usage,
 } from "./types.ts";
-import { DispatchCycleExceeded, DispatchInterrupted } from "./types.ts";
+import { DispatchCycleExceeded, DispatchInterrupted, DispatchToolFailed } from "./types.ts";
 
 // Build a synthetic ToolCallResult from a plain text string (used by satellites).
 const syntheticResult = (
@@ -113,7 +113,7 @@ const drainInjections = (
 // ---------------------------------------------------------------------------
 
 export const dispatch = <R = never>(
-  blueprint: Blueprint<R>,
+  spec: DispatchSpec<R>,
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
@@ -122,10 +122,10 @@ export const dispatch = <R = never>(
   LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
 > =>
   Effect.gen(function* () {
-    const maxIter = blueprint.maxIterations ?? 20;
+    const maxIter = spec.maxIterations ?? 20;
     const zeroUsage: Usage = { inputTokens: 0, outputTokens: 0 };
     const now = yield* Clock.currentTimeMillis;
-    const dispatchId = options?.dispatchId ?? `${blueprint.name}-${now.toString(36)}`;
+    const dispatchId = options?.dispatchId ?? `${spec.name}-${now.toString(36)}`;
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -171,7 +171,7 @@ export const dispatch = <R = never>(
                   : undefined;
             const base = {
               _tag: "Injected" as const,
-              agent: blueprint.name,
+              name: spec.name,
               iteration: iterations,
               injection: injection._tag,
             };
@@ -183,25 +183,25 @@ export const dispatch = <R = never>(
             return yield* Effect.fail(
               new DispatchInterrupted({
                 dispatchId,
-                agent: blueprint.name,
+                name: spec.name,
                 reason: "Interrupted via injection",
               }),
             );
 
           if (iterations >= maxIter)
             return yield* Effect.fail(
-              new DispatchCycleExceeded({ dispatchId, agent: blueprint.name, max: maxIter, usage }),
+              new DispatchCycleExceeded({ dispatchId, name: spec.name, max: maxIter, usage }),
             );
 
           yield* Ref.set(messagesRef, next);
           yield* log.snapshot(dispatchId, iterations, next, usage);
 
           const ring = yield* SatelliteRing;
-          const satCtx = { agent: blueprint.name, iteration: iterations };
+          const satCtx = { name: spec.name, iteration: iterations };
           const onSatAction = (satellite: string, phase: string, action: string) =>
             emit({
               _tag: "SatelliteAction",
-              agent: blueprint.name,
+              name: spec.name,
               iteration: iterations,
               satellite,
               phase,
@@ -217,19 +217,19 @@ export const dispatch = <R = never>(
           const callMessages =
             beforeCallAction._tag === "TransformMessages" ? beforeCallAction.messages : next;
 
-          yield* emit({ _tag: "Calling", agent: blueprint.name, iteration: iterations });
+          yield* emit({ _tag: "Calling", name: spec.name, iteration: iterations });
 
           const rawResult = yield* stepStream(
             callMessages,
-            blueprint.tools,
+            spec.tools,
             dispatchId,
-            blueprint.name,
+            spec.name,
             (chunk) =>
               Match.value(chunk.type).pipe(
                 Match.when("text-delta", () =>
                   emit({
                     _tag: "TextDelta",
-                    agent: blueprint.name,
+                    name: spec.name,
                     iteration: iterations,
                     content: chunk.delta,
                   }),
@@ -237,7 +237,7 @@ export const dispatch = <R = never>(
                 Match.when("reasoning-delta", () =>
                   emit({
                     _tag: "ThinkingDelta",
-                    agent: blueprint.name,
+                    name: spec.name,
                     iteration: iterations,
                     content: chunk.delta,
                   }),
@@ -246,7 +246,7 @@ export const dispatch = <R = never>(
               ),
           ).pipe(
             Effect.withSpan("llm-call", {
-              attributes: { "llm.agent": blueprint.name, "llm.iteration": iterations },
+              attributes: { "llm.name": spec.name, "llm.iteration": iterations },
             }),
           );
           const totalUsage = addUsage(usage, rawResult.usage);
@@ -254,7 +254,7 @@ export const dispatch = <R = never>(
           if (rawResult.thinking) {
             yield* emit({
               _tag: "Thinking",
-              agent: blueprint.name,
+              name: spec.name,
               iteration: iterations,
               content: rawResult.thinking,
             });
@@ -272,6 +272,7 @@ export const dispatch = <R = never>(
           if (result._tag === "text")
             return {
               dispatchId,
+              name: spec.name,
               content: result.content,
               usage: totalUsage,
             };
@@ -279,7 +280,7 @@ export const dispatch = <R = never>(
           // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
           yield* emitAll(result.toolCalls, (tc) => ({
             _tag: "ToolCalling" as const,
-            agent: blueprint.name,
+            name: spec.name,
             iteration: iterations,
             tool: tc.name,
             args: tryParseArgs(tc),
@@ -307,13 +308,13 @@ export const dispatch = <R = never>(
 
                 // Execute tool
                 const callResult: ToolCallResult = yield* runToolCall<R>(
-                  blueprint.tools,
+                  spec.tools,
                   effectiveTc,
                 ).pipe(
                   Effect.catch((err: ToolCallError) =>
                     emit({
                       _tag: "ToolError",
-                      agent: blueprint.name,
+                      name: spec.name,
                       iteration: iterations,
                       tool: tc.name,
                       error: err,
@@ -326,10 +327,11 @@ export const dispatch = <R = never>(
                               action._tag === "RecoverToolError"
                                 ? Effect.succeed(action.result)
                                 : Effect.fail(
-                                    new DispatchInterrupted({
+                                    new DispatchToolFailed({
                                       dispatchId,
-                                      agent: blueprint.name,
-                                      reason: `Unrecovered tool error: ${tc.name}`,
+                                      name: spec.name,
+                                      tool: tc.name,
+                                      error: err,
                                     }),
                                   ),
                             ),
@@ -365,7 +367,7 @@ export const dispatch = <R = never>(
 
           yield* emitAll(calls, (c) => ({
             _tag: "ToolResult" as const,
-            agent: blueprint.name,
+            name: spec.name,
             iteration: iterations,
             tool: c.name,
             content: c.textContent,
@@ -405,7 +407,7 @@ export const dispatch = <R = never>(
       );
 
     const initialMessages: ReadonlyArray<Prompt.MessageEncoded> = options?.messages ?? [
-      { role: "system", content: blueprint.systemPrompt },
+      { role: "system", content: spec.systemPrompt },
       { role: "user", content: task },
     ];
     const initialUsage = options?.usage ?? zeroUsage;
@@ -415,7 +417,7 @@ export const dispatch = <R = never>(
     if (options?.parentDispatchId) {
       yield* log.record(dispatchId, {
         _tag: "Injected",
-        agent: blueprint.name,
+        name: spec.name,
         iteration: initialIteration,
         injection: "ParentLink",
         detail: options.parentDispatchId,
@@ -429,12 +431,12 @@ export const dispatch = <R = never>(
           err._tag === "SatelliteAbort"
             ? new DispatchInterrupted({
                 dispatchId,
-                agent: blueprint.name,
+                name: spec.name,
                 reason: `Satellite "${err.satellite}": ${err.reason}`,
               })
             : err,
         ),
-        Effect.tap((result) => emit({ _tag: "Done", agent: blueprint.name, result })),
+        Effect.tap((result) => emit({ _tag: "Done", name: spec.name, result })),
         Effect.onExit((exit) =>
           Exit.match(exit, {
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
@@ -444,7 +446,7 @@ export const dispatch = <R = never>(
                     resultDeferred,
                     new DispatchInterrupted({
                       dispatchId,
-                      agent: blueprint.name,
+                      name: spec.name,
                       reason: "Fiber interrupted",
                     }),
                   )
@@ -454,10 +456,10 @@ export const dispatch = <R = never>(
         Effect.ensuring(Queue.end(eventQueue)),
         // OTEL: dispatch span — auto parent-child when nested dispatches use withSpan
         Effect.withSpan("dispatch", {
-          attributes: { "dispatch.id": dispatchId, "dispatch.agent": blueprint.name },
+          attributes: { "dispatch.id": dispatchId, "dispatch.name": spec.name },
         }),
         Effect.annotateLogs("dispatchId", dispatchId),
-        Effect.annotateLogs("agent", blueprint.name),
+        Effect.annotateLogs("dispatchName", spec.name),
       ),
     );
 
@@ -478,11 +480,11 @@ export const dispatch = <R = never>(
 // ---------------------------------------------------------------------------
 
 export const dispatchAwait = <R = never>(
-  blueprint: Blueprint<R>,
+  spec: DispatchSpec<R>,
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
   DispatchOutput,
   DispatchError,
   LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
-> => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));
+> => dispatch(spec, task, options).pipe(Effect.flatMap((handle) => handle.result));

@@ -14,7 +14,12 @@
 import { Effect, type Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
-import { AgentCycleExceeded, AgentInterrupted, AgentLLMError } from "../agent/index.ts";
+import {
+  AgentCycleExceeded,
+  AgentInterrupted,
+  AgentLLMError,
+  AgentToolFailed,
+} from "../agent/index.ts";
 import {
   type DispatchError,
   type DispatchEvent,
@@ -37,13 +42,19 @@ const toAgentError = (error: DispatchError): AgentError => {
   switch (error._tag) {
     case "DispatchInterrupted":
       return new AgentInterrupted({
-        agent: error.agent,
+        agent: error.name,
         ...(error.reason !== undefined ? { reason: error.reason } : {}),
       });
     case "DispatchCycleExceeded":
-      return new AgentCycleExceeded({ agent: error.agent, max: error.max, usage: error.usage });
+      return new AgentCycleExceeded({ agent: error.name, max: error.max, usage: error.usage });
     case "DispatchModelFailed":
-      return new AgentLLMError({ agent: error.agent, message: error.message, cause: error.cause });
+      return new AgentLLMError({ agent: error.name, message: error.message, cause: error.cause });
+    case "DispatchToolFailed":
+      return new AgentToolFailed({
+        agent: error.name,
+        tool: error.tool,
+        cause: error.error,
+      });
   }
 };
 

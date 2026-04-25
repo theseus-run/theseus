@@ -75,7 +75,7 @@ export function useChat(client: TheseusClient | null) {
 
   const handleEvent = useCallback(
     (event: DispatchEvent) => {
-      if (event.agent && !agent) setAgent(event.agent ?? "");
+      if (event.name && !agent) setAgent(event.name ?? "");
 
       switch (event._tag) {
         case "Calling":
@@ -85,31 +85,31 @@ export function useChat(client: TheseusClient | null) {
         case "ToolCalling":
           addMessage(
             "event",
-            `[${event.agent}] -> ${event.tool}(${truncate(JSON.stringify(event.args), 80)})`,
+            `[${event.name}] -> ${event.tool}(${truncate(JSON.stringify(event.args), 80)})`,
             event,
           );
           break;
         case "ToolResult":
           addMessage(
             "event",
-            `[${event.agent}] <- ${event.tool}: ${truncate(event.content ?? "", 120)}`,
+            `[${event.name}] <- ${event.tool}: ${truncate(event.content ?? "", 120)}`,
             event,
           );
           break;
         case "ToolError":
           addMessage(
             "event",
-            `[${event.agent}] !! ${event.tool}: ${JSON.stringify(event.error)}`,
+            `[${event.name}] !! ${event.tool}: ${JSON.stringify(event.error)}`,
             event,
           );
           break;
         case "SatelliteAction":
-          addMessage("event", `[${event.agent}] * ${event.satellite}: ${event.action}`, event);
+          addMessage("event", `[${event.name}] * ${event.satellite}: ${event.action}`, event);
           break;
         case "Injected":
           addMessage(
             "event",
-            `[${event.agent}] << ${event.injection}${event.detail ? `: ${truncate(event.detail, 80)}` : ""}`,
+            `[${event.name}] << ${event.injection}${event.detail ? `: ${truncate(event.detail, 80)}` : ""}`,
             event,
           );
           break;

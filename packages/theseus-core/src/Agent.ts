@@ -29,4 +29,9 @@ export {
 // Errors (keep prefix — _tag must be globally unique)
 // ---------------------------------------------------------------------------
 
-export { AgentCycleExceeded, AgentInterrupted, AgentLLMError } from "./agent/index.ts";
+export {
+  AgentCycleExceeded,
+  AgentInterrupted,
+  AgentLLMError,
+  AgentToolFailed,
+} from "./agent/index.ts";

@@ -11,16 +11,16 @@
  *   TheseusRpc.toHandlers({ dispatch: ..., listDispatches: ... })
  *
  *   // Client: call typed methods
- *   client.dispatch({ blueprint, task })
+ *   client.dispatch({ spec, task })
  */
 
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
-  BlueprintSchema,
   CapsuleEventSchema,
   DispatchEventSchema,
   DispatchOutputSchema,
+  DispatchSpecSchema,
   DispatchSummarySchema,
   MessageSchema,
   UsageSchema,
@@ -43,7 +43,7 @@ export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
 export const Dispatch = Rpc.make("dispatch", {
   stream: true,
   payload: Schema.Struct({
-    blueprint: BlueprintSchema,
+    spec: DispatchSpecSchema,
     task: Schema.String,
     continueFrom: Schema.optional(Schema.String),
   }),
@@ -112,7 +112,7 @@ export const Status = Rpc.make("status", {
   success: Schema.Array(
     Schema.Struct({
       dispatchId: Schema.String,
-      agent: Schema.String,
+      name: Schema.String,
       iteration: Schema.Number,
       state: Schema.Literals(["running", "done", "failed"]),
       usage: UsageSchema,

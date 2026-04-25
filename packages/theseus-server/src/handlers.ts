@@ -29,7 +29,7 @@ const SKIP_TAGS = new Set(["TextDelta", "ThinkingDelta", "Thinking"]);
 // ---------------------------------------------------------------------------
 
 export const HandlersLive = TheseusRpc.toLayer({
-  dispatch: ({ blueprint: bp, task, continueFrom }) =>
+  dispatch: ({ spec: bp, task, continueFrom }) =>
     Effect.gen(function* () {
       const log = yield* Dispatch.DispatchLog;
       const registry = yield* DispatchRegistry;
@@ -74,7 +74,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       yield* capsule.log({
         type: "dispatch.start",
         by: "runtime",
-        data: { task, agent: blueprint.name, continueFrom },
+        data: { task, name: blueprint.name, continueFrom },
       });
 
       // Provide ambient services for dispatch

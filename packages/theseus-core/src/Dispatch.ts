@@ -34,6 +34,7 @@ export type {
   DispatchHandle,
   DispatchOptions,
   DispatchOutput,
+  DispatchSpec,
   Injection,
   StepResult,
   StepText,
@@ -69,7 +70,10 @@ export {
   DispatchCycleExceeded,
   DispatchInterrupted,
   DispatchModelFailed,
+  DispatchOutputSchema,
+  DispatchToolFailed,
   ToolCallBadArgs,
   ToolCallFailed,
   ToolCallUnknown,
+  UsageSchema,
 } from "./dispatch/index.ts";

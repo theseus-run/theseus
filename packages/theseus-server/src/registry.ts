@@ -14,7 +14,7 @@ import { Clock, Context, Effect, Ref } from "effect";
 
 interface RegistryEntry {
   readonly handle: Dispatch.DispatchHandle;
-  readonly agent: string;
+  readonly name: string;
   readonly startedAt: number;
   iteration: number;
   usage: Dispatch.Usage;
@@ -23,7 +23,7 @@ interface RegistryEntry {
 
 export interface StatusEntry {
   readonly dispatchId: string;
-  readonly agent: string;
+  readonly name: string;
   readonly iteration: number;
   readonly state: "running" | "done" | "failed";
   readonly usage: Dispatch.Usage;
@@ -36,7 +36,7 @@ export interface StatusEntry {
 export class DispatchRegistry extends Context.Service<
   DispatchRegistry,
   {
-    readonly register: (handle: Dispatch.DispatchHandle, agent: string) => Effect.Effect<void>;
+    readonly register: (handle: Dispatch.DispatchHandle, name: string) => Effect.Effect<void>;
     readonly get: (dispatchId: string) => Effect.Effect<Dispatch.DispatchHandle | null>;
     readonly remove: (dispatchId: string) => Effect.Effect<void>;
     readonly updateStatus: (
@@ -55,14 +55,14 @@ export const DispatchRegistryLive = Effect.gen(function* () {
   const ref = yield* Ref.make<Map<string, RegistryEntry>>(new Map());
 
   return {
-    register: (handle: Dispatch.DispatchHandle, agent: string) =>
+    register: (handle: Dispatch.DispatchHandle, name: string) =>
       Effect.gen(function* () {
         const startedAt = yield* Clock.currentTimeMillis;
         yield* Ref.update(ref, (m) => {
           const next = new Map(m);
           next.set(handle.dispatchId, {
             handle,
-            agent,
+            name,
             startedAt,
             iteration: 0,
             usage: { inputTokens: 0, outputTokens: 0 },
@@ -105,7 +105,7 @@ export const DispatchRegistryLive = Effect.gen(function* () {
           Array.from(m.values()).map(
             (e): StatusEntry => ({
               dispatchId: e.handle.dispatchId,
-              agent: e.agent,
+              name: e.name,
               iteration: e.iteration,
               state: e.state,
               usage: e.usage,

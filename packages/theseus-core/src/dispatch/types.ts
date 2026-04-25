@@ -5,28 +5,53 @@
  */
 
 import type { Effect, Stream } from "effect";
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { Presentation, ToolDefect, ToolInputError } from "../tool/index.ts";
+import type {
+  Presentation,
+  ToolAnyWith,
+  ToolDefect,
+  ToolFailureError,
+  ToolInputError,
+  ToolOutputError,
+  ToolRunResult,
+} from "../tool/index.ts";
+
+// ---------------------------------------------------------------------------
+// DispatchSpec — raw dispatch configuration
+// ---------------------------------------------------------------------------
+
+export interface DispatchSpec<R = never> {
+  readonly name: string;
+  readonly systemPrompt: string;
+  readonly tools: ReadonlyArray<ToolAnyWith<R>>;
+  readonly maxIterations?: number;
+  readonly model?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Usage — simple token counts for accumulation across iterations
 // ---------------------------------------------------------------------------
 
-export interface Usage {
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-}
+export const UsageSchema = Schema.Struct({
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+});
+
+export type Usage = Schema.Schema.Type<typeof UsageSchema>;
 
 // ---------------------------------------------------------------------------
 // DispatchOutput — raw operational success from the loop
 // ---------------------------------------------------------------------------
 
-export interface DispatchOutput {
-  readonly dispatchId: string;
-  readonly content: string;
-  readonly usage: Usage;
-}
+export const DispatchOutputSchema = Schema.Struct({
+  dispatchId: Schema.String,
+  name: Schema.String,
+  content: Schema.String,
+  usage: UsageSchema,
+});
+
+export type DispatchOutput = Schema.Schema.Type<typeof DispatchOutputSchema>;
 
 // ---------------------------------------------------------------------------
 // DispatchError — raw operational failures from the loop
@@ -35,14 +60,14 @@ export interface DispatchOutput {
 /** Dispatch was interrupted via injection, satellite abort, or fiber interrupt. */
 export class DispatchInterrupted extends Data.TaggedError("DispatchInterrupted")<{
   readonly dispatchId: string;
-  readonly agent: string;
+  readonly name: string;
   readonly reason?: string;
 }> {}
 
 /** Dispatch exceeded its iteration cap. */
 export class DispatchCycleExceeded extends Data.TaggedError("DispatchCycleExceeded")<{
   readonly dispatchId: string;
-  readonly agent: string;
+  readonly name: string;
   readonly max: number;
   readonly usage: Usage;
 }> {}
@@ -50,13 +75,25 @@ export class DispatchCycleExceeded extends Data.TaggedError("DispatchCycleExceed
 /** LLM call failed with a provider/framework error. */
 export class DispatchModelFailed extends Data.TaggedError("DispatchModelFailed")<{
   readonly dispatchId: string;
-  readonly agent: string;
+  readonly name: string;
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
+/** Tool execution failed and no satellite recovered it. */
+export class DispatchToolFailed extends Data.TaggedError("DispatchToolFailed")<{
+  readonly dispatchId: string;
+  readonly name: string;
+  readonly tool: string;
+  readonly error: ToolCallError;
+}> {}
+
 /** Union of dispatch-level failures. */
-export type DispatchError = DispatchInterrupted | DispatchCycleExceeded | DispatchModelFailed;
+export type DispatchError =
+  | DispatchInterrupted
+  | DispatchCycleExceeded
+  | DispatchModelFailed
+  | DispatchToolFailed;
 
 // ---------------------------------------------------------------------------
 // ToolCall — what the model emitted (decoded from Response.ToolCallPartEncoded)
@@ -80,6 +117,7 @@ export interface ToolCallResult {
   readonly callId: string;
   readonly name: string;
   readonly args: unknown;
+  readonly run?: ToolRunResult<unknown, unknown, unknown>;
   readonly presentation: Presentation;
   readonly textContent: string;
 }
@@ -88,7 +126,7 @@ export interface ToolCallResult {
 // ToolCallError — typed failures during tool dispatch (not covered by Presentation)
 // ---------------------------------------------------------------------------
 
-/** Tool not found in the blueprint's toolkit. */
+/** Tool not found in the dispatch spec's toolkit. */
 export class ToolCallUnknown extends Data.TaggedError("ToolCallUnknown")<{
   readonly callId: string;
   readonly name: string;
@@ -109,7 +147,7 @@ export class ToolCallFailed extends Data.TaggedError("ToolCallFailed")<{
   readonly callId: string;
   readonly name: string;
   readonly args: unknown;
-  readonly cause: ToolInputError | ToolDefect;
+  readonly cause: ToolInputError | ToolOutputError | ToolFailureError | ToolDefect;
 }> {}
 
 /** Union of all tool-dispatch errors. */
@@ -140,35 +178,35 @@ export interface StepToolCalls {
 // ---------------------------------------------------------------------------
 
 export type DispatchEvent =
-  | { readonly _tag: "Calling"; readonly agent: string; readonly iteration: number }
+  | { readonly _tag: "Calling"; readonly name: string; readonly iteration: number }
   | {
       readonly _tag: "TextDelta";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly content: string;
     }
   | {
       readonly _tag: "ThinkingDelta";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly content: string;
     }
   | {
       readonly _tag: "Thinking";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly content: string;
     }
   | {
       readonly _tag: "ToolCalling";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly tool: string;
       readonly args: unknown;
     }
   | {
       readonly _tag: "ToolResult";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly tool: string;
       readonly content: string;
@@ -176,14 +214,14 @@ export type DispatchEvent =
     }
   | {
       readonly _tag: "ToolError";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly tool: string;
       readonly error: ToolCallError;
     }
   | {
       readonly _tag: "SatelliteAction";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly satellite: string;
       readonly phase: string;
@@ -191,12 +229,12 @@ export type DispatchEvent =
     }
   | {
       readonly _tag: "Injected";
-      readonly agent: string;
+      readonly name: string;
       readonly iteration: number;
       readonly injection: string;
       readonly detail?: string;
     }
-  | { readonly _tag: "Done"; readonly agent: string; readonly result: DispatchOutput };
+  | { readonly _tag: "Done"; readonly name: string; readonly result: DispatchOutput };
 
 // ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside

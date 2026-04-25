@@ -50,7 +50,7 @@ export type Action =
 // ---------------------------------------------------------------------------
 
 export interface SatelliteContext {
-  readonly agent: string;
+  readonly name: string;
   readonly iteration: number;
 }
 

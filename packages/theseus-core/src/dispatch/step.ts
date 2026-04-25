@@ -79,7 +79,7 @@ const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): 
 
 const mapAiErrors = <A, R>(
   dispatchId: string,
-  agentName: string,
+  name: string,
   effect: Effect.Effect<A, AiError.AiError, R>,
 ): Effect.Effect<A, DispatchModelFailed, R> =>
   effect.pipe(
@@ -87,7 +87,7 @@ const mapAiErrors = <A, R>(
       Effect.fail(
         new DispatchModelFailed({
           dispatchId,
-          agent: agentName,
+          name,
           message: `${e.module}.${e.method}: ${e.reason._tag}`,
           cause: e,
         }),
@@ -142,17 +142,18 @@ export const runToolCall = <R = never>(
   if (!tool) return Effect.fail(new ToolCallUnknown({ callId: tc.id, name: tc.name }));
 
   const parsed = tryParseArgs(tc);
-  if (typeof parsed !== "object" || parsed === null)
+  if (parsed === tc.arguments)
     return Effect.fail(new ToolCallBadArgs({ callId: tc.id, name: tc.name, raw: tc.arguments }));
 
   return callTool(tool, parsed).pipe(
     Effect.map(
-      (presentation): ToolCallResult => ({
+      (run): ToolCallResult => ({
         callId: tc.id,
         name: tc.name,
-        args: parsed,
-        presentation,
-        textContent: presentationToText(presentation),
+        args: run.input,
+        run,
+        presentation: run.presentation,
+        textContent: presentationToText(run.presentation),
       }),
     ),
     Effect.mapError(

@@ -23,10 +23,10 @@ export {
 } from "./procedures.ts";
 
 export {
-  BlueprintSchema,
   CapsuleEventSchema,
   DispatchEventSchema,
   DispatchOutputSchema,
+  DispatchSpecSchema,
   DispatchSummarySchema,
   MessageSchema,
   SerializedToolCallErrorSchema,

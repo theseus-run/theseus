@@ -33,7 +33,7 @@ export interface Snapshot {
 
 export interface DispatchSummary {
   readonly dispatchId: string;
-  readonly agent: string;
+  readonly name: string;
   readonly task: string;
   readonly startedAt: number;
   readonly completedAt: number | null;
@@ -143,7 +143,7 @@ export const InMemoryDispatchLog: Layer.Layer<DispatchLog> = Layer.effect(Dispat
               const done = evts.find((e) => e.event._tag === "Done");
               summaries.push({
                 dispatchId,
-                agent: first.event._tag === "Calling" ? first.event.agent : "",
+                name: first.event._tag === "Calling" ? first.event.name : "",
                 task: "",
                 startedAt: first.timestamp,
                 completedAt: done ? done.timestamp : null,

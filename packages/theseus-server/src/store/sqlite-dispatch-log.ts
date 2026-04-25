@@ -45,7 +45,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, Theseus
           dispatch_id,
           MIN(timestamp) as started_at,
           MAX(CASE WHEN event_tag = 'Done' THEN timestamp END) as completed_at,
-          MAX(CASE WHEN event_tag = 'Calling' THEN json_extract(event_json, '$.agent') END) as agent,
+          MAX(CASE WHEN event_tag = 'Calling' THEN json_extract(event_json, '$.name') END) as name,
           MAX(CASE WHEN event_tag = 'Done' THEN event_json END) as done_json
         FROM dispatch_events
         GROUP BY dispatch_id
@@ -133,7 +133,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, Theseus
             dispatch_id: string;
             started_at: number;
             completed_at: number | null;
-            agent: string | null;
+            name: string | null;
             done_json: string | null;
           }>;
           return rows.map((row): Dispatch.DispatchSummary => {
@@ -141,7 +141,7 @@ export const SqliteDispatchLog: Layer.Layer<Dispatch.DispatchLog, never, Theseus
             const result = doneEvent?.result;
             return {
               dispatchId: row.dispatch_id,
-              agent: row.agent ?? "",
+              name: row.name ?? "",
               task: "",
               startedAt: row.started_at,
               completedAt: row.completed_at,

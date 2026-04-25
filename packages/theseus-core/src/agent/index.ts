@@ -3,7 +3,7 @@
  *
  * Blueprint: agent config as data (name + systemPrompt + tools).
  * AgentResult: typed return from agent/grunt protocols.
- * AgentError: union of agent protocol failures (AgentInterrupted | AgentCycleExceeded | AgentLLMError).
+ * AgentError: union of agent protocol failures.
  */
 
 import { Data } from "effect";
@@ -75,5 +75,12 @@ export class AgentLLMError extends Data.TaggedError("AgentLLMError")<{
   readonly cause?: unknown;
 }> {}
 
+/** Underlying dispatch tool call failed and was not recovered. */
+export class AgentToolFailed extends Data.TaggedError("AgentToolFailed")<{
+  readonly agent: string;
+  readonly tool: string;
+  readonly cause: unknown;
+}> {}
+
 /** Union of all agent protocol errors. */
-export type AgentError = AgentInterrupted | AgentCycleExceeded | AgentLLMError;
+export type AgentError = AgentInterrupted | AgentCycleExceeded | AgentLLMError | AgentToolFailed;

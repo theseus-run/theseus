@@ -74,6 +74,8 @@ export const dispatchGruntTool: Tool<
             ),
           AgentLLMError: (e) =>
             Effect.fail(new DispatchGruntFailed({ reason: `Grunt LLM failed: ${e.message}` })),
+          AgentToolFailed: (e) =>
+            Effect.fail(new DispatchGruntFailed({ reason: `Grunt tool failed: ${e.tool}` })),
         }),
       );
 
