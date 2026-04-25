@@ -26,7 +26,6 @@ import {
   type DispatchOptions,
   dispatch as dispatchLoop,
 } from "../dispatch/index.ts";
-import type { DispatchLog } from "../dispatch/log.ts";
 import type { DispatchStore } from "../dispatch/store.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
 
@@ -80,7 +79,7 @@ export const dispatch = <R = never>(
 ): Effect.Effect<
   GruntHandle,
   never,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | DispatchStore | R
+  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | R
 > =>
   dispatchLoop(blueprint, task, options).pipe(
     Effect.map((handle) => ({
@@ -100,5 +99,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   AgentResult,
   AgentError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchLog | DispatchStore | R
+  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | R
 > => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

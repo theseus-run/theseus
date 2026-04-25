@@ -9,7 +9,6 @@
 
 import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
-import * as Dispatch from "@theseus.run/core/Dispatch";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { allTools } from "@theseus.run/tools";
@@ -21,7 +20,7 @@ import { HandlersLive } from "./handlers.ts";
 import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
 import { TheseusDbLive } from "./store/sqlite.ts";
-import { SqliteDispatchLog } from "./store/sqlite-dispatch-log.ts";
+import { SqliteDispatchStore } from "./store/sqlite-dispatch-store.ts";
 import { makeToolRegistry, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
@@ -43,7 +42,7 @@ const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
 
 // SQLite persistence
 const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
-const PersistentLog = Layer.provide(SqliteDispatchLog, DbLive);
+const PersistentDispatchStore = Layer.provide(SqliteDispatchStore, DbLive);
 
 // Satellite middleware
 const RingLive = Satellite.DefaultSatelliteRing;
@@ -61,8 +60,7 @@ const HttpLive = BunHttpServer.layer({ port });
 // Services layer — all business logic dependencies
 const ServicesLayer = Layer.mergeAll(
   CopilotLanguageModelLive,
-  PersistentLog,
-  Dispatch.InMemoryDispatchStore,
+  PersistentDispatchStore,
   RingLive,
   ToolRegistryLive,
   RegistryLive,

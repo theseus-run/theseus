@@ -17,7 +17,6 @@ import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
-import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, step, tryParseArgs } from "./step.ts";
 import { CurrentDispatch, DispatchStore } from "./store.ts";
 import type {
@@ -100,11 +99,7 @@ export const dispatch = <R = never>(
 ): Effect.Effect<
   DispatchHandle,
   never,
-  | LanguageModel.LanguageModel
-  | SatelliteRing
-  | DispatchLog
-  | DispatchStore
-  | Exclude<R, CurrentDispatch>
+  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > =>
   Effect.gen(function* () {
     const maxIter = spec.maxIterations ?? 20;
@@ -119,21 +114,12 @@ export const dispatch = <R = never>(
       ...(options?.dispatchId !== undefined ? { requestedId: options.dispatchId } : {}),
     });
     const dispatchId = record.id;
-    const currentDispatch = {
-      id: dispatchId,
-      name: spec.name,
-      task,
-      ...(options?.parentDispatchId !== undefined
-        ? { parentDispatchId: options.parentDispatchId }
-        : {}),
-      record,
-    };
+    const currentDispatch = record;
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
     const resultDeferred = yield* Deferred.make<DispatchOutput, DispatchError>();
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
-    const log = yield* DispatchLog;
     const ring = yield* SatelliteRing;
     const satelliteScope = yield* (
       ring.openScope({
@@ -145,7 +131,7 @@ export const dispatch = <R = never>(
 
     const emit = (event: DispatchEvent): Effect.Effect<void> =>
       Queue.offer(eventQueue, event).pipe(
-        Effect.tap(() => log.record(dispatchId, event)),
+        Effect.tap(() => store.record(dispatchId, event)),
         Effect.asVoid,
       );
 
@@ -166,7 +152,7 @@ export const dispatch = <R = never>(
     ): Effect.Effect<
       DispatchOutput,
       DispatchError | SatelliteAbort,
-      LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
+      LanguageModel.LanguageModel | SatelliteRing | DispatchStore | R
     > =>
       Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(
         Effect.gen(function* () {
@@ -204,7 +190,7 @@ export const dispatch = <R = never>(
             );
 
           yield* Ref.set(messagesRef, next);
-          yield* log.snapshot(dispatchId, iterations, next, usage);
+          yield* store.snapshot(dispatchId, iterations, next, usage);
 
           const satCtx = { dispatchId, name: spec.name, task, iteration: iterations };
           const onSatAction = (satellite: string, phase: string, action: string) =>
@@ -410,7 +396,7 @@ export const dispatch = <R = never>(
 
     // Record parent link for dispatch tracing
     if (options?.parentDispatchId) {
-      yield* log.record(dispatchId, {
+      yield* store.record(dispatchId, {
         _tag: "Injected",
         name: spec.name,
         iteration: initialIteration,
@@ -473,11 +459,7 @@ export const dispatch = <R = never>(
   }) as Effect.Effect<
     DispatchHandle,
     never,
-    | LanguageModel.LanguageModel
-    | SatelliteRing
-    | DispatchLog
-    | DispatchStore
-    | Exclude<R, CurrentDispatch>
+    LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
   >;
 
 // ---------------------------------------------------------------------------
@@ -491,9 +473,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   DispatchOutput,
   DispatchError,
-  | LanguageModel.LanguageModel
-  | SatelliteRing
-  | DispatchLog
-  | DispatchStore
-  | Exclude<R, CurrentDispatch>
+  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > => dispatch(spec, task, options).pipe(Effect.flatMap((handle) => handle.result));

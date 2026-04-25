@@ -33,12 +33,15 @@ export type {
   DispatchCreate,
   DispatchError,
   DispatchEvent,
+  DispatchEventEntry,
   DispatchHandle,
   DispatchId,
   DispatchOptions,
   DispatchOutput,
   DispatchRecord,
+  DispatchSnapshot,
   DispatchSpec,
+  DispatchSummary,
   Injection,
   StepResult,
   ToolCall,
@@ -46,24 +49,12 @@ export type {
   ToolCallResult,
   Usage,
 } from "./dispatch/index.ts";
-
-// ---------------------------------------------------------------------------
-// Log (audit / replay / restore)
-// ---------------------------------------------------------------------------
-
-export type {
-  DispatchSummary,
-  EventEntry,
-  Snapshot,
-} from "./dispatch/index.ts";
 export {
   CurrentDispatch,
   DispatchDefaults,
-  DispatchLog,
   DispatchStore,
-  InMemoryDispatchLog,
   InMemoryDispatchStore,
-  NoopDispatchLog,
+  makeDispatchId,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------

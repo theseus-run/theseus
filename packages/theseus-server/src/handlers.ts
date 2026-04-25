@@ -1,7 +1,7 @@
 /**
  * RPC Handlers — server-side implementations for each Theseus RPC procedure.
  *
- * Each handler is an Effect that accesses services (DispatchLog, ToolRegistry,
+ * Each handler is an Effect that accesses services (DispatchStore, ToolRegistry,
  * DispatchRegistry) and returns typed results matching the RPC schemas.
  */
 
@@ -31,7 +31,6 @@ const SKIP_TAGS = new Set(["Thinking"]);
 export const HandlersLive = TheseusRpc.toLayer({
   dispatch: ({ spec: bp, task, continueFrom }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.DispatchLog;
       const registry = yield* DispatchRegistry;
       const toolRegistry = yield* ToolRegistry;
       const lm = yield* LanguageModel.LanguageModel;
@@ -55,7 +54,7 @@ export const HandlersLive = TheseusRpc.toLayer({
       // Resolve dispatch options — restore from previous dispatch if continuing
       let options: Dispatch.DispatchOptions | undefined;
       if (continueFrom) {
-        const restored = yield* log.restore(continueFrom);
+        const restored = yield* store.restore(continueFrom);
         if (restored?.messages) {
           options = {
             ...restored,
@@ -82,7 +81,6 @@ export const HandlersLive = TheseusRpc.toLayer({
       const depsLayer = Layer.mergeAll(
         Layer.succeed(LanguageModel.LanguageModel)(lm),
         Layer.succeed(Satellite.SatelliteRing)(ring),
-        Layer.succeed(Dispatch.DispatchLog)(log),
         Layer.succeed(Dispatch.DispatchStore)(store),
         capsuleLayer,
         Agent.AgentIdentityLive(blueprint.name),
@@ -101,7 +99,7 @@ export const HandlersLive = TheseusRpc.toLayer({
               ? Effect.gen(function* () {
                   // Save final snapshot for session continuity
                   const finalMessages = yield* handle.messages;
-                  yield* log.snapshot(
+                  yield* store.snapshot(
                     handle.dispatchId,
                     -1,
                     [...finalMessages, { role: "assistant" as const, content: e.result.content }],
@@ -125,14 +123,14 @@ export const HandlersLive = TheseusRpc.toLayer({
 
   listDispatches: ({ limit }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.DispatchLog;
-      return yield* log.list(limit !== undefined ? { limit } : undefined);
+      const store = yield* Dispatch.DispatchStore;
+      return yield* store.list(limit !== undefined ? { limit } : undefined);
     }),
 
   getMessages: ({ dispatchId }) =>
     Effect.gen(function* () {
-      const log = yield* Dispatch.DispatchLog;
-      const restored = yield* log.restore(dispatchId);
+      const store = yield* Dispatch.DispatchStore;
+      const restored = yield* store.restore(dispatchId);
       return (restored?.messages ?? []).map((m) => ({
         role: String(m.role ?? ""),
         content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),

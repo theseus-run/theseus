@@ -3,11 +3,11 @@ import { Effect, Layer, Random } from "effect";
 import { TestClock } from "effect/testing";
 import { AgentIdentityLive } from "../agent/index.ts";
 import * as Tool from "../Tool.ts";
-import { CurrentCapsule, CapsuleError, makeCapsuleId } from "./index.ts";
+import { CapsuleError, CurrentCapsule, makeCapsuleId } from "./index.ts";
 import { CurrentCapsuleLive } from "./memory.ts";
 import { logCapsuleTool, readCapsuleTool } from "./tools.ts";
 
-const run = <A>(effect: Effect.Effect<A, unknown, Capsule>) =>
+const run = <A>(effect: Effect.Effect<A, unknown, CurrentCapsule>) =>
   Effect.runPromise(Effect.provide(effect, CurrentCapsuleLive("test")));
 
 describe("makeCapsuleId", () => {
@@ -69,7 +69,10 @@ describe("Capsule.log + read", () => {
         const capsule = yield* CurrentCapsule;
         yield* capsule.log({ type: "mission.create", by: "runtime", data: {} });
         return yield* capsule.read();
-      }).pipe(Effect.provide(Layer.merge(CurrentCapsuleLive("test"), TestClock.layer())), Effect.scoped),
+      }).pipe(
+        Effect.provide(Layer.merge(CurrentCapsuleLive("test"), TestClock.layer())),
+        Effect.scoped,
+      ),
     );
 
     expect(events[0]?.at).toBe("2024-01-02T03:04:05.000Z");

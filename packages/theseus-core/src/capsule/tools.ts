@@ -68,25 +68,27 @@ const clampTail = (tail: number | undefined): number => {
   return Math.min(50, Math.max(1, tail));
 };
 
-export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, CurrentCapsule> = defineTool({
-  name: "theseus_read_capsule",
-  description: "Read recent events from the mission capsule. Returns the event trail for context.",
-  input: ReadCapsuleInput,
-  output: Defaults.TextOutput,
-  failure: Defaults.NoFailure,
-  policy: { interaction: "observe" },
-  execute: ({ tail }) =>
-    Effect.gen(function* () {
-      const capsule = yield* CurrentCapsule;
-      const events = yield* capsule.read();
-      const recent = events.slice(-clampTail(tail));
-      return (
-        recent
-          .map(
-            (e) =>
-              `[${e.at.slice(11, 19)}] ${e.type} by ${e.by}: ${JSON.stringify(e.data).slice(0, 100)}`,
-          )
-          .join("\n") || "(no events)"
-      );
-    }),
-});
+export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, CurrentCapsule> =
+  defineTool({
+    name: "theseus_read_capsule",
+    description:
+      "Read recent events from the mission capsule. Returns the event trail for context.",
+    input: ReadCapsuleInput,
+    output: Defaults.TextOutput,
+    failure: Defaults.NoFailure,
+    policy: { interaction: "observe" },
+    execute: ({ tail }) =>
+      Effect.gen(function* () {
+        const capsule = yield* CurrentCapsule;
+        const events = yield* capsule.read();
+        const recent = events.slice(-clampTail(tail));
+        return (
+          recent
+            .map(
+              (e) =>
+                `[${e.at.slice(11, 19)}] ${e.type} by ${e.by}: ${JSON.stringify(e.data).slice(0, 100)}`,
+            )
+            .join("\n") || "(no events)"
+        );
+      }),
+  });

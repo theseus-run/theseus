@@ -1,11 +1,11 @@
 /**
- * TheseusDb — shared SQLite connection for DispatchLog + Capsule.
+ * TheseusDb — shared SQLite connection for DispatchStore + Capsule.
  *
  * Single DB file at `{workspace}/.theseus/theseus.db`.
  * Uses `bun:sqlite` (built-in, zero dependencies).
  *
  * Two consumers:
- *   - SqliteDispatchLog — drop-in Layer for DispatchLog
+ *   - SqliteDispatchStore — persistent DispatchStore layer
  *   - SqliteCapsule     — drop-in Layer for Capsule
  *
  * Both use the same connection. WAL mode for concurrent reads.
@@ -30,7 +30,15 @@ export class TheseusDb extends Context.Service<
 // ---------------------------------------------------------------------------
 
 const SCHEMA = `
-  -- DispatchLog events
+  -- Dispatch records
+  CREATE TABLE IF NOT EXISTS dispatch_records (
+    dispatch_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    task TEXT NOT NULL,
+    parent_dispatch_id TEXT
+  );
+
+  -- Dispatch events
   CREATE TABLE IF NOT EXISTS dispatch_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dispatch_id TEXT NOT NULL,
@@ -40,7 +48,7 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS idx_dispatch_events_id ON dispatch_events(dispatch_id);
 
-  -- DispatchLog message snapshots
+  -- Dispatch message snapshots
   CREATE TABLE IF NOT EXISTS dispatch_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dispatch_id TEXT NOT NULL,

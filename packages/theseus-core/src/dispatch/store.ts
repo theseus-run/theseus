@@ -1,11 +1,14 @@
 /**
  * DispatchStore — collection boundary for dispatch records.
  *
- * Minimal today: create a dispatch record and own id generation.
- * Later this grows into durable create/resume/list/search storage.
+ * Owns dispatch creation, identity, raw event journaling, snapshots, restore,
+ * and listing. Current execution receives the active record through
+ * `CurrentDispatch`.
  */
 
-import { Clock, Context, Effect, Layer, Random } from "effect";
+import { Clock, Context, Effect, Layer, Random, Ref } from "effect";
+import type * as Prompt from "effect/unstable/ai/Prompt";
+import type { DispatchEvent, DispatchOptions, Usage } from "./types.ts";
 
 export type DispatchId = string & { readonly _brand: unique symbol };
 
@@ -18,40 +21,161 @@ export interface DispatchCreate {
 
 export interface DispatchRecord {
   readonly id: DispatchId;
+  readonly name: string;
+  readonly task: string;
+  readonly parentDispatchId?: string;
+}
+
+export interface DispatchEventEntry {
+  readonly timestamp: number;
+  readonly dispatchId: string;
+  readonly event: DispatchEvent;
+}
+
+export interface DispatchSnapshot {
+  readonly timestamp: number;
+  readonly dispatchId: string;
+  readonly iteration: number;
+  readonly messages: ReadonlyArray<Prompt.MessageEncoded>;
+  readonly usage: Usage;
+}
+
+export interface DispatchSummary {
+  readonly dispatchId: string;
+  readonly name: string;
+  readonly task: string;
+  readonly startedAt: number;
+  readonly completedAt: number | null;
+  readonly status: "running" | "done" | "failed";
+  readonly usage: Usage;
 }
 
 export class DispatchStore extends Context.Service<
   DispatchStore,
   {
     readonly create: (input: DispatchCreate) => Effect.Effect<DispatchRecord>;
+    readonly record: (dispatchId: string, event: DispatchEvent) => Effect.Effect<void>;
+    readonly snapshot: (
+      dispatchId: string,
+      iteration: number,
+      messages: ReadonlyArray<Prompt.MessageEncoded>,
+      usage: Usage,
+    ) => Effect.Effect<void>;
+    readonly events: (dispatchId?: string) => Effect.Effect<ReadonlyArray<DispatchEventEntry>>;
+    readonly restore: (dispatchId: string) => Effect.Effect<DispatchOptions | undefined>;
+    readonly list: (options?: {
+      readonly limit?: number;
+    }) => Effect.Effect<ReadonlyArray<DispatchSummary>>;
   }
 >()("DispatchStore") {}
 
-export class CurrentDispatch extends Context.Service<
-  CurrentDispatch,
-  {
-    readonly id: DispatchId;
-    readonly name: string;
-    readonly task: string;
-    readonly parentDispatchId?: string;
-    readonly record: DispatchRecord;
-  }
->()("CurrentDispatch") {}
+export class CurrentDispatch extends Context.Service<CurrentDispatch, DispatchRecord>()(
+  "CurrentDispatch",
+) {}
 
-const makeDispatchId = (name: string): Effect.Effect<DispatchId> =>
+export const makeDispatchId = (name: string): Effect.Effect<DispatchId> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const rand = yield* Random.nextIntBetween(0, 36 ** 5 - 1);
     return `${name}-${now.toString(36)}-${rand.toString(36).padStart(5, "0")}` as DispatchId;
   });
 
-export const InMemoryDispatchStore: Layer.Layer<DispatchStore> = Layer.succeed(DispatchStore)({
-  create: (input) =>
-    Effect.gen(function* () {
-      const id =
-        input.requestedId !== undefined
-          ? (input.requestedId as DispatchId)
-          : yield* makeDispatchId(input.name);
-      return { id };
-    }),
-});
+export const InMemoryDispatchStore: Layer.Layer<DispatchStore> = Layer.effect(DispatchStore)(
+  Effect.gen(function* () {
+    const recordsRef = yield* Ref.make<ReadonlyMap<string, DispatchRecord>>(new Map());
+    const eventsRef = yield* Ref.make<ReadonlyArray<DispatchEventEntry>>([]);
+    const snapshotsRef = yield* Ref.make<ReadonlyArray<DispatchSnapshot>>([]);
+
+    return {
+      create: (input) =>
+        Effect.gen(function* () {
+          const id =
+            input.requestedId !== undefined
+              ? (input.requestedId as DispatchId)
+              : yield* makeDispatchId(input.name);
+          const record: DispatchRecord = {
+            id,
+            name: input.name,
+            task: input.task,
+            ...(input.parentDispatchId !== undefined
+              ? { parentDispatchId: input.parentDispatchId }
+              : {}),
+          };
+          yield* Ref.update(recordsRef, (records) => new Map([...records, [id, record]]));
+          return record;
+        }),
+
+      record: (dispatchId, event) =>
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
+          yield* Ref.update(eventsRef, (entries) => [...entries, { timestamp, dispatchId, event }]);
+        }),
+
+      snapshot: (dispatchId, iteration, messages, usage) =>
+        Effect.gen(function* () {
+          const timestamp = yield* Clock.currentTimeMillis;
+          yield* Ref.update(snapshotsRef, (snaps) => [
+            ...snaps,
+            { timestamp, dispatchId, iteration, messages, usage },
+          ]);
+        }),
+
+      events: (dispatchId) =>
+        Ref.get(eventsRef).pipe(
+          Effect.map((entries) =>
+            dispatchId ? entries.filter((e) => e.dispatchId === dispatchId) : entries,
+          ),
+        ),
+
+      restore: (dispatchId) =>
+        Effect.gen(function* () {
+          const snaps = yield* Ref.get(snapshotsRef);
+          const matching = snaps.filter((s) => s.dispatchId === dispatchId);
+          const latest = matching[matching.length - 1];
+          if (latest === undefined) return undefined;
+
+          const records = yield* Ref.get(recordsRef);
+          const record = records.get(dispatchId);
+          const opts: DispatchOptions = {
+            dispatchId,
+            messages: latest.messages,
+            iteration: latest.iteration,
+            usage: latest.usage,
+          };
+          return record?.parentDispatchId !== undefined
+            ? { ...opts, parentDispatchId: record.parentDispatchId }
+            : opts;
+        }),
+
+      list: (options) =>
+        Effect.gen(function* () {
+          const records = yield* Ref.get(recordsRef);
+          const entries = yield* Ref.get(eventsRef);
+          const summaries: DispatchSummary[] = [];
+
+          for (const record of records.values()) {
+            const dispatchEvents = entries.filter((entry) => entry.dispatchId === record.id);
+            const first = dispatchEvents[0];
+            if (first === undefined) continue;
+            const last = dispatchEvents[dispatchEvents.length - 1];
+            const done = dispatchEvents.find((entry) => entry.event._tag === "Done");
+            summaries.push({
+              dispatchId: record.id,
+              name: record.name,
+              task: record.task,
+              startedAt: first.timestamp,
+              completedAt: done?.timestamp ?? null,
+              status: done ? "done" : last?.event._tag === "Done" ? "done" : "running",
+              usage:
+                done?.event._tag === "Done"
+                  ? done.event.result.usage
+                  : { inputTokens: 0, outputTokens: 0 },
+            });
+          }
+
+          summaries.sort((a, b) => b.startedAt - a.startedAt);
+          return options?.limit ? summaries.slice(0, options.limit) : summaries;
+        }),
+    };
+  }),
+);

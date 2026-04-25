@@ -37,8 +37,8 @@ export { logCapsuleTool, readCapsuleTool } from "./capsule/tools.ts";
 // ---------------------------------------------------------------------------
 
 export {
-  CurrentCapsuleLive,
   CapsuleStore,
+  CurrentCapsuleLive,
   InMemoryCapsuleStore,
   makeInMemoryCapsuleRecord,
 } from "./capsule/store.ts";
