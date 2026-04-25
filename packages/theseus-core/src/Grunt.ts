@@ -7,15 +7,15 @@
  * Usage:
  *   import * as Grunt from "@theseus.run/core/Grunt"
  *
- *   const handle = yield* Grunt.grunt(blueprint, task)
- *   const result = yield* Grunt.gruntAwait(blueprint, task)
+ *   const handle = yield* Grunt.dispatch(blueprint, task)
+ *   const result = yield* Grunt.dispatchAwait(blueprint, task)
  */
 
 // ---------------------------------------------------------------------------
 // Functions (already clean)
 // ---------------------------------------------------------------------------
 
-export { grunt, gruntAwait } from "./grunt/index.ts";
+export { dispatch, dispatchAwait } from "./grunt/index.ts";
 
 // ---------------------------------------------------------------------------
 // Types (short alias)

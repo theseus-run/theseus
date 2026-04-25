@@ -8,7 +8,7 @@
  *   import * as Agent from "@theseus.run/core/Agent"
  *
  *   const bp: Agent.Blueprint = { name: "explorer", systemPrompt: "...", tools: [...] }
- *   const result: Agent.Result = yield* Grunt.gruntAwait(bp, task)
+ *   const result: Agent.Result = yield* Grunt.dispatchAwait(bp, task)
  */
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,14 @@
 // ---------------------------------------------------------------------------
 
 export type { AgentError, AgentResult as Result, Blueprint, ResultKind } from "./agent/index.ts";
-export { AgentIdentity as Identity, AgentIdentityLive as IdentityLive } from "./agent/index.ts";
+export {
+  AgentIdentity as Identity,
+  AgentIdentityLive as IdentityLive,
+  BlueprintNotFound,
+  BlueprintRegistry,
+  BlueprintRegistryLive,
+  type BlueprintSummary,
+} from "./agent/index.ts";
 
 // ---------------------------------------------------------------------------
 // Errors (keep prefix — _tag must be globally unique)

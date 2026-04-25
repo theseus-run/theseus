@@ -32,7 +32,7 @@
     "./Satellite": "./src/Satellite.ts",
     "./Rpc": "./src/rpc/index.ts",
     "./test-utils/mock-language-model": "./src/test-utils/mock-language-model.ts",
-    "./agent-comm/delegate": "./src/agent-comm/delegate.ts",
+    "./agent-comm/dispatch-grunt": "./src/agent-comm/dispatch-grunt.tsx",
     "./agent-comm/briefing.tsx": "./src/agent-comm/briefing.tsx"
   },
   "scripts": {

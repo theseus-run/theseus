@@ -10,6 +10,12 @@ import { Data } from "effect";
 import type { Usage } from "../dispatch/types.ts";
 import type { ToolAnyWith } from "../tool/index.ts";
 
+export {
+  BlueprintNotFound,
+  BlueprintRegistry,
+  BlueprintRegistryLive,
+  type BlueprintSummary,
+} from "./blueprint-registry.ts";
 export { AgentIdentity, AgentIdentityLive } from "./identity.ts";
 
 // ---------------------------------------------------------------------------

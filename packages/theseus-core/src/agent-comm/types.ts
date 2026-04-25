@@ -1,16 +1,18 @@
 /**
  * AgentComm types — cross-agent communication protocol.
  *
- * DelegateInput: what the orchestrator sends (task + criteria + context).
+ * DispatchGruntInput: what the orchestrator sends (blueprint + task + criteria + context).
  * ReportInput: what the worker sends back (result + summary + content).
  */
 
 // ---------------------------------------------------------------------------
-// DelegateInput — orchestrator → worker
+// DispatchGruntInput — orchestrator → grunt
 // ---------------------------------------------------------------------------
 
-/** Structured input for the theseus.delegate tool. */
-export interface DelegateInput {
+/** Structured input for the theseus_dispatch_grunt tool. */
+export interface DispatchGruntInput {
+  /** Runtime-owned blueprint name to dispatch. */
+  readonly blueprint: string;
   /** What the worker should accomplish. Be specific. */
   readonly task: string;
   /** How we know the task is done. */

@@ -5,6 +5,7 @@
  * DispatchRegistry) and returns typed results matching the RPC schemas.
  */
 
+import * as Agent from "@theseus.run/core/Agent";
 import * as CapsuleNs from "@theseus.run/core/Capsule";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
@@ -81,6 +82,8 @@ export const HandlersLive = TheseusRpc.toLayer({
         Layer.succeed(LanguageModel.LanguageModel)(lm),
         Layer.succeed(Satellite.Ring)(ring),
         Layer.succeed(Dispatch.Log)(log),
+        capsuleLayer,
+        Agent.IdentityLive(blueprint.name),
       );
 
       const handle = yield* Effect.provide(Dispatch.dispatch(blueprint, task, options), depsLayer);

@@ -1,3 +1,5 @@
+/** @jsxImportSource @theseus.run/jsx-md */
+
 /**
  * Briefing — jsx-md components for rendering the worker's system prompt.
  *
@@ -6,20 +8,20 @@
  *
  * These are rendering functions called by the runtime (inside delegate),
  * not by the LLM. The LLM fills structured fields; the runtime renders.
- *
- * @jsxImportSource @theseus.run/jsx-md
  */
 
 import type { VNode } from "@theseus.run/jsx-md";
 import { Bold, Code, H2, Hr, Li, Md, P, Ul } from "@theseus.run/jsx-md";
 import { report } from "./report.ts";
-import type { DelegateInput } from "./types.ts";
+import type { DispatchGruntInput } from "./types.ts";
+
+type BriefingInput = Omit<DispatchGruntInput, "blueprint">;
 
 // ---------------------------------------------------------------------------
 // <Briefing> — renders task + criteria + context
 // ---------------------------------------------------------------------------
 
-export function Briefing({ task, criteria, context }: DelegateInput): VNode {
+export function Briefing({ task, criteria, context }: BriefingInput): VNode {
   return (
     <>
       <H2>Briefing</H2>
@@ -59,7 +61,7 @@ export function WorkerPrompt({
   briefing,
 }: {
   readonly basePrompt: string;
-  readonly briefing: DelegateInput;
+  readonly briefing: BriefingInput;
 }): VNode {
   return (
     <>
