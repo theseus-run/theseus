@@ -110,8 +110,7 @@ export const HandlersLive = TheseusRpc.toLayer({
                     by: "runtime",
                     data: {
                       dispatchId: handle.dispatchId,
-                      result: e.result.result,
-                      summary: e.result.summary,
+                      content: e.result.content,
                     },
                   });
                   yield* registry.updateStatus(handle.dispatchId, { state: "done" });
@@ -177,13 +176,13 @@ export const HandlersLive = TheseusRpc.toLayer({
           message: `Dispatch ${dispatchId} not found`,
         });
       }
-      const result = yield* Effect.catch(handle.result, (agentErr) =>
+      const result = yield* Effect.catch(handle.result, (dispatchErr) =>
         Effect.fail(
           new RpcError({
             code: "INTERNAL",
-            message: `Agent error: ${
-              typeof agentErr === "object" && agentErr !== null && "_tag" in agentErr
-                ? String(agentErr._tag)
+            message: `Dispatch error: ${
+              typeof dispatchErr === "object" && dispatchErr !== null && "_tag" in dispatchErr
+                ? String(dispatchErr._tag)
                 : "unknown"
             }`,
           }),

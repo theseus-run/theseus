@@ -2,7 +2,7 @@
  * Agent — namespace barrel for `import * as Agent from "@theseus.run/core/Agent"`
  *
  * Shared types for all agent strategies. Blueprint is config-as-data.
- * AgentResult is the typed return from any dispatch.
+ * AgentResult is the semantic return from agent/grunt protocols.
  *
  * Usage:
  *   import * as Agent from "@theseus.run/core/Agent"

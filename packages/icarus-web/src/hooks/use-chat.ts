@@ -117,6 +117,9 @@ export function useChat(client: TheseusClient | null) {
           if (event.result?.content) {
             addMessage("assistant", event.result.content);
           }
+          if (event.result?.dispatchId) {
+            sessionRef.current.lastCompletedId = event.result.dispatchId;
+          }
           setRunning(false);
           break;
       }
@@ -135,10 +138,6 @@ export function useChat(client: TheseusClient | null) {
 
       try {
         await client.dispatch(BLUEPRINT, text, (event) => handleEvent(event), continueFrom);
-
-        // TODO: we don't get the dispatchId from the RPC stream yet.
-        // For now, session continuity works through the server-side
-        // restore logic.
       } catch (err) {
         addMessage("system", `Error: ${err instanceof Error ? err.message : String(err)}`);
         setRunning(false);

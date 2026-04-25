@@ -1,7 +1,7 @@
 /**
  * Step — one LLM call via LanguageModel. Pure — no tool execution, no loop.
  *
- *   stepStream(messages, tools, agentName, onChunk)
+ *   stepStream(messages, tools, dispatchId, agentName, onChunk)
  *     → StepText      { _tag: "text", content, usage }
  *     → StepToolCalls  { _tag: "tool_calls", toolCalls, usage }
  *
@@ -18,13 +18,11 @@ import type * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
-import type { AgentError } from "../agent/index.ts";
-import { AgentLLMError } from "../agent/index.ts";
 import { toolsArrayToAiToolkit } from "../bridge/to-ai-tools.ts";
 import type { Content, Presentation, ToolAnyWith } from "../tool/index.ts";
 import { callTool } from "../tool/run.ts";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult, Usage } from "./types.ts";
-import { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
+import { DispatchModelFailed, ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // responsePartsToStepResult — extract text/toolCalls/thinking/usage from parts
@@ -76,17 +74,19 @@ const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): 
 };
 
 // ---------------------------------------------------------------------------
-// mapAiError — convert AiError to AgentError
+// mapAiError — convert AiError to DispatchError
 // ---------------------------------------------------------------------------
 
 const mapAiErrors = <A, R>(
+  dispatchId: string,
   agentName: string,
   effect: Effect.Effect<A, AiError.AiError, R>,
-): Effect.Effect<A, AgentError, R> =>
+): Effect.Effect<A, DispatchModelFailed, R> =>
   effect.pipe(
     Effect.catchTag("AiError", (e) =>
       Effect.fail(
-        new AgentLLMError({
+        new DispatchModelFailed({
+          dispatchId,
           agent: agentName,
           message: `${e.module}.${e.method}: ${e.reason._tag}`,
           cause: e,
@@ -218,9 +218,10 @@ export type StreamDelta =
 export const stepStream = (
   messages: ReadonlyArray<Prompt.MessageEncoded>,
   tools: ReadonlyArray<ToolAnyWith<unknown>>,
+  dispatchId: string,
   agentName: string,
   onChunk: (chunk: StreamDelta) => Effect.Effect<void>,
-): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
+): Effect.Effect<StepResult, DispatchModelFailed, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     const prompt = Prompt.make(messages);
     const toolkit = toolsArrayToAiToolkit(tools);
@@ -229,6 +230,7 @@ export const stepStream = (
     const allParts: Response.StreamPartEncoded[] = [];
 
     yield* mapAiErrors(
+      dispatchId,
       agentName,
       LanguageModel.streamText({
         prompt,
@@ -263,13 +265,15 @@ export const stepStream = (
 export const step = (
   messages: ReadonlyArray<Prompt.MessageEncoded>,
   tools: ReadonlyArray<ToolAnyWith<unknown>>,
+  dispatchId: string,
   agentName: string,
-): Effect.Effect<StepResult, AgentError, LanguageModel.LanguageModel> =>
+): Effect.Effect<StepResult, DispatchModelFailed, LanguageModel.LanguageModel> =>
   Effect.gen(function* () {
     const prompt = Prompt.make(messages);
     const toolkit = toolsArrayToAiToolkit(tools);
 
     const response = yield* mapAiErrors(
+      dispatchId,
       agentName,
       LanguageModel.generateText({
         prompt,

@@ -23,13 +23,12 @@ export {
 } from "./procedures.ts";
 
 export {
-  AgentResultSchema,
   BlueprintSchema,
   CapsuleEventSchema,
   DispatchEventSchema,
+  DispatchOutputSchema,
   DispatchSummarySchema,
   MessageSchema,
-  ResultKindSchema,
   SerializedToolCallErrorSchema,
   SerializedToolRefSchema,
   UsageSchema,

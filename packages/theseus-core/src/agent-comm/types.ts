@@ -41,5 +41,5 @@ export const ReportInputSchema = Schema.Struct({
   }),
 });
 
-/** Structured input for the theseus.report tool. */
+/** Structured input for the theseus_report tool. */
 export type ReportInput = Schema.Schema.Type<typeof ReportInputSchema>;

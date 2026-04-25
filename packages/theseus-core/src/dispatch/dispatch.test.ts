@@ -70,7 +70,7 @@ describe("dispatch loop", () => {
       }).pipe(Effect.provide(layer)),
     );
 
-    expect(error._tag).toBe("AgentLLMError");
+    expect(error._tag).toBe("DispatchModelFailed");
     expect(error.message).toContain("InvalidOutputError");
   });
 });

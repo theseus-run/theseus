@@ -28,9 +28,11 @@ export {
 } from "./step.ts";
 // Types
 export type {
+  DispatchError,
   DispatchEvent,
   DispatchHandle,
   DispatchOptions,
+  DispatchOutput,
   Injection,
   StepResult,
   StepText,
@@ -40,4 +42,11 @@ export type {
   ToolCallResult,
   Usage,
 } from "./types.ts";
-export { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./types.ts";
+export {
+  DispatchCycleExceeded,
+  DispatchInterrupted,
+  DispatchModelFailed,
+  ToolCallBadArgs,
+  ToolCallFailed,
+  ToolCallUnknown,
+} from "./types.ts";

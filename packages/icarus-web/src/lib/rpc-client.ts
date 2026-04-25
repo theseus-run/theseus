@@ -33,8 +33,7 @@ export interface DispatchEvent {
   readonly injection?: string;
   readonly detail?: string;
   readonly result?: {
-    readonly result: string;
-    readonly summary: string;
+    readonly dispatchId: string;
     readonly content: string;
     readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   };

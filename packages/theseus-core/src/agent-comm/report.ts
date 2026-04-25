@@ -1,5 +1,5 @@
 /**
- * theseus.report — worker completion payload tool.
+ * theseus_report — worker completion payload tool.
  *
  * Raw dispatch treats this like any other tool. Agent/grunt completion semantics
  * are protocol-level behavior and should be implemented outside the dispatch
@@ -19,7 +19,7 @@ export const decodeReportInput = (input: unknown): Effect.Effect<ReportInput, Sc
   Schema.decodeUnknownEffect(ReportInputSchema)(input);
 
 /**
- * The theseus.report tool. Add to worker Blueprint's tools array when the
+ * The theseus_report tool. Add to worker Blueprint's tools array when the
  * worker should emit structured completion data.
  */
 export const report = defineTool({

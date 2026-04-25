@@ -14,7 +14,9 @@
 import { Effect, type Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
+import { AgentCycleExceeded, AgentInterrupted, AgentLLMError } from "../agent/index.ts";
 import {
+  type DispatchError,
   type DispatchEvent,
   type DispatchOptions,
   dispatch as dispatchLoop,
@@ -30,6 +32,30 @@ export interface GruntHandle {
   readonly events: Stream.Stream<DispatchEvent>;
   readonly result: Effect.Effect<AgentResult, AgentError>;
 }
+
+const toAgentError = (error: DispatchError): AgentError => {
+  switch (error._tag) {
+    case "DispatchInterrupted":
+      return new AgentInterrupted({
+        agent: error.agent,
+        ...(error.reason !== undefined ? { reason: error.reason } : {}),
+      });
+    case "DispatchCycleExceeded":
+      return new AgentCycleExceeded({ agent: error.agent, max: error.max, usage: error.usage });
+    case "DispatchModelFailed":
+      return new AgentLLMError({ agent: error.agent, message: error.message, cause: error.cause });
+  }
+};
+
+const toAgentResult = (output: {
+  readonly content: string;
+  readonly usage: AgentResult["usage"];
+}): AgentResult => ({
+  result: "unstructured",
+  summary: "",
+  content: output.content,
+  usage: output.usage,
+});
 
 // ---------------------------------------------------------------------------
 // grunt — fire-and-forget dispatch
@@ -47,7 +73,7 @@ export const dispatch = <R = never>(
   dispatchLoop(blueprint, task, options).pipe(
     Effect.map((handle) => ({
       events: handle.events,
-      result: handle.result,
+      result: handle.result.pipe(Effect.map(toAgentResult), Effect.mapError(toAgentError)),
     })),
   );
 

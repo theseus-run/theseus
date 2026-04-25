@@ -2,8 +2,8 @@
  * Agent primitives — shared types for all agent strategies.
  *
  * Blueprint: agent config as data (name + systemPrompt + tools).
- * AgentResult: typed return from any agent dispatch.
- * AgentError: union of agent-level failure types (AgentInterrupted | AgentCycleExceeded | AgentLLMError).
+ * AgentResult: typed return from agent/grunt protocols.
+ * AgentError: union of agent protocol failures (AgentInterrupted | AgentCycleExceeded | AgentLLMError).
  */
 
 import { Data } from "effect";
@@ -37,7 +37,7 @@ export interface Blueprint<R = never> {
 }
 
 // ---------------------------------------------------------------------------
-// AgentResult — typed return from any agent dispatch
+// AgentResult — typed return from agent/grunt protocols
 // ---------------------------------------------------------------------------
 
 export interface AgentResult {
@@ -52,28 +52,28 @@ export interface AgentResult {
 }
 
 // ---------------------------------------------------------------------------
-// AgentError — union of agent-level failure types
+// AgentError — union of agent protocol failure types
 // ---------------------------------------------------------------------------
 
-/** Dispatch was interrupted (via injection or fiber interrupt). */
+/** Agent protocol was interrupted (via injection or fiber interrupt). */
 export class AgentInterrupted extends Data.TaggedError("AgentInterrupted")<{
   readonly agent: string;
   readonly reason?: string;
 }> {}
 
-/** Dispatch exceeded its iteration cap. */
+/** Agent protocol exceeded its iteration cap. */
 export class AgentCycleExceeded extends Data.TaggedError("AgentCycleExceeded")<{
   readonly agent: string;
   readonly max: number;
   readonly usage: Usage;
 }> {}
 
-/** LLM call failed (wrapped AiError from provider). */
+/** Underlying dispatch model call failed. */
 export class AgentLLMError extends Data.TaggedError("AgentLLMError")<{
   readonly agent: string;
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-/** Union of all agent-level errors. */
+/** Union of all agent protocol errors. */
 export type AgentError = AgentInterrupted | AgentCycleExceeded | AgentLLMError;

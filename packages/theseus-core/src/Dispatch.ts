@@ -29,9 +29,11 @@ export {
 // ---------------------------------------------------------------------------
 
 export type {
+  DispatchError,
   DispatchEvent,
   DispatchHandle,
   DispatchOptions,
+  DispatchOutput,
   Injection,
   StepResult,
   StepText,
@@ -63,4 +65,11 @@ export {
 // Errors (keep prefix — _tag must be globally unique)
 // ---------------------------------------------------------------------------
 
-export { ToolCallBadArgs, ToolCallFailed, ToolCallUnknown } from "./dispatch/index.ts";
+export {
+  DispatchCycleExceeded,
+  DispatchInterrupted,
+  DispatchModelFailed,
+  ToolCallBadArgs,
+  ToolCallFailed,
+  ToolCallUnknown,
+} from "./dispatch/index.ts";

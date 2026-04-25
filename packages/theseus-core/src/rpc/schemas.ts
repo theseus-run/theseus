@@ -41,14 +41,11 @@ export const BlueprintSchema = Schema.Struct({
 });
 
 // ---------------------------------------------------------------------------
-// AgentResult (serialized)
+// DispatchOutput (serialized)
 // ---------------------------------------------------------------------------
 
-export const ResultKindSchema = Schema.Literals(["success", "error", "defect", "unstructured"]);
-
-export const AgentResultSchema = Schema.Struct({
-  result: ResultKindSchema,
-  summary: Schema.String,
+export const DispatchOutputSchema = Schema.Struct({
+  dispatchId: Schema.String,
   content: Schema.String,
   usage: UsageSchema,
 });
@@ -138,7 +135,7 @@ export const DispatchEventSchema = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal("Done"),
     agent: Schema.String,
-    result: AgentResultSchema,
+    result: DispatchOutputSchema,
   }),
 ]);
 

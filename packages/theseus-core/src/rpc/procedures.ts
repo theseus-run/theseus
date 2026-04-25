@@ -17,10 +17,10 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
-  AgentResultSchema,
   BlueprintSchema,
   CapsuleEventSchema,
   DispatchEventSchema,
+  DispatchOutputSchema,
   DispatchSummarySchema,
   MessageSchema,
   UsageSchema,
@@ -93,7 +93,7 @@ export const GetResult = Rpc.make("getResult", {
   payload: Schema.Struct({
     dispatchId: Schema.String,
   }),
-  success: AgentResultSchema,
+  success: DispatchOutputSchema,
   error: RpcError,
 });
 

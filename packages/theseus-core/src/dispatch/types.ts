@@ -7,7 +7,6 @@
 import type { Effect, Stream } from "effect";
 import { Data } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { AgentError, AgentResult } from "../agent/index.ts";
 import type { Presentation, ToolDefect, ToolInputError } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +17,46 @@ export interface Usage {
   readonly inputTokens: number;
   readonly outputTokens: number;
 }
+
+// ---------------------------------------------------------------------------
+// DispatchOutput — raw operational success from the loop
+// ---------------------------------------------------------------------------
+
+export interface DispatchOutput {
+  readonly dispatchId: string;
+  readonly content: string;
+  readonly usage: Usage;
+}
+
+// ---------------------------------------------------------------------------
+// DispatchError — raw operational failures from the loop
+// ---------------------------------------------------------------------------
+
+/** Dispatch was interrupted via injection, satellite abort, or fiber interrupt. */
+export class DispatchInterrupted extends Data.TaggedError("DispatchInterrupted")<{
+  readonly dispatchId: string;
+  readonly agent: string;
+  readonly reason?: string;
+}> {}
+
+/** Dispatch exceeded its iteration cap. */
+export class DispatchCycleExceeded extends Data.TaggedError("DispatchCycleExceeded")<{
+  readonly dispatchId: string;
+  readonly agent: string;
+  readonly max: number;
+  readonly usage: Usage;
+}> {}
+
+/** LLM call failed with a provider/framework error. */
+export class DispatchModelFailed extends Data.TaggedError("DispatchModelFailed")<{
+  readonly dispatchId: string;
+  readonly agent: string;
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/** Union of dispatch-level failures. */
+export type DispatchError = DispatchInterrupted | DispatchCycleExceeded | DispatchModelFailed;
 
 // ---------------------------------------------------------------------------
 // ToolCall — what the model emitted (decoded from Response.ToolCallPartEncoded)
@@ -157,7 +196,7 @@ export type DispatchEvent =
       readonly injection: string;
       readonly detail?: string;
     }
-  | { readonly _tag: "Done"; readonly agent: string; readonly result: AgentResult };
+  | { readonly _tag: "Done"; readonly agent: string; readonly result: DispatchOutput };
 
 // ---------------------------------------------------------------------------
 // Injection — loop mutations pushed from outside
@@ -196,7 +235,7 @@ export interface DispatchHandle {
   readonly events: Stream.Stream<DispatchEvent>;
   readonly inject: (i: Injection) => Effect.Effect<void>;
   readonly interrupt: Effect.Effect<void>;
-  readonly result: Effect.Effect<AgentResult, AgentError>;
+  readonly result: Effect.Effect<DispatchOutput, DispatchError>;
   /** Snapshot current message history. */
   readonly messages: Effect.Effect<ReadonlyArray<Prompt.MessageEncoded>>;
 }

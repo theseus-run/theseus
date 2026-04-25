@@ -6,7 +6,7 @@
  *   handle.events    Stream<DispatchEvent> — observe every state transition
  *   handle.inject    push Injection — processed at the start of the next iteration
  *   handle.interrupt preemptive Fiber.interrupt — kills mid-LLM-call or mid-tool-call
- *   handle.result    Effect<AgentResult, AgentError> — await the final value
+ *   handle.result    Effect<DispatchOutput, DispatchError> — await the final value
  *
  * Uses LanguageModel from effect/unstable/ai via stepStream.
  */
@@ -26,8 +26,7 @@ import {
 } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
-import { AgentCycleExceeded, AgentInterrupted } from "../agent/index.ts";
+import type { Blueprint } from "../agent/index.ts";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
@@ -35,14 +34,17 @@ import { textPresentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
 import { presentationToText, runToolCall, stepStream, tryParseArgs } from "./step.ts";
 import type {
+  DispatchError,
   DispatchEvent,
   DispatchHandle,
   DispatchOptions,
+  DispatchOutput,
   Injection,
   ToolCallError,
   ToolCallResult,
   Usage,
 } from "./types.ts";
+import { DispatchCycleExceeded, DispatchInterrupted } from "./types.ts";
 
 // Build a synthetic ToolCallResult from a plain text string (used by satellites).
 const syntheticResult = (
@@ -127,7 +129,7 @@ export const dispatch = <R = never>(
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
-    const resultDeferred = yield* Deferred.make<AgentResult, AgentError>();
+    const resultDeferred = yield* Deferred.make<DispatchOutput, DispatchError>();
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
     const log = yield* DispatchLog;
 
@@ -152,8 +154,8 @@ export const dispatch = <R = never>(
       usage: Usage,
       iterations: number,
     ): Effect.Effect<
-      AgentResult,
-      AgentError | SatelliteAbort,
+      DispatchOutput,
+      DispatchError | SatelliteAbort,
       LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
     > =>
       Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iterations } })(
@@ -179,12 +181,16 @@ export const dispatch = <R = never>(
           const next = yield* drainInjections(injectionQueue, messages, logInjection);
           if (next === undefined)
             return yield* Effect.fail(
-              new AgentInterrupted({ agent: blueprint.name, reason: "Interrupted via injection" }),
+              new DispatchInterrupted({
+                dispatchId,
+                agent: blueprint.name,
+                reason: "Interrupted via injection",
+              }),
             );
 
           if (iterations >= maxIter)
             return yield* Effect.fail(
-              new AgentCycleExceeded({ agent: blueprint.name, max: maxIter, usage }),
+              new DispatchCycleExceeded({ dispatchId, agent: blueprint.name, max: maxIter, usage }),
             );
 
           yield* Ref.set(messagesRef, next);
@@ -216,6 +222,7 @@ export const dispatch = <R = never>(
           const rawResult = yield* stepStream(
             callMessages,
             blueprint.tools,
+            dispatchId,
             blueprint.name,
             (chunk) =>
               Match.value(chunk.type).pipe(
@@ -264,8 +271,7 @@ export const dispatch = <R = never>(
 
           if (result._tag === "text")
             return {
-              result: "unstructured" as const,
-              summary: "",
+              dispatchId,
               content: result.content,
               usage: totalUsage,
             };
@@ -320,7 +326,8 @@ export const dispatch = <R = never>(
                               action._tag === "RecoverToolError"
                                 ? Effect.succeed(action.result)
                                 : Effect.fail(
-                                    new AgentInterrupted({
+                                    new DispatchInterrupted({
+                                      dispatchId,
                                       agent: blueprint.name,
                                       reason: `Unrecovered tool error: ${tc.name}`,
                                     }),
@@ -417,10 +424,11 @@ export const dispatch = <R = never>(
 
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
       loop(initialMessages, initialUsage, initialIteration).pipe(
-        // Convert SatelliteAbort to AgentInterrupted for the outer error channel
+        // Convert SatelliteAbort to DispatchInterrupted for the outer error channel
         Effect.mapError((err) =>
           err._tag === "SatelliteAbort"
-            ? new AgentInterrupted({
+            ? new DispatchInterrupted({
+                dispatchId,
                 agent: blueprint.name,
                 reason: `Satellite "${err.satellite}": ${err.reason}`,
               })
@@ -434,7 +442,11 @@ export const dispatch = <R = never>(
               Cause.hasInterruptsOnly(cause)
                 ? Deferred.fail(
                     resultDeferred,
-                    new AgentInterrupted({ agent: blueprint.name, reason: "Fiber interrupted" }),
+                    new DispatchInterrupted({
+                      dispatchId,
+                      agent: blueprint.name,
+                      reason: "Fiber interrupted",
+                    }),
                   )
                 : Deferred.failCause(resultDeferred, cause),
           }),
@@ -449,7 +461,7 @@ export const dispatch = <R = never>(
       ),
     );
 
-    const result: Effect.Effect<AgentResult, AgentError> = Deferred.await(resultDeferred);
+    const result: Effect.Effect<DispatchOutput, DispatchError> = Deferred.await(resultDeferred);
 
     return {
       dispatchId,
@@ -470,7 +482,7 @@ export const dispatchAwait = <R = never>(
   task: string,
   options?: DispatchOptions,
 ): Effect.Effect<
-  AgentResult,
-  AgentError,
+  DispatchOutput,
+  DispatchError,
   LanguageModel.LanguageModel | SatelliteRing | DispatchLog | R
 > => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));
