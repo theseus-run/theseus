@@ -16,8 +16,7 @@
  */
 
 import type { Tool, ToolAny } from "./index.ts";
-import type { ToolInteraction, ToolPolicy } from "./meta.ts";
-import { interactionAtMost } from "./meta.ts";
+import type { ToolPolicy } from "./meta.ts";
 
 // ---------------------------------------------------------------------------
 // Type-level utilities
@@ -82,14 +81,6 @@ export const mergeToolkits = <R1, R2>(a: Toolkit<R1>, b: Toolkit<R2>): Toolkit<R
   for (const t of b.tools) byName.set(t.name, t);
   return buildToolkit<R1 | R2>([...byName.values()]);
 };
-
-/** Keep only tools whose interaction level is at most `max`. */
-export const withMaxInteraction = <R>(toolkit: Toolkit<R>, max: ToolInteraction): Toolkit<R> =>
-  buildToolkit<R>(toolkit.tools.filter((t) => interactionAtMost(t.policy.interaction, max)));
-
-// ---------------------------------------------------------------------------
-// Accessors
-// ---------------------------------------------------------------------------
 
 /** Has a tool with this name? */
 export const hasTool = (toolkit: Toolkit<unknown>, name: string): boolean =>

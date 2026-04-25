@@ -2,7 +2,7 @@
  * AgentComm — cross-agent communication protocol.
  *
  * theseus_dispatch_grunt — orchestrator dispatches a one-shot worker by blueprint name
- * theseus_report         — worker terminates with structured result
+ * theseus_report         — structured completion payload tool
  *
  * Import <Briefing>, <WorkerPrompt> from "@theseus.run/core/agent-comm/briefing.tsx"
  */

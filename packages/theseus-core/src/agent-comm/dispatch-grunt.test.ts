@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { BlueprintRegistryLive } from "../agent/index.ts";
 import * as Tool from "../Tool.ts";
-import { makeMockLanguageModel, toolCallParts } from "../test-utils/mock-language-model.ts";
+import {
+  makeMockLanguageModel,
+  textParts,
+  toolCallParts,
+} from "../test-utils/mock-language-model.ts";
 import { dispatchGruntTool } from "./dispatch-grunt.tsx";
 import { report } from "./report.ts";
 
@@ -35,6 +39,7 @@ describe("dispatchGruntTool", () => {
                   }),
                 },
               ]),
+              textParts("summary text"),
             ]),
           ),
         ),
@@ -44,7 +49,7 @@ describe("dispatchGruntTool", () => {
     const text = output.content
       .map((content) => (content._tag === "text" ? content.text : ""))
       .join("");
-    expect(text).toContain("[success] done");
+    expect(text).toContain("[unstructured]");
     expect(text).toContain("summary text");
   });
 });

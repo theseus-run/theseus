@@ -144,4 +144,3 @@ export {
   type ToolRuntimeError,
 } from "./errors.ts";
 export type { ToolInteraction, ToolPolicy } from "./meta.ts";
-export { compareInteraction, interactionAtMost } from "./meta.ts";

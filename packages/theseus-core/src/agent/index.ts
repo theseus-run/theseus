@@ -51,8 +51,6 @@ export interface AgentResult {
   readonly usage: Usage;
 }
 
-export type AgentCompletion = Omit<AgentResult, "usage">;
-
 // ---------------------------------------------------------------------------
 // AgentError — union of agent-level failure types
 // ---------------------------------------------------------------------------

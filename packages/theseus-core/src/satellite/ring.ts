@@ -72,7 +72,7 @@ const applyActionToPhase = (phase: Phase, action: Action): Phase =>
 // ---------------------------------------------------------------------------
 
 const isTerminalAction = (action: Action): boolean =>
-  action._tag === "BlockTool" || action._tag === "RecoverToolError" || action._tag === "Complete";
+  action._tag === "BlockTool" || action._tag === "RecoverToolError";
 
 // ---------------------------------------------------------------------------
 // makeSatelliteRing — compose satellites into a ring

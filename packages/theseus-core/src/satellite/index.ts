@@ -20,7 +20,6 @@ export { toolRecovery } from "./tool-recovery.ts";
 export type { Action, Phase, Satellite, SatelliteAny, SatelliteContext } from "./types.ts";
 export {
   BlockTool,
-  Complete,
   ModifyArgs,
   Pass,
   RecoverToolError,

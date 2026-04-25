@@ -8,7 +8,7 @@ import type { Effect, Stream } from "effect";
 import { Data } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { AgentError, AgentResult } from "../agent/index.ts";
-import type { Presentation, ToolDefect, ToolInputError, ToolInteraction } from "../tool/index.ts";
+import type { Presentation, ToolDefect, ToolInputError } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Usage — simple token counts for accumulation across iterations
@@ -177,8 +177,6 @@ export type Injection =
 export interface DispatchOptions {
   /** Dispatch identifier for logging/restore. Auto-generated if omitted. */
   readonly dispatchId?: string;
-  /** Maximum allowed tool interaction level for this dispatch. */
-  readonly maxInteraction?: ToolInteraction;
   /** Link to parent dispatch (for dispatch tree tracing). */
   readonly parentDispatchId?: string;
   /** Restore from a previous session — replaces the default [system, user] messages. */

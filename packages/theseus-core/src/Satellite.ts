@@ -41,7 +41,6 @@ export {
 
 export {
   BlockTool,
-  Complete,
   ModifyArgs,
   Pass,
   RecoverToolError,

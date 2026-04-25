@@ -15,7 +15,7 @@
 // Types (short aliases — namespaced by `Agent.*`)
 // ---------------------------------------------------------------------------
 
-export type { AgentCompletion, AgentError, AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
+export type { AgentError, AgentResult, Blueprint, ResultKind } from "./agent/index.ts";
 export {
   AgentIdentity,
   AgentIdentityLive,

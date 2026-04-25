@@ -54,10 +54,6 @@ export type {
   ToolInteraction,
   ToolPolicy,
 } from "./tool/index.ts";
-export {
-  compareInteraction,
-  interactionAtMost,
-} from "./tool/index.ts";
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -76,7 +72,6 @@ export {
   interactions,
   makeToolkit,
   mergeToolkits,
-  withMaxInteraction,
 } from "./tool/toolkit.ts";
 
 // ---------------------------------------------------------------------------

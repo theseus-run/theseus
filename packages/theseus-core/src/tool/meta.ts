@@ -1,13 +1,9 @@
 /**
- * ToolPolicy — ordered world-interaction policy carried by every tool.
- *
- * Policy is inert on its own; runtimes read it to decide things like
- * "may this tool run in observe-only mode?" or "what is the default retry
- * posture for this tool?".
+ * ToolPolicy — descriptive world-interaction metadata carried by every tool.
  */
 
 // ---------------------------------------------------------------------------
-// ToolInteraction — ordered from least to most dangerous
+// ToolInteraction
 // ---------------------------------------------------------------------------
 
 /**
@@ -25,22 +21,6 @@ export type ToolInteraction =
   | "write_idempotent"
   | "write"
   | "write_destructive";
-
-const INTERACTION_ORDER: Record<ToolInteraction, number> = {
-  pure: 0,
-  observe: 1,
-  write_idempotent: 2,
-  write: 3,
-  write_destructive: 4,
-};
-
-/** Compare two interaction levels. Negative if a < b, 0 if equal, positive if a > b. */
-export const compareInteraction = (a: ToolInteraction, b: ToolInteraction): number =>
-  INTERACTION_ORDER[a] - INTERACTION_ORDER[b];
-
-/** Is interaction `a` at most as dangerous as `max`? */
-export const interactionAtMost = (a: ToolInteraction, max: ToolInteraction): boolean =>
-  compareInteraction(a, max) <= 0;
 
 // ---------------------------------------------------------------------------
 // ToolPolicy

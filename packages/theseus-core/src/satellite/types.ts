@@ -12,7 +12,6 @@
 import type { Effect } from "effect";
 import { Data } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { AgentCompletion } from "../agent/index.ts";
 import type { StepResult, ToolCall, ToolCallError, ToolCallResult } from "../dispatch/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -44,9 +43,7 @@ export type Action =
   /** Replace tool result content. Valid in: AfterTool. */
   | { readonly _tag: "ReplaceResult"; readonly content: string }
   /** Recover from tool error with a result. Valid in: ToolError. */
-  | { readonly _tag: "RecoverToolError"; readonly result: ToolCallResult }
-  /** Complete the dispatch with a typed agent result. Valid in any phase. */
-  | { readonly _tag: "Complete"; readonly result: AgentCompletion };
+  | { readonly _tag: "RecoverToolError"; readonly result: ToolCallResult };
 
 // ---------------------------------------------------------------------------
 // SatelliteContext — loop state available to all hooks
@@ -100,7 +97,6 @@ export const RecoverToolError = (result: ToolCallResult): Action => ({
   _tag: "RecoverToolError",
   result,
 });
-export const Complete = (result: AgentCompletion): Action => ({ _tag: "Complete", result });
 
 // ---------------------------------------------------------------------------
 // SatelliteAny — existential type for heterogeneous satellite arrays
