@@ -21,12 +21,14 @@ afterEach(async () => {
 
 const callText = async (tool: Tool.ToolAny, raw: unknown) => {
   const effect = Tool.callTool(tool, raw) as Effect.Effect<
-    Tool.Presentation,
-    Tool.ToolInputError | Tool.ToolDefect,
+    Tool.ToolOutcome<unknown, unknown, unknown>,
+    Tool.ToolRuntimeError,
     never
   >;
   const result = await Effect.runPromise(effect);
-  return result.content.map((content) => (content._tag === "text" ? content.text : "")).join("");
+  return result.presentation.content
+    .map((content) => (content._tag === "text" ? content.text : ""))
+    .join("");
 };
 
 describe("@theseus.run/tools metadata", () => {

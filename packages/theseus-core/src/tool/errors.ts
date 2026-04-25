@@ -8,7 +8,8 @@
  *
  * The three classes here cover the pipeline boundaries:
  *   - input decode failed  → ToolInputError
- *   - output encode failed → ToolOutputError
+ *   - output validation failed → ToolOutputError
+ *   - failure validation failed → ToolFailureError
  *   - unexpected crash     → ToolDefect
  */
 
@@ -36,6 +37,17 @@ export class ToolOutputError extends Data.TaggedError("ToolOutputError")<{
   }
 }
 
+/** Tool known failure did not match the declared failure schema. */
+export class ToolFailureError extends Data.TaggedError("ToolFailureError")<{
+  readonly tool: string;
+  readonly failure: unknown;
+  readonly cause: SchemaError;
+}> {
+  override get message(): string {
+    return `Tool "${this.tool}" produced failure that failed validation: ${this.cause.message}`;
+  }
+}
+
 /** Tool execution threw an unexpected error (not in its typed Failure channel). */
 export class ToolDefect extends Data.TaggedError("ToolDefect")<{
   readonly tool: string;
@@ -47,4 +59,4 @@ export class ToolDefect extends Data.TaggedError("ToolDefect")<{
 }
 
 /** Union of all runtime-produced tool errors. */
-export type ToolRuntimeError = ToolInputError | ToolOutputError | ToolDefect;
+export type ToolRuntimeError = ToolInputError | ToolOutputError | ToolFailureError | ToolDefect;

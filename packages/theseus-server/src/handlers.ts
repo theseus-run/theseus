@@ -19,10 +19,10 @@ import { SqliteCapsuleLive } from "./store/sqlite-capsule.ts";
 import { resolveBlueprint, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
-// Tags to skip over the wire (deltas are large + noisy)
+// Tags to skip over the wire (verbose model internals)
 // ---------------------------------------------------------------------------
 
-const SKIP_TAGS = new Set(["TextDelta", "ThinkingDelta", "Thinking"]);
+const SKIP_TAGS = new Set(["Thinking"]);
 
 // ---------------------------------------------------------------------------
 // Handlers Layer

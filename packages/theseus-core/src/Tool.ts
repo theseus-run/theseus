@@ -11,6 +11,8 @@
  *     name: "readFile",
  *     description: "Read a file by path",
  *     input: Schema.Struct({ path: Schema.String }),
+ *     output: Schema.String,
+ *     failure: Tool.Defaults.NoFailure,
  *     policy: { interaction: "observe" },
  *     execute: ({ path }) => Effect.tryPromise({
  *       try: () => Bun.file(path).text(),
@@ -78,7 +80,7 @@ export {
 // Execution pipeline
 // ---------------------------------------------------------------------------
 
-export { callTool } from "./tool/run.ts";
+export { callTool, type ToolOutcome, type ToolValue } from "./tool/run.ts";
 
 // ---------------------------------------------------------------------------
 // Runtime errors (keep prefix — _tag must be globally unique for pattern matching)
@@ -86,6 +88,7 @@ export { callTool } from "./tool/run.ts";
 
 export {
   ToolDefect,
+  ToolFailureError,
   ToolInputError,
   ToolOutputError,
   type ToolRuntimeError,

@@ -67,13 +67,7 @@ export const DispatchEventSchema = Schema.Union([
     iteration: Schema.Number,
   }),
   Schema.Struct({
-    _tag: Schema.Literal("TextDelta"),
-    name: Schema.String,
-    iteration: Schema.Number,
-    content: Schema.String,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("ThinkingDelta"),
+    _tag: Schema.Literal("Text"),
     name: Schema.String,
     iteration: Schema.Number,
     content: Schema.String,

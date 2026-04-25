@@ -12,6 +12,7 @@
  */
 
 import { Context, Effect, Layer, Match, Ref } from "effect";
+import { textPresentation } from "../tool/index.ts";
 import { toolRecovery } from "./tool-recovery.ts";
 import type { Phase, SatelliteAbort, SatelliteAny, SatelliteContext } from "./types.ts";
 import { type Action, Pass } from "./types.ts";
@@ -58,11 +59,14 @@ const applyActionToPhase = (phase: Phase, action: Action): Phase =>
         : phase,
     ),
     Match.tag("BlockTool", () => phase),
-    Match.tag("ReplaceResult", (a) =>
-      phase._tag === "AfterTool"
-        ? { ...phase, result: { ...phase.result, content: a.content } }
-        : phase,
-    ),
+    Match.tag("ReplaceResult", (a) => {
+      if (phase._tag !== "AfterTool") return phase;
+      const presentation = textPresentation(a.content);
+      return {
+        ...phase,
+        result: { ...phase.result, presentation, textContent: a.content },
+      };
+    }),
     Match.tag("RecoverToolError", () => phase),
     Match.exhaustive,
   );

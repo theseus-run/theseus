@@ -12,8 +12,8 @@
  *   const compactor = backgroundSatellite({
  *     name: "compactor",
  *     shouldStart: (phase) =>
- *       phase._tag === "AfterTool" && phase.result.content.length > 4000
- *         ? phase.result.content
+ *       phase._tag === "AfterTool" && phase.result.textContent.length > 4000
+ *         ? phase.result.textContent
  *         : null,
  *     work: (content) => compactViaLLM(content),
  *     toAction: (compacted) => ReplaceResult(compacted),

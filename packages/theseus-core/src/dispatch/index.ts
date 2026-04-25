@@ -2,7 +2,6 @@
  * Dispatch — the reusable LLM dispatch primitive.
  *
  * step()          — one LLM call (pure, no tool execution, no fiber/events)
- * stepStream()    — streaming LLM call with delta callbacks
  * dispatch()      — full machine: loop + events + injection + fiber handle
  * dispatchAwait() — convenience for callers that only need the result
  *
@@ -17,13 +16,11 @@ export type { DispatchSummary, EventEntry, Snapshot } from "./log.ts";
 
 // Log — append-only audit/replay/restore
 export { DispatchLog, InMemoryDispatchLog, NoopDispatchLog } from "./log.ts";
-export type { StreamDelta } from "./step.ts";
 
 // Step — pure, reusable independently
 export {
   runToolCall,
   step,
-  stepStream,
   tryParseArgs,
 } from "./step.ts";
 // Types
@@ -36,8 +33,6 @@ export type {
   DispatchSpec,
   Injection,
   StepResult,
-  StepText,
-  StepToolCalls,
   ToolCall,
   ToolCallError,
   ToolCallResult,

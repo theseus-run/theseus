@@ -148,8 +148,8 @@ describe("Capsule tools", () => {
             type: "mission.note",
             summary: "bound at execution",
           });
-          const presentation = yield* Tool.callTool(readCapsuleTool, { tail: 10 });
-          return presentation.content
+          const run = yield* Tool.callTool(readCapsuleTool, { tail: 10 });
+          return run.presentation.content
             .map((content) => (content._tag === "text" ? content.text : ""))
             .join("");
         }),
@@ -169,8 +169,8 @@ describe("Capsule tools", () => {
           yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
         }
 
-        const presentation = yield* Tool.callTool(readCapsuleTool, { tail: 100 });
-        const text = presentation.content
+        const run = yield* Tool.callTool(readCapsuleTool, { tail: 100 });
+        const text = run.presentation.content
           .map((content) => (content._tag === "text" ? content.text : ""))
           .join("");
         return text;

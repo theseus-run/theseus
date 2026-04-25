@@ -46,7 +46,7 @@ describe("dispatchGruntTool", () => {
       ),
     );
 
-    const text = output.content
+    const text = output.presentation.content
       .map((content) => (content._tag === "text" ? content.text : ""))
       .join("");
     expect(text).toContain("[unstructured]");

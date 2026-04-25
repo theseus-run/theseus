@@ -102,12 +102,17 @@ const partEncodedToStreamParts = (parts: Response.PartEncoded[]): Response.Strea
 
 export type MockResponse = Response.PartEncoded[] | AiError.AiError;
 
+export interface MockLanguageModelOptions {
+  readonly onGenerateText?: (options: LanguageModel.ProviderOptions) => void;
+}
+
 // ---------------------------------------------------------------------------
 // Mock LanguageModel Layer
 // ---------------------------------------------------------------------------
 
 export const makeMockLanguageModel = (
   responses: MockResponse[],
+  options?: MockLanguageModelOptions,
 ): Layer.Layer<LanguageModel.LanguageModel> =>
   Layer.effect(LanguageModel.LanguageModel)(
     Effect.gen(function* () {
@@ -129,7 +134,10 @@ export const makeMockLanguageModel = (
       });
 
       return yield* LanguageModel.make({
-        generateText: () => getNext,
+        generateText: (providerOptions) =>
+          Effect.sync(() => options?.onGenerateText?.(providerOptions)).pipe(
+            Effect.flatMap(() => getNext),
+          ),
 
         streamText: () =>
           Stream.unwrap(

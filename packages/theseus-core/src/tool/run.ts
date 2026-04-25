@@ -4,24 +4,56 @@
  *   1. Decode raw LLM args via `tool.input` (Effect Schema)
  *   2. Apply `tool.retry` schedule (if configured) around execution
  *   3. Run `tool.execute`
- *   4. On success → `tool.present(output)` (or default text presentation)
- *   5. On known failure (`F`) → build an error Presentation (isError: true)
- *   6. On defect (unexpected throw) → fail with `ToolDefect`
+ *   4. Validate success output via `tool.output`
+ *   5. Validate known failure via `tool.failure`
+ *   6. Project the validated value into a Presentation
+ *   7. On defect (unexpected throw) → fail with `ToolDefect`
  *
  * The returned Effect's error channel contains only runtime errors:
  *   - `ToolInputError`  — schema decode failed (LLM sent bad args)
+ *   - `ToolOutputError` — execute returned a value outside its schema
+ *   - `ToolFailureError` — execute failed with a value outside its schema
  *   - `ToolDefect`      — tool crashed unexpectedly
  *
- * Typed failures (`F`) are absorbed into the Presentation (`isError: true`,
- * `structured` carries the encoded failure) because the LLM needs to see them
+ * Typed failures (`F`) are absorbed into the outcome (`_tag: "Failure"`)
+ * with a Presentation marked `isError: true`;
+ * `structured` carries the validated failure) because the LLM needs to see them
  * as tool-result content, not exceptions. Callers who need F in the error
- * channel can match on `result.isError` or pre-compose around `callTool`.
+ * channel can pre-compose around `callTool`.
  */
 
 import { Effect, Schema } from "effect";
 import { type Presentation, textPresentation } from "./content.ts";
-import { ToolDefect, ToolInputError } from "./errors.ts";
+import { ToolDefect, ToolFailureError, ToolInputError, ToolOutputError } from "./errors.ts";
 import type { Tool } from "./index.ts";
+
+// ---------------------------------------------------------------------------
+// ToolValue / ToolOutcome
+// ---------------------------------------------------------------------------
+
+export type ToolValue<O, F> =
+  | {
+      readonly _tag: "Success";
+      readonly output: O;
+    }
+  | {
+      readonly _tag: "Failure";
+      readonly failure: F;
+    };
+
+export type ToolOutcome<I, O, F> =
+  | {
+      readonly _tag: "Success";
+      readonly input: I;
+      readonly output: O;
+      readonly presentation: Presentation;
+    }
+  | {
+      readonly _tag: "Failure";
+      readonly input: I;
+      readonly failure: F;
+      readonly presentation: Presentation;
+    };
 
 // ---------------------------------------------------------------------------
 // Default presenters
@@ -38,19 +70,27 @@ const defaultPresent = <O>(output: O): Presentation =>
 const defaultPresentFailure = <F>(failure: F): Presentation =>
   textPresentation(stringify(failure), { isError: true, structured: failure });
 
+const defaultPresentValue = <O, F>(value: ToolValue<O, F>): Presentation =>
+  value._tag === "Success" ? defaultPresent(value.output) : defaultPresentFailure(value.failure);
+
 // ---------------------------------------------------------------------------
 // callTool
 // ---------------------------------------------------------------------------
 
 /**
- * Call a tool: decode → retry-wrapped execute → present.
+ * Call a tool: decode → retry-wrapped execute → validate → present.
  * Typed failures are folded into an error `Presentation`; defects propagate.
  */
 export const callTool = <I, O, F, R>(
   tool: Tool<I, O, F, R>,
   raw: unknown,
-): Effect.Effect<Presentation, ToolInputError | ToolDefect, R> => {
-  const present = tool.present ?? (defaultPresent as (o: O) => Presentation);
+): Effect.Effect<
+  ToolOutcome<I, O, F>,
+  ToolInputError | ToolOutputError | ToolFailureError | ToolDefect,
+  R
+> => {
+  const present = (value: ToolValue<O, F>): Effect.Effect<Presentation, never, R> =>
+    tool.present ? tool.present(value) : Effect.succeed(defaultPresentValue(value));
 
   // Tool schemas are pure; Effect Schema currently exposes an unconstrained
   // context here, so the primitive boundary narrows it once.
@@ -63,12 +103,46 @@ export const callTool = <I, O, F, R>(
     return tool.retry ? Effect.retry(run, tool.retry) : run;
   };
 
+  const validateOutput = (output: O): Effect.Effect<O, ToolOutputError> =>
+    Schema.decodeUnknownEffect(tool.output)(output).pipe(
+      Effect.mapError((cause) => new ToolOutputError({ tool: tool.name, output, cause })),
+    ) as Effect.Effect<O, ToolOutputError, never>;
+
+  const validateFailure = (failure: F): Effect.Effect<F, ToolFailureError> =>
+    Schema.decodeUnknownEffect(tool.failure)(failure).pipe(
+      Effect.mapError((cause) => new ToolFailureError({ tool: tool.name, failure, cause })),
+    ) as Effect.Effect<F, ToolFailureError, never>;
+
   return decodeStep.pipe(
     Effect.flatMap((input) =>
       executeStep(input).pipe(
         Effect.matchEffect({
-          onSuccess: (output) => Effect.succeed(present(output)),
-          onFailure: (failure) => Effect.succeed(defaultPresentFailure<F>(failure)),
+          onSuccess: (output) =>
+            validateOutput(output).pipe(
+              Effect.flatMap((validated) =>
+                present({ _tag: "Success", output: validated }).pipe(
+                  Effect.map((presentation) => ({
+                    _tag: "Success" as const,
+                    input,
+                    output: validated,
+                    presentation,
+                  })),
+                ),
+              ),
+            ),
+          onFailure: (failure) =>
+            validateFailure(failure).pipe(
+              Effect.flatMap((validated) =>
+                present({ _tag: "Failure", failure: validated }).pipe(
+                  Effect.map((presentation) => ({
+                    _tag: "Failure" as const,
+                    input,
+                    failure: validated,
+                    presentation,
+                  })),
+                ),
+              ),
+            ),
         }),
       ),
     ),

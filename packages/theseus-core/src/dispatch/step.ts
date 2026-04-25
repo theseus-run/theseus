@@ -1,9 +1,8 @@
 /**
  * Step — one LLM call via LanguageModel. Pure — no tool execution, no loop.
  *
- *   stepStream(messages, tools, dispatchId, agentName, onChunk)
- *     → StepText      { _tag: "text", content, usage }
- *     → StepToolCalls  { _tag: "tool_calls", toolCalls, usage }
+ *   step(messages, tools, dispatchId, name)
+ *     → StepResult { content, thinking?, toolCalls, usage }
  *
  * Tool execution is the caller's responsibility. This keeps step() pure
  * and gives callers control over intermediate steps (event emission,
@@ -13,7 +12,7 @@
  * so that our dispatch loop retains full control over tool execution.
  */
 
-import { Effect, Match, Stream } from "effect";
+import { Effect, Match } from "effect";
 import type * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
@@ -66,11 +65,12 @@ const responsePartsToStepResult = (parts: ReadonlyArray<Response.PartEncoded>): 
       arguments: JSON.stringify(tc.params),
     }));
 
-  const usage = extractUsage(parts);
-
-  return toolCalls.length > 0
-    ? { _tag: "tool_calls", toolCalls, ...(thinking ? { thinking } : {}), usage }
-    : { _tag: "text", content: text, ...(thinking ? { thinking } : {}), usage };
+  return {
+    content: text,
+    ...(thinking ? { thinking } : {}),
+    toolCalls,
+    usage: extractUsage(parts),
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -147,13 +147,13 @@ export const runToolCall = <R = never>(
 
   return callTool(tool, parsed).pipe(
     Effect.map(
-      (run): ToolCallResult => ({
+      (outcome): ToolCallResult => ({
         callId: tc.id,
         name: tc.name,
-        args: run.input,
-        run,
-        presentation: run.presentation,
-        textContent: presentationToText(run.presentation),
+        args: outcome.input,
+        outcome,
+        presentation: outcome.presentation,
+        textContent: presentationToText(outcome.presentation),
       }),
     ),
     Effect.mapError(
@@ -161,103 +161,6 @@ export const runToolCall = <R = never>(
     ),
   ) as Effect.Effect<ToolCallResult, ToolCallError, R>;
 };
-
-// ---------------------------------------------------------------------------
-// foldStreamParts — fold StreamPartEncoded[] into PartEncoded[]
-// ---------------------------------------------------------------------------
-
-/** Fold streaming deltas (text-start/text-delta/text-end) back into complete parts. */
-const foldStreamParts = (
-  streamParts: ReadonlyArray<Response.StreamPartEncoded>,
-): Response.PartEncoded[] => {
-  const acc = { text: "", reasoning: "", parts: [] as Response.PartEncoded[] };
-  for (const part of streamParts) {
-    const deltaPart = part as Response.StreamPartEncoded & { readonly delta?: string };
-    Match.value(part.type).pipe(
-      Match.when("text-delta", () => {
-        acc.text += deltaPart.delta ?? "";
-      }),
-      Match.when("reasoning-delta", () => {
-        acc.reasoning += deltaPart.delta ?? "";
-      }),
-      Match.when("tool-call", () => {
-        acc.parts.push(part as Response.PartEncoded);
-      }),
-      Match.when("finish", () => {
-        acc.parts.push(part as Response.PartEncoded);
-      }),
-      Match.when("error", () => {
-        acc.parts.push(part as Response.PartEncoded);
-      }),
-      Match.orElse(() => undefined),
-    );
-  }
-
-  return [
-    ...(acc.reasoning
-      ? ([{ type: "reasoning", text: acc.reasoning }] as Response.PartEncoded[])
-      : []),
-    ...(acc.text ? [{ type: "text", text: acc.text } as Response.TextPartEncoded] : []),
-    ...acc.parts,
-  ];
-};
-
-// ---------------------------------------------------------------------------
-// stepStream — streaming LLM call via LanguageModel
-// ---------------------------------------------------------------------------
-
-/** Chunk types we forward to the dispatch loop. */
-export type StreamDelta =
-  | { readonly type: "text-delta"; readonly delta: string }
-  | { readonly type: "reasoning-delta"; readonly delta: string };
-
-/**
- * Streaming LLM call via LanguageModel.streamText with disableToolCallResolution.
- *
- * Emits text/thinking deltas via onChunk callback. Returns StepResult when done.
- */
-export const stepStream = (
-  messages: ReadonlyArray<Prompt.MessageEncoded>,
-  tools: ReadonlyArray<ToolAnyWith<unknown>>,
-  dispatchId: string,
-  agentName: string,
-  onChunk: (chunk: StreamDelta) => Effect.Effect<void>,
-): Effect.Effect<StepResult, DispatchModelFailed, LanguageModel.LanguageModel> =>
-  Effect.gen(function* () {
-    const prompt = Prompt.make(messages);
-    const toolkit = toolsArrayToAiToolkit(tools);
-
-    // Collect all parts from the stream
-    const allParts: Response.StreamPartEncoded[] = [];
-
-    yield* mapAiErrors(
-      dispatchId,
-      agentName,
-      LanguageModel.streamText({
-        prompt,
-        toolkit,
-        disableToolCallResolution: true,
-      }).pipe(
-        Stream.tap((part) => {
-          const encodedPart = part as unknown as Response.StreamPartEncoded;
-          allParts.push(encodedPart);
-          const deltaPart = encodedPart as Response.StreamPartEncoded & { readonly delta?: string };
-          return Match.value(encodedPart.type).pipe(
-            Match.when("text-delta", () =>
-              onChunk({ type: "text-delta", delta: deltaPart.delta ?? "" }),
-            ),
-            Match.when("reasoning-delta", () =>
-              onChunk({ type: "reasoning-delta", delta: deltaPart.delta ?? "" }),
-            ),
-            Match.orElse(() => Effect.void),
-          );
-        }),
-        Stream.runDrain,
-      ),
-    );
-
-    return responsePartsToStepResult(foldStreamParts(allParts));
-  });
 
 // ---------------------------------------------------------------------------
 // step — non-streaming LLM call via LanguageModel.generateText

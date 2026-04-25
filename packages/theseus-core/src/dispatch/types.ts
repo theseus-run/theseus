@@ -13,8 +13,8 @@ import type {
   ToolDefect,
   ToolFailureError,
   ToolInputError,
+  ToolOutcome,
   ToolOutputError,
-  ToolRunResult,
 } from "../tool/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ export interface ToolCallResult {
   readonly callId: string;
   readonly name: string;
   readonly args: unknown;
-  readonly run?: ToolRunResult<unknown, unknown, unknown>;
+  readonly outcome?: ToolOutcome<unknown, unknown, unknown>;
   readonly presentation: Presentation;
   readonly textContent: string;
 }
@@ -157,19 +157,10 @@ export type ToolCallError = ToolCallUnknown | ToolCallBadArgs | ToolCallFailed;
 // StepResult — outcome of a single LLM call (no tool execution)
 // ---------------------------------------------------------------------------
 
-export type StepResult = StepText | StepToolCalls;
-
-export interface StepText {
-  readonly _tag: "text";
+export interface StepResult {
   readonly content: string;
   readonly thinking?: string;
-  readonly usage: Usage;
-}
-
-export interface StepToolCalls {
-  readonly _tag: "tool_calls";
   readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly thinking?: string;
   readonly usage: Usage;
 }
 
@@ -180,13 +171,7 @@ export interface StepToolCalls {
 export type DispatchEvent =
   | { readonly _tag: "Calling"; readonly name: string; readonly iteration: number }
   | {
-      readonly _tag: "TextDelta";
-      readonly name: string;
-      readonly iteration: number;
-      readonly content: string;
-    }
-  | {
-      readonly _tag: "ThinkingDelta";
+      readonly _tag: "Text";
       readonly name: string;
       readonly iteration: number;
       readonly content: string;

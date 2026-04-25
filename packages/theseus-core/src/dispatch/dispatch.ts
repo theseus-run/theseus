@@ -8,7 +8,7 @@
  *   handle.interrupt preemptive Fiber.interrupt — kills mid-LLM-call or mid-tool-call
  *   handle.result    Effect<DispatchOutput, DispatchError> — await the final value
  *
- * Uses LanguageModel from effect/unstable/ai via stepStream.
+ * Uses LanguageModel from effect/unstable/ai via generateText.
  */
 
 import {
@@ -31,7 +31,7 @@ import type { SatelliteAbort } from "../satellite/types.ts";
 import type { Presentation } from "../tool/index.ts";
 import { textPresentation } from "../tool/index.ts";
 import { DispatchLog } from "./log.ts";
-import { presentationToText, runToolCall, stepStream, tryParseArgs } from "./step.ts";
+import { presentationToText, runToolCall, step, tryParseArgs } from "./step.ts";
 import type {
   DispatchError,
   DispatchEvent,
@@ -219,32 +219,7 @@ export const dispatch = <R = never>(
 
           yield* emit({ _tag: "Calling", name: spec.name, iteration: iterations });
 
-          const rawResult = yield* stepStream(
-            callMessages,
-            spec.tools,
-            dispatchId,
-            spec.name,
-            (chunk) =>
-              Match.value(chunk.type).pipe(
-                Match.when("text-delta", () =>
-                  emit({
-                    _tag: "TextDelta",
-                    name: spec.name,
-                    iteration: iterations,
-                    content: chunk.delta,
-                  }),
-                ),
-                Match.when("reasoning-delta", () =>
-                  emit({
-                    _tag: "ThinkingDelta",
-                    name: spec.name,
-                    iteration: iterations,
-                    content: chunk.delta,
-                  }),
-                ),
-                Match.orElse(() => Effect.void),
-              ),
-          ).pipe(
+          const rawResult = yield* step(callMessages, spec.tools, dispatchId, spec.name).pipe(
             Effect.withSpan("llm-call", {
               attributes: { "llm.name": spec.name, "llm.iteration": iterations },
             }),
@@ -260,6 +235,15 @@ export const dispatch = <R = never>(
             });
           }
 
+          if (rawResult.content) {
+            yield* emit({
+              _tag: "Text",
+              name: spec.name,
+              iteration: iterations,
+              content: rawResult.content,
+            });
+          }
+
           // --- Phase: AfterCall ---
           const afterCallAction = yield* ring.run(
             { _tag: "AfterCall", stepResult: rawResult },
@@ -269,7 +253,7 @@ export const dispatch = <R = never>(
           const result =
             afterCallAction._tag === "TransformStepResult" ? afterCallAction.stepResult : rawResult;
 
-          if (result._tag === "text")
+          if (result.toolCalls.length === 0)
             return {
               dispatchId,
               name: spec.name,
@@ -390,12 +374,17 @@ export const dispatch = <R = never>(
 
           const assistantMsg: Prompt.MessageEncoded = {
             role: "assistant" as const,
-            content: result.toolCalls.map((tc) => ({
-              type: "tool-call" as const,
-              id: tc.id,
-              name: tc.name,
-              params: tryParseArgs(tc),
-            })),
+            content: [
+              ...(result.content
+                ? ([{ type: "text" as const, text: result.content }] as const)
+                : []),
+              ...result.toolCalls.map((tc) => ({
+                type: "tool-call" as const,
+                id: tc.id,
+                name: tc.name,
+                params: tryParseArgs(tc),
+              })),
+            ],
           };
 
           return yield* loop(

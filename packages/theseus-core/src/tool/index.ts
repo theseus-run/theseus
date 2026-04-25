@@ -32,6 +32,11 @@
 import type { Effect, Schedule, Schema } from "effect";
 import type { Presentation } from "./content.ts";
 import type { ToolPolicy } from "./meta.ts";
+import type { ToolValue } from "./run.ts";
+
+type ToolPresenter<O, F, R> = {
+  bivarianceHack(value: ToolValue<O, F>): Effect.Effect<Presentation, never, R>;
+}["bivarianceHack"];
 
 // ---------------------------------------------------------------------------
 // Tool<I, O, F, R>
@@ -60,8 +65,8 @@ export interface Tool<I, O, F, R> {
   readonly policy: ToolPolicy;
   /** The typed effect. */
   readonly execute: (input: I) => Effect.Effect<O, F, R>;
-  /** Convert the typed output into LLM/UI content. Defaults to text via JSON encode. */
-  readonly present?: (output: O) => Presentation;
+  /** Project the typed success/failure value into LLM/UI content. Defaults to text via JSON. */
+  readonly present?: ToolPresenter<O, F, R>;
   /** Retry policy for failures. Authors gate by error shape via `Schedule.whileInput` internally. */
   readonly retry?: Schedule.Schedule<unknown>;
 }
@@ -95,7 +100,9 @@ export interface ToolDef<
   readonly execute: (
     input: Schema.Schema.Type<Input>,
   ) => Effect.Effect<Schema.Schema.Type<Output>, Schema.Schema.Type<Failure>, R>;
-  readonly present?: (output: Schema.Schema.Type<Output>) => Presentation;
+  readonly present?: (
+    value: ToolValue<Schema.Schema.Type<Output>, Schema.Schema.Type<Failure>>,
+  ) => Effect.Effect<Presentation, never, R>;
   readonly retry?: Schedule.Schedule<unknown>;
 }
 
@@ -148,8 +155,10 @@ export {
 export * as Defaults from "./defaults.ts";
 export {
   ToolDefect,
+  ToolFailureError,
   ToolInputError,
   ToolOutputError,
   type ToolRuntimeError,
 } from "./errors.ts";
 export type { ToolInteraction, ToolPolicy } from "./meta.ts";
+export type { ToolOutcome, ToolValue } from "./run.ts";

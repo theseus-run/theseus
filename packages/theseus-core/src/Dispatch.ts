@@ -20,7 +20,6 @@ export {
   dispatchAwait,
   runToolCall,
   step,
-  stepStream,
   tryParseArgs,
 } from "./dispatch/index.ts";
 
@@ -37,9 +36,6 @@ export type {
   DispatchSpec,
   Injection,
   StepResult,
-  StepText,
-  StepToolCalls,
-  StreamDelta,
   ToolCall,
   ToolCallError,
   ToolCallResult,
