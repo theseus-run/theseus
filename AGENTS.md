@@ -99,6 +99,8 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 ## TypeScript And Effect
 
 - Keep public fallible boundaries as `Effect` where composition, interception, or typed failure matters.
+- Prefer Effect-style namespace APIs for public primitive surfaces. Names should read well under their namespace, such as `Tool.Error<Input, Output, Error, Requirements>`, `Tool.Def<Input, Output, Error, Requirements>`, or `Mission.Id`, instead of repeating the primitive name at every member.
+- Keep generic parameter order stable for related public types. For tool-like APIs, prefer input, output, error, requirements: `<Input, Output, Error, Requirements>`.
 - Prefer plain interfaces and named function fields over class hierarchies or hidden registries.
 - Keep runtime data serializable when it crosses process, tool, or dispatch boundaries.
 - Use strict types for closed sets. Use `string` only for externally extensible runtime sets.
@@ -169,6 +171,10 @@ Use a docs-management skill for documentation vault structure, note moves, note 
 Use a Theseus design skill for primitive design, runtime concepts, operator model, and major package ownership decisions.
 
 Use an Effect v4 skill for Effect API mechanics, service/layer wiring, error channels, Schema, Schedule, Queue, Deferred, Fiber, Scope, or Stream work.
+
+Use a monorepo-maintenance skill for package boundaries, file splits, public exports, naming/API surface, and god-file reduction.
+
+Use a testing-patterns skill for test placement, characterization tests, Effect test layers, fixtures, and verification scope.
 
 </skills>
 

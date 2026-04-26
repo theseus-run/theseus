@@ -1,0 +1,67 @@
+---
+name: monorepo-maintenance
+description: Use when changing package boundaries, splitting or moving modules, shaping public exports, naming APIs, reducing large files, or reviewing repo structure and maintainability in Theseus.
+---
+
+# Monorepo Maintenance
+
+Use this skill for structural changes: package ownership, file shape, public API names, barrels, dependency direction, and maintainability reviews.
+
+Do not use this skill for web-only `packages/icarus-web` work unless the user explicitly brings web structure into scope.
+
+## First Pass
+
+1. Read the nearest `package.json`, `tsconfig.json`, and current package exports before moving code.
+2. Search for existing naming and module patterns with `rg`.
+3. Identify the owning package before adding a type, service, runtime implementation, fixture, or test.
+4. Prefer the smallest boundary that removes real coupling or file growth.
+5. After moves or export changes, run the narrow typecheck or the root typecheck when signatures cross packages.
+
+## Package Ownership
+
+- `theseus-core` owns primitives, protocol contracts, service tags, and shared runtime types. It must not depend on tools, server, or web packages.
+- `theseus-tools` owns concrete tool implementations. It may depend on `theseus-core`.
+- `theseus-server` owns runtime assembly, persistence, RPC/HTTP wiring, and process-level service composition.
+- `jsx-md` packages own prompt/document rendering utilities and should stay independent from runtime orchestration.
+- Cross-package contracts belong in the lowest package that can own them without importing implementation concerns.
+- If two packages need the same runtime behavior, first ask whether the behavior is actually a primitive contract, a server concern, or a duplicated convenience.
+
+## File Shape
+
+- Prefer modules with one reason to change.
+- Split files when they mix public types, service tags, service implementations, persistence, command routing, serialization, fixtures, and test helpers.
+- Keep orchestration files shallow: wire named pieces together, but move behavior into focused modules.
+- Avoid "god files" that accumulate every variant of a primitive. A large file is a smell when unrelated sections can change independently.
+- Do not split only by syntax category if the result separates code that must always be read together.
+- Keep test fixtures and mocks out of production modules unless they are explicitly exported test utilities.
+
+## Public API And Naming
+
+- Prefer namespace-style public APIs for primitives, matching the existing Effect-style surface:
+  - `import * as Tool from "@theseus.run/core/Tool"`
+  - `Tool.Error<Input, Output, Error, Requirements>`
+  - `Tool.Def<Input, Output, Error, Requirements>`
+  - `Mission.Id`, `Mission.Record`, `Dispatch.Result`
+- For public primitive barrels, favor short names that read clearly under the namespace. Prefer `Tool.Error` over `Tool.ToolError` when the namespace already supplies the subject.
+- Keep globally matched runtime error classes prefixed when their `_tag` values must be unique, such as `ToolInputError` or `MissionErrorInvalidTransition`.
+- Use the same word for the same concept across packages. Do not alternate between `result`, `outcome`, `response`, and `value` unless the concepts are intentionally different.
+- Prefer named constructors for repeated protocol variants so call sites do not duplicate `_tag` literals or default fields.
+- Keep generic parameter order stable for related types. For tool-like APIs, prefer input, output, error, requirements: `<Input, Output, Error, Requirements>`.
+- Internal modules may use longer local names when that avoids ambiguity. Public barrels should make the imported namespace do useful naming work.
+
+## Barrels And Exports
+
+- Keep package and primitive barrels thin. They should expose the public surface, not contain runtime behavior.
+- Prefer direct namespace imports from primitive barrels over root catch-all imports in examples and public docs.
+- Do not add compatibility exports, duplicate old/new paths, or alias layers unless the user explicitly requires back compatibility.
+- When replacing a public path without back compatibility, remove stale exports, comments, tests, and docs in the same pass when feasible.
+- Match `package.json` exports, TypeScript path aliases, and source entrypoints.
+
+## Review Checklist
+
+- Does every changed module have one clear owner?
+- Did any package import upward into a higher-level package?
+- Did a public name become redundant under its namespace?
+- Did a file start mixing contracts, implementation, persistence, and tests?
+- Did a move leave stale exports, compatibility shims, or duplicate concepts?
+- Is verification scoped to the packages whose public surface changed?

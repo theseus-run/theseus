@@ -149,9 +149,7 @@ export const callTool = <I, O, F, R>(
             validateOutput(output).pipe(
               Effect.flatMap((validated) =>
                 present(ToolValue.success(validated)).pipe(
-                  Effect.map((presentation) =>
-                    ToolOutcome.success(input, validated, presentation),
-                  ),
+                  Effect.map((presentation) => ToolOutcome.success(input, validated, presentation)),
                 ),
               ),
             ),
@@ -159,9 +157,7 @@ export const callTool = <I, O, F, R>(
             validateFailure(failure).pipe(
               Effect.flatMap((validated) =>
                 present(ToolValue.failure(validated)).pipe(
-                  Effect.map((presentation) =>
-                    ToolOutcome.failure(input, validated, presentation),
-                  ),
+                  Effect.map((presentation) => ToolOutcome.failure(input, validated, presentation)),
                 ),
               ),
             ),

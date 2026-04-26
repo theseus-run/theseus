@@ -2,11 +2,13 @@ import { Effect, Match } from "effect";
 import type { SatelliteActionCallback } from "../satellite/ring.ts";
 import type {
   BeforeToolDecision,
+  CheckpointDecision,
   SatelliteAbort,
   SatelliteContext,
   SatelliteScope,
   ToolErrorDecision,
 } from "../satellite/types.ts";
+import { SatelliteAbort as SatelliteAbortError } from "../satellite/types.ts";
 import type { Presentation, ToolAnyWith } from "../tool/index.ts";
 import { presentationToText, runToolCall, tryParseArgs } from "./step.ts";
 import {
@@ -108,6 +110,23 @@ const recoverToolError = (
     Match.exhaustive,
   );
 
+const requireObservationCheckpoint = (
+  checkpoint: "before-tools" | "after-tools",
+  decision: CheckpointDecision,
+): Effect.Effect<void, SatelliteAbort> =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => Effect.void),
+    Match.tag("TransformMessages", () =>
+      Effect.fail(
+        new SatelliteAbortError({
+          satellite: "dispatch",
+          reason: `Checkpoint "${checkpoint}" is observation-only and cannot transform messages`,
+        }),
+      ),
+    ),
+    Match.exhaustive,
+  );
+
 export const runDispatchToolCalls = <R>(input: {
   readonly dispatchId: string;
   readonly name: string;
@@ -127,11 +146,12 @@ export const runDispatchToolCalls = <R>(input: {
       },
     );
 
-    yield* input.satelliteScope.checkpoint(
+    const beforeTools = yield* input.satelliteScope.checkpoint(
       "before-tools",
       input.satelliteContext,
       input.onSatelliteAction,
     );
+    yield* requireObservationCheckpoint("before-tools", beforeTools);
 
     const results: ToolCallResult[] = [];
     for (const toolCall of input.toolCalls) {
@@ -185,11 +205,12 @@ export const runDispatchToolCalls = <R>(input: {
       results.push(finalResult);
     }
 
-    yield* input.satelliteScope.checkpoint(
+    const afterTools = yield* input.satelliteScope.checkpoint(
       "after-tools",
       input.satelliteContext,
       input.onSatelliteAction,
     );
+    yield* requireObservationCheckpoint("after-tools", afterTools);
 
     yield* Effect.all(
       results.map((result) => input.emit(toolResultEvent(input.name, input.iteration, result))),

@@ -3,6 +3,7 @@ import { Duration, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Response from "effect/unstable/ai/Response";
+import { type Satellite, SatelliteRingLive, TransformMessages } from "../satellite/index.ts";
 import {
   makeMockLanguageModel,
   textParts,
@@ -11,7 +12,7 @@ import {
 import { Defaults, defineTool } from "../tool/index.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
-import { CurrentDispatch, DispatchStore } from "./store.ts";
+import { CurrentDispatch, DispatchStore, InMemoryDispatchStore } from "./store.ts";
 import type { DispatchSpec } from "./types.ts";
 
 const CompleteInput = Schema.Struct({
@@ -276,5 +277,57 @@ describe("dispatch loop", () => {
 
     expect(summary?.status).toBe("failed");
     expect(summary?.completedAt).not.toBeNull();
+  });
+
+  test("aborts when observation-only tool checkpoints try to transform messages", async () => {
+    const badCheckpoint: Satellite<void> = {
+      name: "bad-checkpoint",
+      open: () => Effect.void,
+      checkpoint: (checkpoint) =>
+        Effect.succeed({
+          decision:
+            checkpoint === "before-tools"
+              ? TransformMessages([{ role: "system", content: "ignored" }] as const)
+              : { _tag: "Pass" as const },
+          state: undefined,
+        }),
+    };
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Call completion.",
+      tools: [completeTool],
+      maxIterations: 3,
+    };
+
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it");
+        return yield* Effect.flip(handle.result);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            makeMockLanguageModel([
+              toolCallParts([
+                {
+                  id: "complete-1",
+                  name: completeTool.name,
+                  arguments: JSON.stringify({
+                    result: "success",
+                    summary: "done",
+                  }),
+                },
+              ]),
+            ]),
+            SatelliteRingLive([badCheckpoint]),
+            InMemoryDispatchStore,
+          ),
+        ),
+      ),
+    );
+
+    expect(error._tag).toBe("DispatchInterrupted");
+    if (error._tag === "DispatchInterrupted") {
+      expect(error.reason).toContain("observation-only");
+    }
   });
 });

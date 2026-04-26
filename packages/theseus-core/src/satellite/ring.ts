@@ -51,7 +51,7 @@ const phaseName = (phase: string) => phase;
 const isCheckpointDecision = (decision: SatelliteDecision): decision is CheckpointDecision =>
   Match.value(decision).pipe(
     Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformMessages", () => true),
     Match.tag("TransformStepResult", () => false),
     Match.tag("ModifyArgs", () => false),
     Match.tag("BlockTool", () => false),

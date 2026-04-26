@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { textPresentation } from "../tool/index.ts";
 import {
   DispatchModelFailed,
+  type ToolCall,
   ToolCallBadArgs,
   ToolCallFailed,
   ToolCallUnknown,
-  type ToolCall,
-  type ToolCallResult,
 } from "../dispatch/types.ts";
+import { tokenBudget } from "./token-budget.ts";
 import { toolGuard } from "./tool-guard.ts";
 import { toolRecovery } from "./tool-recovery.ts";
-import { tokenBudget } from "./token-budget.ts";
 
 const ctx = { dispatchId: "d", name: "runner", task: "task", iteration: 0 };
 
@@ -19,14 +17,6 @@ const tool: ToolCall = {
   id: "call-1",
   name: "read_file",
   arguments: "{}",
-};
-
-const result: ToolCallResult = {
-  callId: "call-1",
-  name: "read_file",
-  args: {},
-  presentation: textPresentation("ok"),
-  textContent: "ok",
 };
 
 describe("toolRecovery", () => {

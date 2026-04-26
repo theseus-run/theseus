@@ -88,7 +88,7 @@ export interface RecoverToolError {
   readonly result: ToolCallResult;
 }
 
-export type CheckpointDecision = Pass;
+export type CheckpointDecision = Pass | TransformMessages;
 export type BeforeCallDecision = Pass | TransformMessages;
 export type AfterCallDecision = Pass | TransformStepResult;
 export type BeforeToolDecision = Pass | ModifyArgs | BlockTool;
