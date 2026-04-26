@@ -9,8 +9,9 @@ import type {
   ToolErrorDecision,
 } from "../satellite/types.ts";
 import { SatelliteAbort as SatelliteAbortError } from "../satellite/types.ts";
-import type { Presentation, ToolAnyWith } from "../tool/index.ts";
-import { presentationToText, runToolCall, tryParseArgs } from "./step.ts";
+import type { ToolAnyWith } from "../tool/index.ts";
+import * as DispatchEvents from "./events.ts";
+import { runToolCall, tryParseArgs } from "./step.ts";
 import {
   type DispatchEvent,
   DispatchToolFailed,
@@ -20,52 +21,6 @@ import {
 } from "./types.ts";
 
 type Emit = (event: DispatchEvent) => Effect.Effect<void>;
-
-const presentationResult = (
-  toolCall: { id: string; name: string },
-  args: unknown,
-  presentation: Presentation,
-): ToolCallResult => ({
-  callId: toolCall.id,
-  name: toolCall.name,
-  args,
-  presentation,
-  textContent: presentationToText(presentation),
-});
-
-const toolCallingEvent = (name: string, iteration: number, toolCall: ToolCall): DispatchEvent => ({
-  _tag: "ToolCalling",
-  name,
-  iteration,
-  tool: toolCall.name,
-  args: tryParseArgs(toolCall),
-});
-
-const toolResultEvent = (
-  name: string,
-  iteration: number,
-  result: ToolCallResult,
-): DispatchEvent => ({
-  _tag: "ToolResult",
-  name,
-  iteration,
-  tool: result.name,
-  content: result.textContent,
-  isError: result.presentation.isError ?? false,
-});
-
-const toolErrorEvent = (
-  name: string,
-  iteration: number,
-  toolCall: ToolCall,
-  error: ToolCallError,
-): DispatchEvent => ({
-  _tag: "ToolError",
-  name,
-  iteration,
-  tool: toolCall.name,
-  error,
-});
 
 const runToolWithDecision = <R>(
   tools: ReadonlyArray<ToolAnyWith<R>>,
@@ -81,7 +36,9 @@ const runToolWithDecision = <R>(
       }),
     ),
     Match.tag("BlockTool", (block) =>
-      Effect.succeed(presentationResult(toolCall, tryParseArgs(toolCall), block.presentation)),
+      Effect.succeed(
+        DispatchEvents.resultFromPresentation(toolCall, tryParseArgs(toolCall), block.presentation),
+      ),
     ),
     Match.exhaustive,
   );
@@ -139,11 +96,10 @@ export const runDispatchToolCalls = <R>(input: {
   readonly emit: Emit;
 }): Effect.Effect<ReadonlyArray<ToolCallResult>, DispatchToolFailed | SatelliteAbort, R> =>
   Effect.gen(function* () {
-    yield* Effect.all(
-      input.toolCalls.map((tc) => input.emit(toolCallingEvent(input.name, input.iteration, tc))),
-      {
-        concurrency: "unbounded",
-      },
+    yield* Effect.forEach(
+      input.toolCalls,
+      (tc) => input.emit(DispatchEvents.toolCalling(input.name, input.iteration, tc)),
+      { discard: true },
     );
 
     const beforeTools = yield* input.satelliteScope.checkpoint(
@@ -164,7 +120,7 @@ export const runDispatchToolCalls = <R>(input: {
       const callResult = yield* runToolWithDecision(input.tools, toolCall, beforeAction).pipe(
         Effect.catch((error: ToolCallError) =>
           input
-            .emit(toolErrorEvent(input.name, input.iteration, toolCall, error))
+            .emit(DispatchEvents.toolError(input.name, input.iteration, toolCall, error))
             .pipe(
               Effect.flatMap(() =>
                 input.satelliteScope
@@ -197,7 +153,7 @@ export const runDispatchToolCalls = <R>(input: {
       const finalResult = Match.value(afterAction).pipe(
         Match.tag("Pass", () => callResult),
         Match.tag("ReplaceToolResult", (decision) =>
-          presentationResult(toolCall, callResult.args, decision.presentation),
+          DispatchEvents.resultFromPresentation(toolCall, callResult.args, decision.presentation),
         ),
         Match.exhaustive,
       );
@@ -212,11 +168,10 @@ export const runDispatchToolCalls = <R>(input: {
     );
     yield* requireObservationCheckpoint("after-tools", afterTools);
 
-    yield* Effect.all(
-      results.map((result) => input.emit(toolResultEvent(input.name, input.iteration, result))),
-      {
-        concurrency: "unbounded",
-      },
+    yield* Effect.forEach(
+      results,
+      (result) => input.emit(DispatchEvents.toolResult(input.name, input.iteration, result)),
+      { discard: true },
     );
 
     return results;

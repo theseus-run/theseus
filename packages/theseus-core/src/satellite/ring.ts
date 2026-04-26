@@ -5,16 +5,27 @@
  * SatelliteScope per dispatch; all satellite state is scoped to that dispatch.
  */
 
-import { Context, Effect, Layer, Match, Ref } from "effect";
+import { Context, Effect, Layer, Ref } from "effect";
+import {
+  applyAfterCallDecision,
+  applyAfterToolDecision,
+  applyBeforeCallDecision,
+  applyBeforeToolDecision,
+  applyCheckpointDecision,
+  applyToolErrorDecision,
+  isAfterCallDecision,
+  isAfterToolDecision,
+  isBeforeCallDecision,
+  isBeforeToolDecision,
+  isCheckpointDecision,
+  isTerminalDecision,
+  isToolErrorDecision,
+} from "./decisions.ts";
 import { toolRecovery } from "./tool-recovery.ts";
 import type {
-  AfterCall,
   AfterCallDecision,
-  AfterTool,
   AfterToolDecision,
-  BeforeCall,
   BeforeCallDecision,
-  BeforeTool,
   BeforeToolDecision,
   CheckpointDecision,
   SatelliteAbort,
@@ -24,7 +35,6 @@ import type {
   SatelliteRequirements,
   SatelliteScope,
   SatelliteStartContext,
-  ToolError,
   ToolErrorDecision,
 } from "./types.ts";
 import { Pass, SatelliteAbort as SatelliteAbortError } from "./types.ts";
@@ -43,82 +53,7 @@ export class SatelliteRing extends Context.Service<SatelliteRing, SatelliteRingS
   "SatelliteRing",
 ) {}
 
-const isTerminalDecision = (decision: SatelliteDecision): boolean =>
-  decision._tag === "BlockTool" || decision._tag === "RecoverToolError";
-
 const phaseName = (phase: string) => phase;
-
-const isCheckpointDecision = (decision: SatelliteDecision): decision is CheckpointDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => true),
-    Match.tag("TransformStepResult", () => false),
-    Match.tag("ModifyArgs", () => false),
-    Match.tag("BlockTool", () => false),
-    Match.tag("ReplaceToolResult", () => false),
-    Match.tag("RecoverToolError", () => false),
-    Match.exhaustive,
-  );
-
-const isBeforeCallDecision = (decision: SatelliteDecision): decision is BeforeCallDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => true),
-    Match.tag("TransformStepResult", () => false),
-    Match.tag("ModifyArgs", () => false),
-    Match.tag("BlockTool", () => false),
-    Match.tag("ReplaceToolResult", () => false),
-    Match.tag("RecoverToolError", () => false),
-    Match.exhaustive,
-  );
-
-const isAfterCallDecision = (decision: SatelliteDecision): decision is AfterCallDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => false),
-    Match.tag("TransformStepResult", () => true),
-    Match.tag("ModifyArgs", () => false),
-    Match.tag("BlockTool", () => false),
-    Match.tag("ReplaceToolResult", () => false),
-    Match.tag("RecoverToolError", () => false),
-    Match.exhaustive,
-  );
-
-const isBeforeToolDecision = (decision: SatelliteDecision): decision is BeforeToolDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => false),
-    Match.tag("TransformStepResult", () => false),
-    Match.tag("ModifyArgs", () => true),
-    Match.tag("BlockTool", () => true),
-    Match.tag("ReplaceToolResult", () => false),
-    Match.tag("RecoverToolError", () => false),
-    Match.exhaustive,
-  );
-
-const isAfterToolDecision = (decision: SatelliteDecision): decision is AfterToolDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => false),
-    Match.tag("TransformStepResult", () => false),
-    Match.tag("ModifyArgs", () => false),
-    Match.tag("BlockTool", () => false),
-    Match.tag("ReplaceToolResult", () => true),
-    Match.tag("RecoverToolError", () => false),
-    Match.exhaustive,
-  );
-
-const isToolErrorDecision = (decision: SatelliteDecision): decision is ToolErrorDecision =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => true),
-    Match.tag("TransformMessages", () => false),
-    Match.tag("TransformStepResult", () => false),
-    Match.tag("ModifyArgs", () => false),
-    Match.tag("BlockTool", () => false),
-    Match.tag("ReplaceToolResult", () => false),
-    Match.tag("RecoverToolError", () => true),
-    Match.exhaustive,
-  );
 
 type StateCell = {
   readonly name: string;
@@ -191,39 +126,6 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
 
     return lastDecision;
   });
-
-const applyCheckpointDecision = <Phase extends string>(
-  phase: Phase,
-  _decision: CheckpointDecision,
-): Phase => phase;
-
-const applyBeforeCallDecision = (phase: BeforeCall, decision: BeforeCallDecision): BeforeCall =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => phase),
-    Match.tag("TransformMessages", (d) => ({ messages: d.messages })),
-    Match.exhaustive,
-  );
-
-const applyAfterCallDecision = (phase: AfterCall, decision: AfterCallDecision): AfterCall =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => phase),
-    Match.tag("TransformStepResult", (d) => ({ stepResult: d.stepResult })),
-    Match.exhaustive,
-  );
-
-const applyBeforeToolDecision = (phase: BeforeTool, decision: BeforeToolDecision): BeforeTool =>
-  Match.value(decision).pipe(
-    Match.tag("Pass", () => phase),
-    Match.tag("ModifyArgs", (d) => ({
-      tool: { ...phase.tool, arguments: JSON.stringify(d.args) },
-    })),
-    Match.tag("BlockTool", () => phase),
-    Match.exhaustive,
-  );
-
-const applyAfterToolDecision = (phase: AfterTool, _decision: AfterToolDecision): AfterTool => phase;
-
-const applyToolErrorDecision = (phase: ToolError, _decision: ToolErrorDecision): ToolError => phase;
 
 export const makeSatelliteRing = <const Satellites extends ReadonlyArray<SatelliteAny>>(
   satellites: Satellites,

@@ -16,6 +16,7 @@
 - **Prefer existing structure.** Follow local package boundaries, naming, error style, and docs layout before introducing new patterns.
 - **Keep scope tight.** Do the requested work. Report unrelated issues; do not fix them without explicit approval.
 - **Use deterministic tools.** Formatting, import order, type checks, tests, and line counts belong to tools, not guesswork.
+- **Turn repeated mistakes into checks.** If an agent-visible failure can be caught deterministically, prefer a lint/type/test rule over another prose instruction.
 - **Fail forward.** When an approach fails, state what failed and change strategy. Do not retry with cosmetic differences.
 - **Separate fact from inference.** Mark assumptions when a conclusion depends on incomplete evidence.
 - **No mind claims.** Do not claim feelings, desires, consciousness, or lived experience.
@@ -125,7 +126,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - New runtime behavior needs focused tests near the package that owns it.
 - Primitive services with behavior, such as registries, stores, parsers, dispatch loops, satellite rings, and tool execution boundaries, should have direct tests.
 - Pure type surfaces and thin barrels do not need tests unless they contain runtime constructors or behavior.
-- Prefer characterization tests before refactoring working behavior, then keep or tighten those tests after the cleanup.
+- Use characterization tests to pin intended behavior before risky moves. Do not freeze known-bad WIP behavior just to preserve it.
 - Missing tests are review findings, not TODO decorations. Either add the test, explicitly defer it in the final report, or explain why the surface is type-only.
 
 ## Errors
@@ -168,11 +169,17 @@ Do not maintain a skill registry in this file. The filesystem is the source of t
 
 Use a docs-management skill for documentation vault structure, note moves, note splits, archive handling, and docs navigation.
 
+Use an agent-self-check skill before finishing code changes, after deterministic check failures, or when deciding whether a repeated mistake should become a rule.
+
+Use a biome-grit-rules skill when creating, reviewing, or modifying custom Biome Grit plugins.
+
 Use a Theseus design skill for primitive design, runtime concepts, operator model, and major package ownership decisions.
 
-Use an Effect v4 skill for Effect API mechanics, service/layer wiring, error channels, Schema, Schedule, Queue, Deferred, Fiber, Scope, or Stream work.
+Use an Effect v4 skill for general Effect API mechanics and v3-to-v4 translation. Prefer narrower Effect topic skills when work is specifically about services/layers, errors/schema, concurrency/lifecycle, observability/time, or testing/runtime.
 
 Use a monorepo-maintenance skill for package boundaries, file splits, public exports, naming/API surface, and god-file reduction.
+
+Use a refactoring-discipline skill for cleanup, risky moves, large-file reduction, and replacing WIP/POC code with a clean single path. Prefer hard replacement over compatibility unless the user explicitly asks for back compatibility.
 
 Use a testing-patterns skill for test placement, characterization tests, Effect test layers, fixtures, and verification scope.
 

@@ -49,6 +49,17 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Keep generic parameter order stable for related types. For tool-like APIs, prefer input, output, error, requirements: `<Input, Output, Error, Requirements>`.
 - Internal modules may use longer local names when that avoids ambiguity. Public barrels should make the imported namespace do useful naming work.
 
+## API Surface Design
+
+- Public APIs should expose domain intent, not implementation mechanics.
+- Exported functions that define package or primitive contracts should have explicit return types.
+- Avoid boolean parameter pairs and ambiguous positional flags. Use named options or discriminated unions.
+- Avoid overloads unless they materially improve call-site clarity and have a single coherent implementation model.
+- Prefer stable constructors for protocol variants and errors over repeated object literals at call sites.
+- Keep generic names descriptive in public examples and docs: `Input`, `Output`, `Error`, `Requirements` over single-letter aliases.
+- Keep APIs narrow at the boundary and composable inside the package. Do not export helper internals just because tests or one consumer can reach them.
+- When an API accepts unknown external data, pair it with a schema/decoder or a clearly named boundary function.
+
 ## Barrels And Exports
 
 - Keep package and primitive barrels thin. They should expose the public surface, not contain runtime behavior.
@@ -62,6 +73,7 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Does every changed module have one clear owner?
 - Did any package import upward into a higher-level package?
 - Did a public name become redundant under its namespace?
+- Did a public API expose implementation details or ambiguous boolean flags?
 - Did a file start mixing contracts, implementation, persistence, and tests?
 - Did a move leave stale exports, compatibility shims, or duplicate concepts?
 - Is verification scoped to the packages whose public surface changed?

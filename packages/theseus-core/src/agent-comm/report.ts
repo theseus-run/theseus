@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Match, Schema } from "effect";
 import { defineTool, textPresentation } from "../tool/index.ts";
 
 export const ReportChannelSchema = Schema.Literals(["complete", "blocked", "defect"]);
@@ -84,8 +84,14 @@ export const report = defineTool({
   execute: (input) => Effect.succeed(input),
   present: (value) =>
     Effect.succeed(
-      textPresentation(JSON.stringify(value._tag === "Success" ? value.output : value.failure), {
-        structured: value._tag === "Success" ? value.output : value.failure,
-      }),
+      Match.value(value).pipe(
+        Match.tag("Success", ({ output }) =>
+          textPresentation(JSON.stringify(output), { structured: output }),
+        ),
+        Match.tag("Failure", ({ failure }) =>
+          textPresentation(JSON.stringify(failure), { structured: failure }),
+        ),
+        Match.exhaustive,
+      ),
     ),
 });

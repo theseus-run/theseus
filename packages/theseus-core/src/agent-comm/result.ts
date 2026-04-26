@@ -50,4 +50,4 @@ export const DispatchGruntResult = {
     _tag: "Unstructured",
     ...input,
   }),
-} as const;
+};

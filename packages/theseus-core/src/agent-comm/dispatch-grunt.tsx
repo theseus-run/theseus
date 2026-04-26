@@ -5,7 +5,7 @@
  */
 
 import { render } from "@theseus.run/jsx-md";
-import { Effect, Exit, Fiber, Ref, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Match, Ref, Schema, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { BlueprintRegistry } from "../agent/index.ts";
 import { dispatch as dispatchLoop } from "../dispatch/index.ts";
@@ -62,16 +62,20 @@ const captureReport = (
     : Effect.void;
 
 const presentDispatchGruntResult = (result: DispatchGruntResultType): string => {
-  if (result._tag === "Reported") {
-    const { report: packet } = result;
-    const evidence =
-      packet.evidence && packet.evidence.length > 0
-        ? `\n\nEvidence:\n${packet.evidence.map((e) => `- ${e.ref ? `${e.ref}: ` : ""}${e.text}`).join("\n")}`
-        : "";
-    return `[${packet.channel}] ${packet.summary}\n\n${packet.content}${evidence}`;
-  }
-
-  return `[unstructured] ${result.salvage.summary}\n\n${result.salvage.content}`;
+  return Match.value(result).pipe(
+    Match.tag("Reported", ({ report: packet }) => {
+      const evidence =
+        packet.evidence && packet.evidence.length > 0
+          ? `\n\nEvidence:\n${packet.evidence.map((e) => `- ${e.ref ? `${e.ref}: ` : ""}${e.text}`).join("\n")}`
+          : "";
+      return `[${packet.channel}] ${packet.summary}\n\n${packet.content}${evidence}`;
+    }),
+    Match.tag(
+      "Unstructured",
+      ({ salvage }) => `[unstructured] ${salvage.summary}\n\n${salvage.content}`,
+    ),
+    Match.exhaustive,
+  );
 };
 
 export const dispatchGruntTool: Tool<
@@ -141,18 +145,20 @@ export const dispatchGruntTool: Tool<
 
       return yield* Effect.fail(
         new DispatchGruntFailed({
-          reason: `Grunt dispatch failed: ${String(exit.cause)}`,
+          reason: `Grunt dispatch failed: ${String(Cause.squash(exit.cause))}`,
         }),
       );
     }),
   present: (value) =>
     Effect.succeed(
-      textPresentation(
-        value._tag === "Success" ? presentDispatchGruntResult(value.output) : value.failure.reason,
-        {
-          ...(value._tag === "Failure" ? { isError: true } : {}),
-          structured: value._tag === "Success" ? value.output : value.failure,
-        },
+      Match.value(value).pipe(
+        Match.tag("Success", ({ output }) =>
+          textPresentation(presentDispatchGruntResult(output), { structured: output }),
+        ),
+        Match.tag("Failure", ({ failure }) =>
+          textPresentation(failure.reason, { isError: true, structured: failure }),
+        ),
+        Match.exhaustive,
       ),
     ),
 });

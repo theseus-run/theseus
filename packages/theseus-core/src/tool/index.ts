@@ -161,4 +161,4 @@ export {
   type ToolRuntimeError,
 } from "./errors.ts";
 export type { ToolInteraction, ToolPolicy } from "./meta.ts";
-export type { ToolOutcome, ToolValue } from "./run.ts";
+export { ToolOutcome, ToolValue } from "./run.ts";

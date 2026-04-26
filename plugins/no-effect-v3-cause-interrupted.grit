@@ -2,5 +2,5 @@ engine biome(1.0)
 language js
 
 `Cause.isInterruptedOnly($args)` as $m where {
-  register_diagnostic(span=$m, message="Effect v4 (beta.50): Cause.isInterruptedOnly was renamed to Cause.hasInterruptsOnly.", severity="error")
+  register_diagnostic(span=$m, message="Effect v4: Cause.isInterruptedOnly was renamed to Cause.hasInterruptsOnly. Load skill: effect-errors-schema.", severity="error")
 }

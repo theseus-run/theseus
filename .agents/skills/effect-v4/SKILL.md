@@ -1,11 +1,23 @@
 ---
 name: effect-v4
-description: Use when writing, reviewing, or debugging Effect v4 beta code in Theseus, including Context.Service, Layer composition, typed errors, Schema, Schedule, Queue, Stream, Deferred, Fiber, Scope, logging, tracing, and migration from Effect v3 examples.
+description: Use when writing, reviewing, or debugging Effect v4 beta code in Theseus, especially core Effect composition, Effect.gen, v3-to-v4 API translation, typed Effect signatures, and deciding which narrower Effect skill applies.
 ---
 
 # Effect v4
 
-Use this skill for Effect mechanics. For Theseus product/domain choices, use the Theseus design skill.
+Use this skill for general Effect mechanics and routing. For Theseus product/domain choices, use the Theseus design skill.
+
+## Route To Narrow Skills
+
+Load the narrower skill when the task clearly matches it:
+
+- `effect-services-layers` - Context.Service, service interfaces, Layer construction, dependency graphs, test seams.
+- `effect-errors-schema` - typed failures, defects, Cause, Schema decoding/encoding, schema-backed errors, boundary normalization.
+- `effect-concurrency-lifecycle` - Fiber, Deferred, Queue, PubSub, Stream, Scope, interruption, background loops, backpressure.
+- `effect-observability-time` - Clock, Duration, timeout, retry schedules, logging, tracing spans, metrics, config, redaction.
+- `effect-testing-runtime` - Effect.runPromise boundaries, test layers, deterministic services, TestClock/TestContext, runtime verification.
+
+If several apply, load only the ones needed for the change.
 
 ## Operating Model
 
@@ -40,13 +52,13 @@ The repo already has `@effect/language-service` configured in root `tsconfig.jso
 
 ## Type Shape
 
-`Effect.Effect<A, E, R>` means:
+`Effect.Effect<Success, Error, Requirements>` means:
 
-- `A` - success value
-- `E` - expected typed failure
-- `R` - required services/environment
+- `Success` - success value
+- `Error` - expected typed failure
+- `Requirements` - required services/environment
 
-Expected failures belong in `E`. Defects are bugs, thrown exceptions, rejected promise defects, or violated invariants; handle them only at boundaries.
+Expected failures belong in the error channel. Defects are bugs, thrown exceptions, rejected promise defects, or violated invariants; handle them only at boundaries.
 
 ## Core Constructors
 
@@ -132,220 +144,6 @@ Common v3 or stale examples need translation:
 
 Do not cargo-cult `Effect.Service` unless local v4 types and repo patterns support it for the case at hand. This repo currently uses `Context.Service`.
 
-## Services And Layers
-
-Use services for replaceable dependencies. Keep construction in layers and business methods as effects.
-
-```typescript
-import { Context, Effect, Layer } from "effect"
-
-interface UsersService {
-  readonly find: (id: UserId) => Effect.Effect<User, UserNotFound>
-}
-
-export class Users extends Context.Service<Users, UsersService>()("Users") {}
-
-export const UsersLive = Layer.effect(Users)(
-  Effect.gen(function* () {
-    const db = yield* Db
-    return Users.of({
-      find: (id) => db.queryUser(id),
-    })
-  }),
-)
-```
-
-Rules:
-
-- Declare service requirements in return types; do not hide them with `any`.
-- Compose same-level layers with `Layer.mergeAll`.
-- Use `Layer.provideMerge` when wiring dependencies into another layer while preserving provided services.
-- Use `Layer.succeed(Service)(implementation)` when the implementation already exists.
-- Avoid repeated `Effect.provide` inside hot paths; provide layers at composition boundaries.
-- Do not call `Effect.runPromise` or `Effect.runSync` inside services. Run effects at process, test, or script edges.
-- For test seams, provide alternate layers instead of conditionals inside production services.
-
-## Error Handling
-
-Use explicit domain errors. Do not collapse distinct failures into a generic error unless crossing a boundary that intentionally hides details.
-
-```typescript
-import { Data, Effect } from "effect"
-
-class UserNotFound extends Data.TaggedError("UserNotFound")<{
-  readonly userId: string
-}> {}
-
-const program = getUser(id).pipe(
-  Effect.catchTag("UserNotFound", (error) => Effect.succeed(fallback(error.userId))),
-)
-```
-
-Rules:
-
-- Use `Data.TaggedError` for plain runtime/domain errors.
-- Use `Schema.TaggedErrorClass` when the error must be schema-backed or serialized.
-- Use `Effect.catchTag` / `Effect.catchTags` for known tagged failures.
-- Use `Effect.catch` for all typed failures only when you deliberately collapse the union.
-- Use `Effect.catchCause` when interrupts or defects must be inspected.
-- Use `Cause.hasInterruptsOnly(cause)` to distinguish pure interruption from failure.
-- Use `Effect.catchDefect` only for defect conversion at a boundary.
-- Do not use try/catch inside `Effect.gen` to catch Effect failures; they are not thrown.
-- Do not throw expected failures.
-- Do not erase error unions with `any`, `unknown`, or generic wrappers.
-
-## Boundary Pattern
-
-At every external boundary, normalize once:
-
-- raw input -> Schema decode -> typed input
-- foreign exception -> tagged typed failure
-- domain failure -> explicit response or presentation
-- defect -> logged/crashed/interrupted according to boundary policy
-
-Examples of boundaries: tool calls, RPC handlers, SQLite calls, filesystem, subprocesses, model provider calls, WebSocket messages.
-
-Inside the domain, keep typed values and typed failures. Do not repeatedly decode or stringify internal data.
-
-## Schema
-
-Use Schema at external boundaries: tool inputs/outputs, RPC, persistence serialization, and config.
-
-```typescript
-import { Schema } from "effect"
-
-export const UserId = Schema.String.pipe(Schema.brand("UserId"))
-export type UserId = Schema.Schema.Type<typeof UserId>
-
-export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
-  code: Schema.String,
-  message: Schema.String,
-}) {}
-```
-
-Rules:
-
-- Use `Schema.Struct`, `Schema.Union`, `Schema.Literal`, and `Schema.Literals` for wire contracts.
-- Use `Schema.optional(...)` for optional fields in this repo.
-- Use branded schemas for IDs that cross service/package boundaries.
-- Decode unknown inputs with `Schema.decodeUnknownEffect(schema)(raw)` when failures should stay typed.
-- Keep schemas near the boundary they protect unless they are shared API contracts.
-- Prefer narrow schemas for commands and events. Avoid `Schema.Unknown` except for explicitly open extension points.
-
-## State, Cache, And Shared Mutable Cells
-
-Use the narrowest primitive for shared state:
-
-- `Ref` for small in-memory mutable state inside an Effect runtime.
-- `Cache` for memoized effectful lookups with capacity and TTL.
-- A service/store when state has domain meaning, persistence, or test seams.
-
-```typescript
-import { Cache, Duration, Ref } from "effect"
-
-const counter = yield* Ref.make(0)
-yield* Ref.update(counter, (n) => n + 1)
-
-const users = yield* Cache.make({
-  capacity: 500,
-  timeToLive: Duration.minutes(5),
-  lookup: (id: UserId) => Users.fetch(id),
-})
-```
-
-Rules:
-
-- Do not invent `Effect.cachedWithTTL`; use `Cache.make`.
-- Avoid global mutable module state for runtime state.
-- Keep cache keys typed and cache invalidation explicit.
-- Do not use `Ref` as a hidden dependency; put meaningful shared state behind a service.
-
-## Concurrency And Lifecycle
-
-Pick the fiber lifecycle intentionally.
-
-```typescript
-const fiber = yield* Effect.forkDetach({ startImmediately: true })(work)
-yield* Fiber.interrupt(fiber)
-```
-
-Rules:
-
-- Use `Effect.forkScoped` for work that must stop when the current scope closes.
-- Use `Effect.forkIn(effect, scope)` when scope ownership is explicit.
-- Use `Effect.forkDetach({ startImmediately: true })(effect)` only when work must outlive the parent fiber.
-- Use `Deferred` for cross-fiber result delivery, especially from detached work.
-- Use `Effect.onExit` or `Effect.ensuring` for cleanup that must run on success, failure, or interrupt.
-- Use `Effect.acquireUseRelease` or scoped layers for real resources.
-- Limit parallelism with `Effect.all(..., { concurrency: n })` or `Effect.forEach(..., { concurrency: n })`; use `"unbounded"` only when the collection and cost are bounded by design.
-- `Effect.race` interrupts the losing effect. Make sure both sides are interruption-safe.
-- Background work must have an owner: scope, registry, runtime service, or explicit detached lifecycle.
-
-## Queues, Streams, And Backpressure
-
-Queues encode pressure policy. Choose it deliberately:
-
-- `Queue.bounded<A>(n)` - backpressure; producer waits when full.
-- `Queue.sliding<A>(n)` - keep latest, drop oldest.
-- `Queue.dropping<A>(n)` - keep current, drop new when full.
-- `Queue.unbounded<A>()` - only when memory growth is impossible or bounded elsewhere.
-
-Rules:
-
-- Use explicit type parameters for queues.
-- Bridge queues to streams with `Stream.fromQueue(queue)`.
-- End queue-backed streams by offering a terminal event plus `Stream.takeUntil(...)`, or by `Queue.shutdown(queue)` when shutdown semantics are correct.
-- Do not leave background consumers without interruption or shutdown.
-
-## Time, Retry, Logging, Tracing
-
-Use Effect primitives instead of ad hoc timers and console output.
-
-```typescript
-import { Duration, Effect, Schedule } from "effect"
-
-const guarded = operation.pipe(Effect.timeout(Duration.seconds(5)))
-
-const retryPolicy = Schedule.exponential("200 millis").pipe(
-  Schedule.jittered,
-)
-```
-
-Rules:
-
-- Use `Duration` helpers for time units when clarity matters.
-- Use `Effect.timeout` around external calls that can hang.
-- Use `Schedule` for retry; gate retry by failure shape when only some errors are retryable.
-- Public retry fields should usually accept `Schedule.Schedule<unknown>` because schedule input is contravariant.
-- Use `Effect.logInfo`, `Effect.logDebug`, `Effect.logError`, and `Effect.annotateLogs`.
-- Use `Effect.withSpan("name", { attributes })` around meaningful runtime boundaries.
-- Use `Metric.counter`, `Metric.gauge`, or `Metric.histogram` when a value is operationally useful across runs, not just useful for local debugging.
-- Avoid `console.log` in Effect runtime code.
-
-## Configuration
-
-- Use Effect `Config` for runtime configuration when code needs typed environment values.
-- Do not read `process.env` throughout domain code.
-- Read config once through a service/layer, then inject the parsed values.
-- Keep secrets redacted in logs and errors.
-- Use `ConfigProvider` in tests or alternate runtimes when config should come from a map/object rather than the process environment.
-- Use `Redacted` for secrets and unwrap only at the final foreign boundary that needs the raw value.
-
-## Option And Null
-
-- Prefer explicit `Option.match` or `Option.getOrElse`.
-- Do not use `Option.getOrThrow` in runtime code.
-- Use `Option` internally when absence is expected.
-- Convert to `null` / `undefined` only at wire or UI boundaries that require it.
-
-## Testing
-
-- Test Effect code by running the effect at the test boundary with `Effect.runPromise`.
-- Prefer test layers over mocks embedded in production services.
-- Test typed failures directly; do not assert on stringified defects unless the boundary contract is string output.
-- For streams, test completion semantics as well as emitted values.
-- For background fibers, test interruption or shutdown behavior.
-
 ## Anti-Patterns
 
 Avoid these unless the file is explicitly a process/test/script boundary:
@@ -357,7 +155,7 @@ Avoid these unless the file is explicitly a process/test/script boundary:
 - direct `process.env` access outside config boundaries.
 - `Option.getOrThrow` in runtime code.
 - unbounded queues or concurrency without an explicit bounding argument.
-- type assertions that erase `E` or `R` (`as any`, `as never`) instead of fixing the layer/error model.
+- type assertions that erase the error or requirements channel (`as any`, `as never`) instead of fixing the layer/error model.
 
 ## Theseus Checks
 

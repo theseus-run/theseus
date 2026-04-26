@@ -6,5 +6,5 @@ or {
   `Layer.effect($tag, $impl)`,
   `Layer.scoped($tag, $impl)`
 } as $m where {
-  register_diagnostic(span=$m, message="Effect v4 (beta.50): Layer constructors have both curried and two-arg forms. Curried Layer.succeed(Tag)(impl) is preferred for consistency with partial application patterns.", severity="warning")
+  register_diagnostic(span=$m, message="Effect v4: Layer constructors have both curried and two-arg forms. Curried Layer.succeed(Tag)(impl) is preferred for consistency with partial application patterns. Load skill: effect-services-layers.", severity="warning")
 }

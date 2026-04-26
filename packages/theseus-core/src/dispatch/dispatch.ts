@@ -16,16 +16,11 @@ import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
-import { drainInjections } from "./injections.ts";
-import {
-  assistantToolMessage,
-  defaultMessages,
-  finalAssistantMessages,
-  toolResultMessages,
-} from "./messages.ts";
-import { step } from "./step.ts";
+import * as DispatchEvents from "./events.ts";
+import { drainInjections, injectionDetail } from "./injections.ts";
+import { runDispatchIteration } from "./iteration.ts";
+import { defaultMessages } from "./messages.ts";
 import { CurrentDispatch, DispatchStore } from "./store.ts";
-import { runDispatchToolCalls } from "./tool-loop.ts";
 import type {
   DispatchError,
   DispatchEvent,
@@ -36,16 +31,7 @@ import type {
   Injection,
   Usage,
 } from "./types.ts";
-import { DispatchCycleExceeded, DispatchInterrupted } from "./types.ts";
-
-// ---------------------------------------------------------------------------
-// addUsage — accumulate token counts
-// ---------------------------------------------------------------------------
-
-const addUsage = (a: Usage, b: Usage): Usage => ({
-  inputTokens: a.inputTokens + b.inputTokens,
-  outputTokens: a.outputTokens + b.outputTokens,
-});
+import { DispatchInterrupted } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // dispatch
@@ -111,145 +97,52 @@ export const dispatch = <R = never>(
         Effect.gen(function* () {
           yield* Effect.yieldNow;
 
-          const logInjection = (injection: Injection): Effect.Effect<void> => {
-            const detail =
-              injection._tag === "Redirect"
-                ? injection.task
-                : injection._tag === "Interrupt"
-                  ? injection.reason
-                  : undefined;
-            const base = {
-              _tag: "Injected" as const,
-              name: spec.name,
-              iteration: iterations,
-              injection: injection._tag,
-            };
-            return emit(detail !== undefined ? { ...base, detail } : base);
-          };
-
-          const next = yield* drainInjections(injectionQueue, messages, logInjection);
-          if (next === undefined)
-            return yield* Effect.fail(
-              new DispatchInterrupted({
-                dispatchId,
-                name: spec.name,
-                reason: "Interrupted via injection",
-              }),
-            );
-
-          if (iterations >= maxIter)
-            return yield* Effect.fail(
-              new DispatchCycleExceeded({ dispatchId, name: spec.name, max: maxIter, usage }),
-            );
-
-          yield* Ref.set(messagesRef, next);
-          yield* store.snapshot(dispatchId, iterations, next, usage);
-
-          const satCtx = { dispatchId, name: spec.name, task, iteration: iterations };
-          const onSatAction = (satellite: string, phase: string, action: string) =>
-            emit({
-              _tag: "SatelliteAction",
-              name: spec.name,
-              iteration: iterations,
-              satellite,
-              phase,
-              action,
-            });
-
-          const iterationStart = yield* satelliteScope.checkpoint(
-            "iteration-start",
-            satCtx,
-            onSatAction,
+          const drained = yield* drainInjections(injectionQueue, messages, (injection) =>
+            emit(
+              DispatchEvents.injected(
+                spec.name,
+                iterations,
+                injection._tag,
+                injectionDetail(injection),
+              ),
+            ),
           );
-          const checkpointMessages = Match.value(iterationStart).pipe(
-            Match.tag("Pass", () => next),
-            Match.tag("TransformMessages", (decision) => decision.messages),
+
+          const prepared = yield* Match.value(drained).pipe(
+            Match.tag("Continue", ({ messages }) => Effect.succeed(messages)),
+            Match.tag("Interrupted", ({ reason }) =>
+              Effect.fail(
+                new DispatchInterrupted({
+                  dispatchId,
+                  name: spec.name,
+                  reason: reason ?? "Interrupted via injection",
+                }),
+              ),
+            ),
             Match.exhaustive,
           );
 
-          // --- Phase: BeforeCall ---
-          const beforeCallAction = yield* satelliteScope.beforeCall(
-            { messages: checkpointMessages },
-            satCtx,
-            onSatAction,
-          );
-          const callMessages = Match.value(beforeCallAction).pipe(
-            Match.tag("Pass", () => checkpointMessages),
-            Match.tag("TransformMessages", (decision) => decision.messages),
-            Match.exhaustive,
-          );
+          yield* Ref.set(messagesRef, prepared);
+          yield* store.snapshot(dispatchId, iterations, prepared, usage);
 
-          yield* emit({ _tag: "Calling", name: spec.name, iteration: iterations });
-
-          const rawResult = yield* step(callMessages, spec.tools, dispatchId, spec.name).pipe(
-            Effect.withSpan("llm-call", {
-              attributes: { "llm.name": spec.name, "llm.iteration": iterations },
-            }),
-          );
-          const totalUsage = addUsage(usage, rawResult.usage);
-
-          if (rawResult.thinking) {
-            yield* emit({
-              _tag: "Thinking",
-              name: spec.name,
-              iteration: iterations,
-              content: rawResult.thinking,
-            });
-          }
-
-          if (rawResult.content) {
-            yield* emit({
-              _tag: "Text",
-              name: spec.name,
-              iteration: iterations,
-              content: rawResult.content,
-            });
-          }
-
-          // --- Phase: AfterCall ---
-          const afterCallAction = yield* satelliteScope.afterCall(
-            { stepResult: rawResult },
-            satCtx,
-            onSatAction,
-          );
-          const result = Match.value(afterCallAction).pipe(
-            Match.tag("Pass", () => rawResult),
-            Match.tag("TransformStepResult", (decision) => decision.stepResult),
-            Match.exhaustive,
-          );
-
-          if (result.toolCalls.length === 0) {
-            const finalMessages = finalAssistantMessages(callMessages, result.content);
-            yield* Ref.set(messagesRef, finalMessages);
-            return {
-              dispatchId,
-              name: spec.name,
-              content: result.content,
-              messages: finalMessages,
-              usage: totalUsage,
-            };
-          }
-
-          const calls = yield* runDispatchToolCalls<R>({
+          const iteration = yield* runDispatchIteration<R>({
             dispatchId,
-            name: spec.name,
+            spec,
+            task,
+            maxIterations: maxIter,
+            messages: prepared,
+            usage,
             iteration: iterations,
-            tools: spec.tools,
-            toolCalls: result.toolCalls,
             satelliteScope,
-            satelliteContext: satCtx,
-            onSatelliteAction: onSatAction,
             emit,
           });
 
-          // Build messages for next iteration (native Prompt.MessageEncoded format)
-          const toolMessages = toolResultMessages(calls);
-          const assistantMsg = assistantToolMessage(result.content, result.toolCalls);
-
-          return yield* loop(
-            [...callMessages, assistantMsg, ...toolMessages],
-            totalUsage,
-            iterations + 1,
+          return yield* Match.value(iteration).pipe(
+            Match.tag("Finished", ({ output }) =>
+              Ref.set(messagesRef, output.messages).pipe(Effect.as(output)),
+            ),
+            Match.tag("Continue", (next) => loop(next.messages, next.usage, next.iteration)),
+            Match.exhaustive,
           );
         }),
       );
@@ -261,13 +154,15 @@ export const dispatch = <R = never>(
 
     // Record parent link for dispatch tracing
     if (options?.parentDispatchId) {
-      yield* store.record(dispatchId, {
-        _tag: "Injected",
-        name: spec.name,
-        iteration: initialIteration,
-        injection: "ParentLink",
-        detail: options.parentDispatchId,
-      });
+      yield* store.record(
+        dispatchId,
+        DispatchEvents.injected(
+          spec.name,
+          initialIteration,
+          "ParentLink",
+          options.parentDispatchId,
+        ),
+      );
     }
 
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
@@ -282,7 +177,7 @@ export const dispatch = <R = never>(
               })
             : err,
         ),
-        Effect.tap((result) => emit({ _tag: "Done", name: spec.name, result })),
+        Effect.tap((result) => emit(DispatchEvents.done(spec.name, result))),
         Effect.onExit((exit) =>
           Exit.match(exit, {
             onSuccess: (result) => Deferred.succeed(resultDeferred, result),
@@ -297,7 +192,7 @@ export const dispatch = <R = never>(
                     reason,
                   })
                 : undefined;
-              return emit({ _tag: "Failed", name: spec.name, reason }).pipe(
+              return emit(DispatchEvents.failed(spec.name, reason)).pipe(
                 Effect.flatMap(() =>
                   failure
                     ? Deferred.fail(resultDeferred, failure)

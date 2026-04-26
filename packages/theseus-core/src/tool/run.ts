@@ -65,7 +65,7 @@ export const ToolValue = {
     _tag: "Failure",
     failure,
   }),
-} as const;
+};
 
 export const ToolOutcome = {
   success: <I, O>(input: I, output: O, presentation: Presentation): ToolOutcome<I, O, never> => ({
@@ -81,7 +81,7 @@ export const ToolOutcome = {
     failure,
     presentation,
   }),
-} as const;
+};
 
 // ---------------------------------------------------------------------------
 // Default presenters

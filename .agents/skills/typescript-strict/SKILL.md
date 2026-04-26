@@ -27,6 +27,24 @@ Use this skill for TypeScript mechanics that are not specific to Effect.
 - Avoid non-null assertions; prove presence through narrowing.
 - Avoid type assertions that erase useful errors or requirements.
 
+## Type-First Modeling
+
+For new public APIs, protocols, or domain states, design the type shape before filling in implementation details.
+
+1. Define the data model: IDs, state variants, schemas, and external wire shape.
+2. Define function signatures: input, output, recoverable errors, and Effect requirements.
+3. Implement to satisfy the types; let compiler errors expose missing cases.
+4. Validate at boundaries where unknown data enters or leaves the system.
+
+Rules:
+
+- Make illegal states unrepresentable with discriminated unions instead of correlated optional fields or boolean flags.
+- Use branded/schema-backed IDs for values that cross package, persistence, tool, or RPC boundaries.
+- Prefer constructors/builders for exported protocol variants so defaults and `_tag` literals are centralized.
+- Avoid stringly typed protocols when the set is closed. Use literal unions or schemas.
+- Use `satisfies` when checking object shape without widening or erasing useful literal information.
+- Let TypeScript infer local obvious values, but write explicit return types for exported functions that define public API.
+
 ## Module And Package Rules
 
 - Keep package public exports intentional.
@@ -47,6 +65,8 @@ Use this skill for TypeScript mechanics that are not specific to Effect.
 - Use typed result/error models for recoverable failures.
 - In Effect code, preserve the `E` channel instead of collapsing errors to `unknown`.
 - In non-Effect code, prefer discriminated unions for recoverable results when exceptions are not the right boundary.
+- Do not silently default malformed input unless the default is a domain rule. Prefer explicit validation and a typed failure.
+- When converting foreign errors, add stable context without leaking secrets or large payloads.
 
 ## Anti-Patterns
 
@@ -55,4 +75,5 @@ Use this skill for TypeScript mechanics that are not specific to Effect.
 - Do not use `T[]` for input collections that should not be mutated.
 - Do not add default exports to packages that use named export style.
 - Do not hide package-boundary type errors by changing root compiler options.
-
+- Do not model mutually exclusive states as one object with many optional fields.
+- Do not use broad index signatures when explicit keys or a typed map would preserve more information.

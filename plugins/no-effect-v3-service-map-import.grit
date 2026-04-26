@@ -5,5 +5,5 @@ or {
   `"effect/ServiceMap"`,
   `'effect/ServiceMap'`
 } as $m where {
-  register_diagnostic(span=$m, message="Effect v4 (beta.50): `effect/ServiceMap` was removed. Import Context from `effect` instead: `import { Context } from \"effect\"`.", severity="error")
+  register_diagnostic(span=$m, message="Effect v4: `effect/ServiceMap` was removed. Import Context from `effect` instead: `import { Context } from \"effect\"`. Load skill: effect-services-layers.", severity="error")
 }

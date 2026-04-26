@@ -80,7 +80,7 @@ export {
 // Execution pipeline
 // ---------------------------------------------------------------------------
 
-export { callTool, type ToolOutcome, type ToolValue } from "./tool/run.ts";
+export { callTool, ToolOutcome, ToolValue } from "./tool/run.ts";
 
 // ---------------------------------------------------------------------------
 // Runtime errors (keep prefix — _tag must be globally unique for pattern matching)

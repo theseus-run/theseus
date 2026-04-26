@@ -14,6 +14,7 @@ Use this skill for Biome formatting and linting.
 - Config: `biome.json`.
 - Biome organizes imports through assist source actions.
 - Custom Grit plugins block stale Effect v3 patterns and several local style hazards.
+- For custom Grit plugin authoring or diagnostic-message design, use `biome-grit-rules`.
 
 ## Command Rules
 
@@ -29,6 +30,7 @@ Use this skill for Biome formatting and linting.
 - Keep generated outputs, lockfiles, `node_modules`, `dist`, and build artifacts excluded unless there is a deliberate reason.
 - Treat custom Grit plugin failures as repo policy, not generic style suggestions.
 - If a rule is noisy, fix the code first; weaken config only when the rule is wrong for the repo.
+- Repeated agent mistakes should become deterministic checks when the bad pattern is syntactically recognizable and low-noise.
 
 ## Common Fix Strategy
 

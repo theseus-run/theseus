@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Duration, Effect, Layer, Schema } from "effect";
+import { Duration, Effect, Fiber, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Response from "effect/unstable/ai/Response";
@@ -201,15 +201,28 @@ describe("dispatch loop", () => {
       DispatchDefaults,
     );
 
-    const result = await Effect.runPromise(
+    const observed = await Effect.runPromise(
       Effect.gen(function* () {
         const handle = yield* dispatch<never>(spec, "do it");
-        return yield* handle.result;
+        const eventsFiber = yield* handle.events.pipe(Stream.runCollect, Effect.forkChild);
+        const result = yield* handle.result;
+        const events = yield* Fiber.join(eventsFiber);
+        return { result, events: Array.from(events) };
       }).pipe(Effect.provide(layer)),
     );
 
-    expect(result.content).toBe("done");
+    expect(observed.result.content).toBe("done");
     expect(order).toEqual(["first", "second"]);
+    expect(
+      observed.events
+        .filter((event) => event._tag === "ToolCalling" || event._tag === "ToolResult")
+        .map((event) => `${event._tag}:${event.tool}`),
+    ).toEqual([
+      "ToolCalling:first_tool",
+      "ToolCalling:second_tool",
+      "ToolResult:first_tool",
+      "ToolResult:second_tool",
+    ]);
   });
 
   test("provides CurrentDispatch to tools", async () => {
