@@ -61,67 +61,57 @@ export const SerializedToolCallErrorSchema = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 export const DispatchEventSchema = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal("Calling"),
+  Schema.TaggedStruct("Calling", {
     name: Schema.String,
     iteration: Schema.Number,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("Text"),
-    name: Schema.String,
-    iteration: Schema.Number,
-    content: Schema.String,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("Thinking"),
+  Schema.TaggedStruct("Text", {
     name: Schema.String,
     iteration: Schema.Number,
     content: Schema.String,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("ToolCalling"),
+  Schema.TaggedStruct("Thinking", {
+    name: Schema.String,
+    iteration: Schema.Number,
+    content: Schema.String,
+  }),
+  Schema.TaggedStruct("ToolCalling", {
     name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     args: Schema.Unknown,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("ToolResult"),
+  Schema.TaggedStruct("ToolResult", {
     name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     content: Schema.String,
     isError: Schema.Boolean,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("ToolError"),
+  Schema.TaggedStruct("ToolError", {
     name: Schema.String,
     iteration: Schema.Number,
     tool: Schema.String,
     error: SerializedToolCallErrorSchema,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("SatelliteAction"),
+  Schema.TaggedStruct("SatelliteAction", {
     name: Schema.String,
     iteration: Schema.Number,
     satellite: Schema.String,
     phase: Schema.String,
     action: Schema.String,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("Injected"),
+  Schema.TaggedStruct("Injected", {
     name: Schema.String,
     iteration: Schema.Number,
     injection: Schema.String,
     detail: Schema.optional(Schema.String),
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("Done"),
+  Schema.TaggedStruct("Done", {
     name: Schema.String,
     result: DispatchOutputSchema,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("Failed"),
+  Schema.TaggedStruct("Failed", {
     name: Schema.String,
     reason: Schema.String,
   }),

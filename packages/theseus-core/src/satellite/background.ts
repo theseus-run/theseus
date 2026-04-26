@@ -81,7 +81,7 @@ export const backgroundSatellite = <I, O, E = never, R = never>(
                 }),
               ),
             ),
-            Effect.catch((abort: SatelliteAbort) => Effect.fail(abort)),
+            Effect.mapError((abort: SatelliteAbort) => abort),
           );
         }
         return { decision: Pass, state };

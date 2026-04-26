@@ -46,7 +46,7 @@ export const makeToolCatalog = (
     Effect.gen(function* () {
       const missing = names.filter((name) => !byName.has(name));
       if (missing.length > 0) {
-        return yield* Effect.fail(new ToolCatalogMissing({ names: missing }));
+        return yield* new ToolCatalogMissing({ names: missing });
       }
 
       return names.flatMap((name) => {

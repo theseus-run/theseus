@@ -122,14 +122,12 @@ export const makeMockLanguageModel = (
         const i = yield* Ref.getAndUpdate(ref, (n) => n + 1);
         const r = responses[i];
         if (!r)
-          return yield* Effect.fail(
-            AiError.make({
-              module: "MockLLM",
-              method: "call",
-              reason: new AiError.UnknownError({ description: "unexpected call" }),
-            }),
-          );
-        if (r instanceof AiError.AiError) return yield* Effect.fail(r);
+          return yield* AiError.make({
+            module: "MockLLM",
+            method: "call",
+            reason: new AiError.UnknownError({ description: "unexpected call" }),
+          });
+        if (r instanceof AiError.AiError) return yield* r;
         return r;
       });
 

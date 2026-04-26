@@ -39,10 +39,10 @@ const parseJson = (content: string): unknown | undefined => {
 
 const decodeReportContent = (content: string): Effect.Effect<Report | undefined> => {
   const parsed = parseJson(content);
-  if (parsed === undefined) return Effect.succeed(undefined);
+  if (parsed === undefined) return Effect.as(Effect.void, undefined);
   return Schema.decodeUnknownEffect(ReportSchema)(parsed).pipe(
     Effect.matchEffect({
-      onFailure: () => Effect.succeed(undefined),
+      onFailure: () => Effect.as(Effect.void, undefined),
       onSuccess: (decoded) => Effect.succeed(decoded),
     }),
   );
@@ -117,7 +117,7 @@ export const dispatchGruntTool: Tool<
       );
 
       const exit = yield* Effect.exit(handle.result);
-      yield* Fiber.join(drainFiber).pipe(Effect.catch(() => Effect.void));
+      yield* Fiber.join(drainFiber);
 
       const captured = yield* Ref.get(reportRef);
 
@@ -143,11 +143,9 @@ export const dispatchGruntTool: Tool<
         });
       }
 
-      return yield* Effect.fail(
-        new DispatchGruntFailed({
-          reason: `Grunt dispatch failed: ${String(Cause.squash(exit.cause))}`,
-        }),
-      );
+      return yield* new DispatchGruntFailed({
+        reason: `Grunt dispatch failed: ${String(Cause.squash(exit.cause))}`,
+      });
     }),
   present: (value) =>
     Effect.succeed(

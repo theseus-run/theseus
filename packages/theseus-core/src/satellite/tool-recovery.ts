@@ -29,7 +29,7 @@ const errorResult = (
 
 export const toolRecovery: Satellite = {
   name: "tool-recovery",
-  open: () => Effect.succeed(undefined),
+  open: () => Effect.void,
   toolError: ({ tool, error }) =>
     Effect.succeed({
       decision: RecoverToolError(

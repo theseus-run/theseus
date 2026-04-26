@@ -1,6 +1,7 @@
 import { Effect, Match } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
+import { encodeJsonEffect } from "../../json.ts";
 import { CopilotEncodeError } from "./errors.ts";
 
 const textFromParts = (parts: ReadonlyArray<Prompt.Part>): string =>
@@ -10,10 +11,7 @@ const textFromParts = (parts: ReadonlyArray<Prompt.Part>): string =>
     .join("");
 
 const encodeJson = (value: unknown, fallback: unknown): Effect.Effect<string, CopilotEncodeError> =>
-  Effect.try({
-    try: () => JSON.stringify(value ?? fallback) ?? "null",
-    catch: (cause) => new CopilotEncodeError({ cause }),
-  });
+  encodeJsonEffect(value ?? fallback, (cause) => new CopilotEncodeError({ cause }));
 
 const unsupportedPromptPart = (
   role: Prompt.Message["role"],
@@ -41,7 +39,7 @@ export const promptToChatCompletions = (
             (part) => part.type !== "text" && part.type !== "tool-call",
           );
           if (unsupported) {
-            return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+            return yield* unsupportedPromptPart(message.role, unsupported);
           }
           const parts = message.content;
           const textParts = parts.filter((p) => p.type === "text");
@@ -72,7 +70,7 @@ export const promptToChatCompletions = (
           if (!result) {
             const unsupported = message.content[0];
             if (unsupported) {
-              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+              return yield* unsupportedPromptPart(message.role, unsupported);
             }
           }
           const content =
@@ -111,7 +109,7 @@ export const promptToResponsesInput = (
               (part) => part.type !== "text" && part.type !== "tool-call",
             );
             if (unsupported) {
-              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+              return yield* unsupportedPromptPart(message.role, unsupported);
             }
             const parts = message.content;
             const textParts = parts.filter((p) => p.type === "text");
@@ -137,7 +135,7 @@ export const promptToResponsesInput = (
           Effect.gen(function* () {
             const unsupported = message.content.find((part) => part.type !== "tool-result");
             if (unsupported) {
-              return yield* Effect.fail(unsupportedPromptPart(message.role, unsupported));
+              return yield* unsupportedPromptPart(message.role, unsupported);
             }
             return yield* Effect.forEach(
               message.content.filter((p) => p.type === "tool-result"),

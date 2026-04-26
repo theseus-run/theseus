@@ -1,5 +1,6 @@
 import { Effect, Match, Stream } from "effect";
 import type * as Response from "effect/unstable/ai/Response";
+import { decodeJsonEffect } from "../../json.ts";
 import { CopilotParseError } from "./errors.ts";
 import { parseToolParams } from "./response-parser.ts";
 import type { ChatCompletionsWire, ResponsesSSEEvent } from "./wire.ts";
@@ -196,10 +197,7 @@ export const processSSEChunkToStreamPart = (
 ): Effect.Effect<Response.StreamPartEncoded | null, CopilotParseError> => {
   if (data.trim() === "") return Effect.succeed(null);
 
-  return Effect.try({
-    try: () => JSON.parse(data),
-    catch: (cause) => new CopilotParseError({ cause }),
-  }).pipe(
+  return decodeJsonEffect(data, (cause) => new CopilotParseError({ cause })).pipe(
     Effect.flatMap((parsed) => {
       if (useResponses) {
         return acc.addResponsesEvent(parsed as ResponsesSSEEvent);

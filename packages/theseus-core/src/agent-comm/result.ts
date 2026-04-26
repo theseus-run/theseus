@@ -10,15 +10,13 @@ export const SalvageSchema = Schema.Struct({
 export type Salvage = Schema.Schema.Type<typeof SalvageSchema>;
 
 export const DispatchGruntResultSchema = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal("Reported"),
+  Schema.TaggedStruct("Reported", {
     target: Schema.String,
     dispatchId: Schema.String,
     report: ReportSchema,
     usage: UsageSchema,
   }),
-  Schema.Struct({
-    _tag: Schema.Literal("Unstructured"),
+  Schema.TaggedStruct("Unstructured", {
     target: Schema.String,
     dispatchId: Schema.String,
     reason: Schema.String,

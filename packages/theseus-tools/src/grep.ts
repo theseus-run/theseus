@@ -111,7 +111,7 @@ export const grep = Tool.defineTool({
           // Exit code 2 = ripgrep error (bad regex, permission denied, etc.)
           if (exitCode === 2) {
             const stderr = result.stderr.toString().trim();
-            return yield* Effect.fail(new ToolFailure({ message: `ripgrep error: ${stderr}` }));
+            return yield* new ToolFailure({ message: `ripgrep error: ${stderr}` });
           }
 
           // Exit code 1 = no matches (not an error)

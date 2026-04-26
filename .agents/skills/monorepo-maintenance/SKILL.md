@@ -54,6 +54,10 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Public APIs should expose domain intent, not implementation mechanics.
 - Exported functions that define package or primitive contracts should have explicit return types.
 - Avoid boolean parameter pairs and ambiguous positional flags. Use named options or discriminated unions.
+- Avoid optional options bags that leak into implementation bodies as `options?.x`, `x ?? fallback`, or conditional object spreads. Normalize options once into a required internal shape.
+- Avoid defaults creep: after a boundary normalizes input, downstream code should receive explicit values, not repeat fallbacks.
+- Prefer explicit sentinel/domain values over absence when absence changes semantics, such as a root dispatch id instead of omitted `parentDispatchId`.
+- Public/internal boundaries should make trust explicit: external inputs are decoded and normalized; internal protocol violations fail loudly instead of being recovered with fallback behavior.
 - Avoid overloads unless they materially improve call-site clarity and have a single coherent implementation model.
 - Prefer stable constructors for protocol variants and errors over repeated object literals at call sites.
 - Keep generic names descriptive in public examples and docs: `Input`, `Output`, `Error`, `Requirements` over single-letter aliases.

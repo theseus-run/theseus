@@ -104,7 +104,7 @@ const executeRequest = (
       const text = yield* res.text.pipe(
         Effect.mapError((cause) => new CopilotParseError({ cause })),
       );
-      return yield* Effect.fail(new CopilotHttpError({ status: res.status, body: text }));
+      return yield* new CopilotHttpError({ status: res.status, body: text });
     }
     return res;
   });

@@ -54,9 +54,10 @@ export const makeInMemoryCapsuleRecord = (slug: string): Effect.Effect<CapsuleRe
           const map = yield* Ref.get(artifactsRef);
           const content = map.get(name);
           if (content === undefined) {
-            return yield* Effect.fail(
-              new CapsuleError({ capsule: id, message: `Artifact not found: ${name}` }),
-            );
+            return yield* new CapsuleError({
+              capsule: id,
+              message: `Artifact not found: ${name}`,
+            });
           }
           return content;
         }),

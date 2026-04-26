@@ -11,6 +11,8 @@ Use this skill for typed failures, schema contracts, and boundary normalization.
 
 Use explicit domain errors. Expected failures stay in the Effect error channel. Defects are bugs, thrown exceptions, rejected promise defects, interrupts, or violated invariants.
 
+Recovery is for expected external uncertainty: user input, network, filesystem, subprocesses, model providers, persistence, environment, and other foreign systems. Controlled internal protocol violations are defects.
+
 Rules:
 
 - Use `Data.TaggedError` for plain runtime/domain errors.
@@ -20,8 +22,10 @@ Rules:
 - Use `Effect.catchCause` when interrupts or defects must be inspected.
 - Use `Cause.hasInterruptsOnly(cause)` to distinguish pure interruption from failure.
 - Use `Effect.catchDefect` only for defect conversion at a boundary.
+- Use `Effect.die`, thrown invariant errors, or equivalent hard failure for impossible internal states when types failed to prevent them.
 - Do not use try/catch inside `Effect.gen` to catch Effect failures; they are not thrown.
 - Do not throw expected failures.
+- Do not recover from unsupported internal variants, impossible state transitions, or violated contracts with defaults, dropped events, or generic fallbacks.
 - Do not erase error unions with `any`, `unknown`, or generic wrappers.
 
 ## Boundary Pattern
@@ -35,7 +39,7 @@ At every external boundary, normalize once:
 
 Examples of boundaries: tool calls, RPC handlers, SQLite calls, filesystem, subprocesses, model provider calls, WebSocket messages.
 
-Inside the domain, keep typed values and typed failures. Do not repeatedly decode or stringify internal data.
+Inside the domain, keep typed values and typed failures. Do not repeatedly decode or stringify internal data. At important internal seams, validate or assert invariants and fail loudly when they are violated.
 
 ## Schema
 
@@ -68,3 +72,4 @@ Rules:
 - Does the boundary serialize or persist this error?
 - Are parse failures kept typed until the boundary handles them?
 - Are `_tag` values globally safe where pattern matching crosses modules?
+- Is this recovery handling external uncertainty, or is it hiding a broken internal contract?

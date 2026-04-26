@@ -7,6 +7,7 @@
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import { Clock, Effect, Layer } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
+import { decodeJson, encodeJson } from "../json.ts";
 import { TheseusDb } from "./sqlite.ts";
 
 export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, TheseusDb> =
@@ -80,7 +81,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
         record: (dispatchId: string, event: Dispatch.DispatchEvent) =>
           Effect.gen(function* () {
             const timestamp = yield* Clock.currentTimeMillis;
-            insertEvent.run(dispatchId, timestamp, event._tag, JSON.stringify(event));
+            insertEvent.run(dispatchId, timestamp, event._tag, encodeJson(event));
           }),
 
         snapshot: (
@@ -95,8 +96,8 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
               dispatchId,
               iteration,
               timestamp,
-              JSON.stringify(messages),
-              JSON.stringify(usage),
+              encodeJson(messages),
+              encodeJson(usage),
             );
           }),
 
@@ -116,7 +117,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
             return rows.map((row) => ({
               dispatchId: row.dispatch_id,
               timestamp: row.timestamp,
-              event: JSON.parse(row.event_json) as Dispatch.DispatchEvent,
+              event: decodeJson(row.event_json) as Dispatch.DispatchEvent,
             }));
           }),
 
@@ -134,7 +135,10 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
             const linkRow = selectParentLink.get(dispatchId) as { event_json: string } | null;
             let parentDispatchId: string | undefined;
             if (linkRow) {
-              const event = JSON.parse(linkRow.event_json);
+              const event = decodeJson(linkRow.event_json) as {
+                readonly injection?: string;
+                readonly detail?: string;
+              };
               if (event.injection === "ParentLink" && event.detail) {
                 parentDispatchId = event.detail;
               }
@@ -142,9 +146,9 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
 
             const opts: Dispatch.DispatchOptions = {
               dispatchId,
-              messages: JSON.parse(row.messages_json),
+              messages: decodeJson(row.messages_json) as ReadonlyArray<Prompt.MessageEncoded>,
               iteration: row.iteration,
-              usage: JSON.parse(row.usage_json),
+              usage: decodeJson(row.usage_json) as Dispatch.Usage,
             };
             return parentDispatchId !== undefined ? { ...opts, parentDispatchId } : opts;
           }),
@@ -162,7 +166,9 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
               done_json: string | null;
             }>;
             return rows.map((row): Dispatch.DispatchSummary => {
-              const doneEvent = row.done_json ? JSON.parse(row.done_json) : null;
+              const doneEvent = row.done_json
+                ? (decodeJson(row.done_json) as { readonly result?: Dispatch.DispatchOutput })
+                : null;
               const result = doneEvent?.result;
               return {
                 dispatchId: row.dispatch_id,

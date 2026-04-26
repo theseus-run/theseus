@@ -107,6 +107,8 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Keep generic parameter order stable for related public types. For tool-like APIs, prefer input, output, error, requirements: `<Input, Output, Error, Requirements>`.
 - Prefer plain interfaces and named function fields over class hierarchies or hidden registries.
 - Keep runtime data serializable when it crosses process, tool, or dispatch boundaries.
+- Prefer explicit required internal data over optional/default soup. Normalize optional inputs once at the boundary; avoid defaults creep, silent fallbacks, conditional object spreads, and scattered nullish fallbacks in function bodies.
+- Prefer hard boundaries. Validate external input at the edge and normalize it into explicit internal types. Inside controlled code, do not recover from impossible states, unsupported internal variants, or violated invariants; fail early and loudly.
 - Use strict types for closed sets. Use `string` only for externally extensible runtime sets.
 - Prefer ordered enums/unions over correlated boolean flags.
 - Prefer strict discriminated unions for domain states, protocol packets, outcomes, and lifecycle phases.
@@ -136,7 +138,8 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 
 - Distinguish expected domain failures from defects.
 - Expected failures should be typed and recoverable.
-- Defects are program bugs; do not hide them behind generic error bags.
+- Recovery is for expected uncertainty at external boundaries: user input, network, filesystem, subprocesses, model providers, persistence, and environment.
+- Defects are program bugs or violated internal contracts; do not hide them behind generic error bags, default branches, silent drops, or best-effort recovery.
 - Prefer flat tagged errors with primitive-specific prefixes such as `Tool*`, `Mission*`, or `Capsule*`.
 
 ## Compatibility

@@ -52,8 +52,8 @@ const dispatchResult = (
   getHandle(registry, dispatchId).pipe(
     Effect.flatMap((handle) =>
       handle.result.pipe(
-        Effect.catch((cause: Dispatch.DispatchError) =>
-          Effect.fail(
+        Effect.mapError(
+          (cause: Dispatch.DispatchError) =>
             new RuntimeDispatchFailed({
               id: dispatchId,
               reason:
@@ -62,7 +62,6 @@ const dispatchResult = (
                   : "unknown",
               cause,
             }),
-          ),
         ),
       ),
     ),

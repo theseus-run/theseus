@@ -1,14 +1,12 @@
 import { Effect, Match } from "effect";
 import type * as Response from "effect/unstable/ai/Response";
+import { decodeJsonEffect } from "../../json.ts";
 import { CopilotParseError } from "./errors.ts";
 import type { ChatCompletionsWire, ResponsesWire } from "./wire.ts";
 import { makeFinishPart, sanitizeCallId } from "./wire.ts";
 
 export const parseToolParams = (raw: string): Effect.Effect<unknown, CopilotParseError> =>
-  Effect.try({
-    try: () => JSON.parse(raw),
-    catch: (cause) => new CopilotParseError({ cause }),
-  });
+  decodeJsonEffect(raw, (cause) => new CopilotParseError({ cause }));
 
 export const parseChatCompletionsToResponseParts = (
   data: ChatCompletionsWire,

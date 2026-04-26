@@ -71,9 +71,7 @@ export const makeMissionRecord = (
         Effect.gen(function* () {
           const from = yield* Ref.get(statusRef);
           if (!isValidTransition(from, to)) {
-            return yield* Effect.fail(
-              new MissionErrorInvalidTransition({ mission: config.id, from, to }),
-            );
+            return yield* new MissionErrorInvalidTransition({ mission: config.id, from, to });
           }
           yield* Ref.set(statusRef, to);
           yield* capsule.log({

@@ -41,7 +41,7 @@ const restoreOptions = (
   task: string,
 ): Effect.Effect<Dispatch.DispatchOptions | undefined, RuntimeNotFound> =>
   continueFrom === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.as(Effect.void, undefined)
     : store
         .restore(continueFrom)
         .pipe(

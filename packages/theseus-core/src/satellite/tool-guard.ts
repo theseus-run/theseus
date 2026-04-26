@@ -9,7 +9,7 @@ import { BlockTool, Pass } from "./types.ts";
 
 export const toolGuard = (blocked: ReadonlyArray<string>): Satellite => ({
   name: "tool-guard",
-  open: () => Effect.succeed(undefined),
+  open: () => Effect.void,
   beforeTool: (phase) => {
     return blocked.includes(phase.tool.name)
       ? Effect.succeed({

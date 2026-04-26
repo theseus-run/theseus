@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { RuntimeConfig } from "../../config.ts";
+import { encodeJson } from "../../json.ts";
 import { CopilotAuthError, CopilotParseError } from "./errors.ts";
 import type { TokenCache } from "./wire.ts";
 
@@ -26,11 +27,9 @@ export const readOauthToken: Effect.Effect<string, CopilotAuthError> = Effect.ge
 
   const entry = parsed["github.com"] ?? Object.values(parsed)[0];
   if (!entry?.oauth_token) {
-    return yield* Effect.fail(
-      new CopilotAuthError({
-        cause: `oauth_token not found in ${path} (keys: ${Object.keys(parsed).join(", ")})`,
-      }),
-    );
+    return yield* new CopilotAuthError({
+      cause: `oauth_token not found in ${path} (keys: ${Object.keys(parsed).join(", ")})`,
+    });
   }
 
   return entry.oauth_token;
@@ -56,11 +55,9 @@ export const exchangeToken = (
       Effect.mapError((cause) => new CopilotParseError({ cause })),
     ) as Effect.Effect<{ token?: string; expires_at?: number }, CopilotParseError>;
     if (!body?.token) {
-      return yield* Effect.fail(
-        new CopilotAuthError({
-          cause: new Error(`Unexpected token response: ${JSON.stringify(body)}`),
-        }),
-      );
+      return yield* new CopilotAuthError({
+        cause: new Error(`Unexpected token response: ${encodeJson(body)}`),
+      });
     }
     return { bearer: body.token, expiresAt: body.expires_at ?? 0 };
   });

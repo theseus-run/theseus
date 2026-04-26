@@ -9,6 +9,7 @@
 
 import * as CapsuleNs from "@theseus.run/core/Capsule";
 import { Clock, Effect, Layer } from "effect";
+import { decodeJson, encodeJson } from "../json.ts";
 import { TheseusDb } from "./sqlite.ts";
 
 export const SqliteCurrentCapsuleLive = (
@@ -42,7 +43,7 @@ export const SqliteCurrentCapsuleLive = (
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
             const at = new Date(now).toISOString();
-            insertEvent.run(id, input.type, at, input.by, JSON.stringify(input.data));
+            insertEvent.run(id, input.type, at, input.by, encodeJson(input.data));
           }),
 
         read: () =>
@@ -59,7 +60,7 @@ export const SqliteCurrentCapsuleLive = (
                 type: row.type,
                 at: row.at,
                 by: row.by,
-                data: JSON.parse(row.data_json),
+                data: decodeJson(row.data_json),
               }),
             ),
           ),
@@ -73,9 +74,10 @@ export const SqliteCurrentCapsuleLive = (
           Effect.gen(function* () {
             const row = selectArtifact.get(id, name) as { content: string } | null;
             if (!row) {
-              return yield* Effect.fail(
-                new CapsuleNs.CapsuleError({ capsule: id, message: `Artifact not found: ${name}` }),
-              );
+              return yield* new CapsuleNs.CapsuleError({
+                capsule: id,
+                message: `Artifact not found: ${name}`,
+              });
             }
             return row.content;
           }),
