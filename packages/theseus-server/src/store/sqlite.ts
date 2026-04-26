@@ -12,6 +12,8 @@
  */
 
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { Context, Effect, Layer } from "effect";
 
 // ---------------------------------------------------------------------------
@@ -86,6 +88,7 @@ const SCHEMA = `
 export const TheseusDbLive = (dbPath: string): Layer.Layer<TheseusDb> =>
   Layer.effect(TheseusDb)(
     Effect.sync(() => {
+      mkdirSync(dirname(dbPath), { recursive: true });
       const db = new Database(dbPath, { create: true });
       db.exec("PRAGMA journal_mode = WAL");
       db.exec("PRAGMA foreign_keys = ON");

@@ -1,28 +1,42 @@
 /**
  * RPC Handlers — server-side implementations for each Theseus RPC procedure.
  *
- * Each handler is an Effect that accesses services (DispatchStore, ToolRegistry,
- * DispatchRegistry) and returns typed results matching the RPC schemas.
+ * Handlers stay at the transport boundary: they call TheseusRuntime and map
+ * runtime errors into RPC errors.
  */
 
-import * as Agent from "@theseus.run/core/Agent";
-import * as CapsuleNs from "@theseus.run/core/Capsule";
-import * as Dispatch from "@theseus.run/core/Dispatch";
 import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
-import * as Satellite from "@theseus.run/core/Satellite";
-import { Effect, Layer, Stream } from "effect";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import { DispatchRegistry } from "./registry.ts";
+import { Effect, Stream } from "effect";
+import {
+  RuntimeCommands,
+  RuntimeControls,
+  type RuntimeDispatchFailed,
+  type RuntimeNotFound,
+  RuntimeQueries,
+  type RuntimeToolNotFound,
+  TheseusRuntime,
+} from "./runtime.ts";
 import { serializeEvent } from "./serialize.ts";
-import { TheseusDb } from "./store/sqlite.ts";
-import { SqliteCurrentCapsuleLive } from "./store/sqlite-capsule.ts";
-import { resolveBlueprint, ToolRegistry } from "./tool-registry.ts";
 
 // ---------------------------------------------------------------------------
-// Tags to skip over the wire (verbose model internals)
+// Helpers
 // ---------------------------------------------------------------------------
 
-const SKIP_TAGS = new Set(["Thinking"]);
+const toRpcError = (error: RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed) =>
+  new RpcError({
+    code:
+      error._tag === "RuntimeToolNotFound"
+        ? "TOOL_NOT_FOUND"
+        : error._tag === "RuntimeNotFound"
+          ? "NOT_FOUND"
+          : "INTERNAL",
+    message:
+      error._tag === "RuntimeToolNotFound"
+        ? `Unknown tools: ${error.names.join(", ")}`
+        : error._tag === "RuntimeNotFound"
+          ? `Dispatch ${error.id} not found`
+          : `Dispatch error: ${error.reason}`,
+  });
 
 // ---------------------------------------------------------------------------
 // Handlers Layer
@@ -31,179 +45,61 @@ const SKIP_TAGS = new Set(["Thinking"]);
 export const HandlersLive = TheseusRpc.toLayer({
   dispatch: ({ spec: bp, task, continueFrom }) =>
     Effect.gen(function* () {
-      const registry = yield* DispatchRegistry;
-      const toolRegistry = yield* ToolRegistry;
-      const lm = yield* LanguageModel.LanguageModel;
-      const ring = yield* Satellite.SatelliteRing;
-      const store = yield* Dispatch.DispatchStore;
-      const theseusDb = yield* TheseusDb;
-
-      const blueprint = resolveBlueprint(bp, toolRegistry);
-      const resolved = toolRegistry.resolve(bp.tools.map((t) => t.name));
-      const missing = bp.tools
-        .filter((t) => !resolved.some((rt) => rt.name === t.name))
-        .map((t) => t.name);
-
-      if (missing.length > 0) {
-        return yield* new RpcError({
-          code: "TOOL_NOT_FOUND",
-          message: `Unknown tools: ${missing.join(", ")}`,
-        });
-      }
-
-      // Resolve dispatch options — restore from previous dispatch if continuing
-      let options: Dispatch.DispatchOptions | undefined;
-      if (continueFrom) {
-        const restored = yield* store.restore(continueFrom);
-        if (restored?.messages) {
-          options = {
-            ...restored,
-            messages: [...restored.messages, { role: "user" as const, content: task }],
-          };
-        }
-      }
-
-      // Create per-dispatch CurrentCapsule backed by SQLite
-      const dbLayer = Layer.succeed(TheseusDb)(theseusDb);
-      const capsuleLayer = Layer.provide(SqliteCurrentCapsuleLive(blueprint.name), dbLayer);
-      const getCapsule = Effect.gen(function* () {
-        return yield* CapsuleNs.CurrentCapsule;
-      });
-      const capsule = yield* Effect.provide(getCapsule, capsuleLayer);
-
-      yield* capsule.log({
-        type: "dispatch.start",
-        by: "runtime",
-        data: { task, name: blueprint.name, continueFrom },
-      });
-
-      // Provide ambient services for dispatch
-      const depsLayer = Layer.mergeAll(
-        Layer.succeed(LanguageModel.LanguageModel)(lm),
-        Layer.succeed(Satellite.SatelliteRing)(ring),
-        Layer.succeed(Dispatch.DispatchStore)(store),
-        capsuleLayer,
-        Agent.AgentIdentityLive(blueprint.name),
-      );
-
-      const handle = yield* Effect.provide(Dispatch.dispatch(blueprint, task, options), depsLayer);
-      yield* registry.register(handle, blueprint.name);
-
-      // Return the event stream — RPC framework handles serialization + backpressure
-      return handle.events.pipe(
-        Stream.filter((e) => !SKIP_TAGS.has(e._tag)),
-        Stream.tap((e) =>
-          e._tag === "Calling"
-            ? registry.updateStatus(handle.dispatchId, { iteration: e.iteration })
-            : e._tag === "Done"
-              ? Effect.gen(function* () {
-                  // Save final snapshot for session continuity
-                  yield* store.snapshot(handle.dispatchId, -1, e.result.messages, e.result.usage);
-                  yield* capsule.log({
-                    type: "dispatch.done",
-                    by: "runtime",
-                    data: {
-                      dispatchId: handle.dispatchId,
-                      content: e.result.content,
-                    },
-                  });
-                  yield* registry.updateStatus(handle.dispatchId, { state: "done" });
-                })
-              : Effect.void,
-        ),
-        Stream.map((e) => serializeEvent(e)),
-      ) as unknown as never;
+      const runtime = yield* TheseusRuntime;
+      const events = yield* RuntimeCommands.startDispatch(runtime, {
+        spec: bp,
+        task,
+        continueFrom,
+      }).pipe(Effect.mapError(toRpcError));
+      return events.pipe(Stream.map((event) => serializeEvent(event))) as unknown as never;
     }),
 
   listDispatches: ({ limit }) =>
     Effect.gen(function* () {
-      const store = yield* Dispatch.DispatchStore;
-      return yield* store.list(limit !== undefined ? { limit } : undefined);
+      const runtime = yield* TheseusRuntime;
+      return yield* RuntimeQueries.listDispatches(
+        runtime,
+        limit !== undefined ? { limit } : undefined,
+      ).pipe(Effect.mapError(toRpcError));
     }),
 
   getMessages: ({ dispatchId }) =>
     Effect.gen(function* () {
-      const store = yield* Dispatch.DispatchStore;
-      const restored = yield* store.restore(dispatchId);
-      return (restored?.messages ?? []).map((m) => ({
-        role: String(m.role ?? ""),
-        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      }));
+      const runtime = yield* TheseusRuntime;
+      return yield* RuntimeQueries.getMessages(runtime, dispatchId).pipe(
+        Effect.mapError(toRpcError),
+      );
     }),
 
   inject: ({ dispatchId, text }) =>
     Effect.gen(function* () {
-      const registry = yield* DispatchRegistry;
-      const handle = yield* registry.get(dispatchId);
-      if (handle === null) {
-        return yield* new RpcError({
-          code: "NOT_FOUND",
-          message: `Dispatch ${dispatchId} not found`,
-        });
-      }
-      yield* handle.inject({
-        _tag: "AppendMessages",
-        messages: [{ role: "user", content: text }],
-      });
+      const runtime = yield* TheseusRuntime;
+      yield* RuntimeControls.inject(runtime, dispatchId, text).pipe(Effect.mapError(toRpcError));
     }),
 
   interrupt: ({ dispatchId }) =>
     Effect.gen(function* () {
-      const registry = yield* DispatchRegistry;
-      const handle = yield* registry.get(dispatchId);
-      if (handle === null) {
-        return yield* new RpcError({
-          code: "NOT_FOUND",
-          message: `Dispatch ${dispatchId} not found`,
-        });
-      }
-      yield* handle.interrupt;
+      const runtime = yield* TheseusRuntime;
+      yield* RuntimeControls.interrupt(runtime, dispatchId).pipe(Effect.mapError(toRpcError));
     }),
 
   getResult: ({ dispatchId }) =>
     Effect.gen(function* () {
-      const registry = yield* DispatchRegistry;
-      const handle = yield* registry.get(dispatchId);
-      if (handle === null) {
-        return yield* new RpcError({
-          code: "NOT_FOUND",
-          message: `Dispatch ${dispatchId} not found`,
-        });
-      }
-      const result = yield* Effect.catch(handle.result, (dispatchErr) =>
-        Effect.fail(
-          new RpcError({
-            code: "INTERNAL",
-            message: `Dispatch error: ${
-              typeof dispatchErr === "object" && dispatchErr !== null && "_tag" in dispatchErr
-                ? String(dispatchErr._tag)
-                : "unknown"
-            }`,
-          }),
-        ),
-      );
-      return result;
+      const runtime = yield* TheseusRuntime;
+      return yield* RuntimeQueries.getResult(runtime, dispatchId).pipe(Effect.mapError(toRpcError));
     }),
 
   getCapsuleEvents: ({ capsuleId }) =>
     Effect.gen(function* () {
-      const { db } = yield* TheseusDb;
-      const rows = db
-        .prepare(
-          "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
-        )
-        .all(capsuleId) as Array<{ type: string; at: string; by: string; data_json: string }>;
-      return rows.map((row) => ({
-        type: row.type,
-        at: row.at,
-        by: row.by,
-        data: JSON.parse(row.data_json),
-      }));
+      const runtime = yield* TheseusRuntime;
+      return yield* RuntimeQueries.getCapsuleEvents(runtime, capsuleId).pipe(
+        Effect.mapError(toRpcError),
+      );
     }),
 
   status: () =>
     Effect.gen(function* () {
-      const registry = yield* DispatchRegistry;
-      return yield* registry.list();
+      const runtime = yield* TheseusRuntime;
+      return yield* RuntimeQueries.status(runtime).pipe(Effect.mapError(toRpcError));
     }),
 });

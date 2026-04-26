@@ -19,9 +19,10 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { HandlersLive } from "./handlers.ts";
 import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
 import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
+import { TheseusRuntime, TheseusRuntimeLive } from "./runtime.ts";
 import { TheseusDbLive } from "./store/sqlite.ts";
 import { SqliteDispatchStore } from "./store/sqlite-dispatch-store.ts";
-import { makeToolRegistry, ToolRegistry } from "./tool-registry.ts";
+import { makeToolCatalog, ToolCatalog } from "./tool-catalog.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -35,7 +36,7 @@ const port = Number(process.env["THESEUS_PORT"] ?? 4800);
 // ---------------------------------------------------------------------------
 
 // Tools
-const ToolRegistryLive = Layer.succeed(ToolRegistry)(makeToolRegistry(allTools));
+const ToolCatalogLive = Layer.succeed(ToolCatalog)(makeToolCatalog(allTools));
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
@@ -62,10 +63,12 @@ const ServicesLayer = Layer.mergeAll(
   CopilotLanguageModelLive,
   PersistentDispatchStore,
   RingLive,
-  ToolRegistryLive,
+  ToolCatalogLive,
   RegistryLive,
   DbLive,
 );
+
+const RuntimeLive = Layer.provide(Layer.effect(TheseusRuntime)(TheseusRuntimeLive), ServicesLayer);
 
 // The app layer that configures the HttpRouter with RPC routes
 const RouterAppLayer = Layer.provideMerge(
@@ -73,7 +76,7 @@ const RouterAppLayer = Layer.provideMerge(
   Layer.mergeAll(
     HttpRouter.layer,
     RpcSerialization.layerJson,
-    Layer.provideMerge(HandlersLive, ServicesLayer),
+    Layer.provideMerge(HandlersLive, RuntimeLive),
   ),
 );
 

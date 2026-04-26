@@ -1,3 +1,8 @@
+---
+name: docs-management
+description: Use when editing the Theseus docs Obsidian vault under docs/, including adding, moving, splitting, renaming, archiving, cross-linking, or restructuring notes and section indexes.
+---
+
 # Theseus Docs Management Skill
 
 You are editing the **Theseus** documentation vault. Apply these rules whenever you add,
