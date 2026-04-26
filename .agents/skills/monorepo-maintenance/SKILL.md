@@ -21,10 +21,12 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 
 - `theseus-core` owns primitives, protocol contracts, service tags, and shared runtime types. It must not depend on tools, server, or web packages.
 - `theseus-tools` owns concrete tool implementations. It may depend on `theseus-core`.
-- `theseus-server` owns runtime assembly, persistence, RPC/HTTP wiring, and process-level service composition.
+- `theseus-runtime` owns live work orchestration, active registries, runtime command/query services, persistence-backed runtime stores, and capability catalog hydration. It must not depend on server or web packages.
+- `theseus-server` owns HTTP/RPC transport, provider configuration, process startup, and final layer assembly.
 - `jsx-md` packages own prompt/document rendering utilities and should stay independent from runtime orchestration.
 - Cross-package contracts belong in the lowest package that can own them without importing implementation concerns.
 - If two packages need the same runtime behavior, first ask whether the behavior is actually a primitive contract, a server concern, or a duplicated convenience.
+- Provider-specific shapes stay in provider adapters unless intentionally promoted into a shared contract.
 
 ## File Shape
 
@@ -33,6 +35,7 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Keep orchestration files shallow: wire named pieces together, but move behavior into focused modules.
 - Avoid "god files" that accumulate every variant of a primitive. A large file is a smell when unrelated sections can change independently.
 - Avoid `utils.ts`, `helpers.ts`, `common.ts`, giant `types.ts`, and miscellaneous service bags. Prefer small named modules/services with a domain responsibility and direct tests.
+- Avoid speculative abstractions. Add an abstraction for a real boundary, an important domain concept, or at least two real callers.
 - Do not split only by syntax category if the result separates code that must always be read together.
 - Keep test fixtures and mocks out of production modules unless they are explicitly exported test utilities.
 
@@ -59,8 +62,11 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Avoid defaults creep: after a boundary normalizes input, downstream code should receive explicit values, not repeat fallbacks.
 - Prefer explicit sentinel/domain values over absence when absence changes semantics, such as a root dispatch id instead of omitted `parentDispatchId`.
 - Public/internal boundaries should make trust explicit: external inputs are decoded and normalized; internal protocol violations fail loudly instead of being recovered with fallback behavior.
+- Translate once at each boundary. Avoid repeated partial adapters where external data is half-normalized across several modules.
 - Avoid `Partial<T>` patch APIs for domain records. Prefer named domain commands with explicit invariants.
 - Internal event/action names should be literal unions, schemas, or constructors. Plain `string` is for externally extensible names or raw undecoded input.
+- Prefer command/query separation. A function should either observe data or perform a state transition unless the name makes the combined behavior explicit, such as `ensureDispatch`.
+- If ordering matters, encode it in the API with an ordered type, sequence number, priority, timestamp, or named ordering rule.
 - Avoid overloads unless they materially improve call-site clarity and have a single coherent implementation model.
 - Prefer stable constructors for protocol variants and errors over repeated object literals at call sites.
 - Keep generic names descriptive in public examples and docs: `Input`, `Output`, `Error`, `Requirements` over single-letter aliases.
@@ -81,6 +87,8 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Did any package import upward into a higher-level package?
 - Did a public name become redundant under its namespace?
 - Did a public API expose implementation details or ambiguous boolean flags?
+- Did provider-specific data leak into core/domain types?
+- Is this abstraction tied to a real boundary/concept/caller, or is it speculative?
 - Did a file start mixing contracts, implementation, persistence, and tests?
 - Did a move leave stale exports, compatibility shims, or duplicate concepts?
 - Is verification scoped to the packages whose public surface changed?

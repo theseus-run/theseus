@@ -1,8 +1,12 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Effect, Match, type Stream } from "effect";
-import type { StatusEntry } from "../registry.ts";
-import type { RuntimeError, StartDispatchInput, TheseusRuntimeService } from "./types.ts";
+import type {
+  RuntimeError,
+  StartDispatchInput,
+  StatusEntry,
+  TheseusRuntimeService,
+} from "./types.ts";
 
 export const RuntimeCommands = {
   startDispatch: (

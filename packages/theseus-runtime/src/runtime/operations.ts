@@ -1,7 +1,7 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Effect, Match } from "effect";
-import type { DispatchRegistry, StatusEntry } from "../registry.ts";
+import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
 import {
   type RuntimeControl,
@@ -9,6 +9,7 @@ import {
   RuntimeNotFound,
   type RuntimeQuery,
   type RuntimeQueryResult,
+  type StatusEntry,
 } from "./types.ts";
 
 export interface RuntimeOperationsDeps {

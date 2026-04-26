@@ -50,6 +50,7 @@ Rules:
 
 - Runtime services, clocks, random/id generation, stores, language models, and mutable context should be read from the Effect environment at execution time.
 - Constructors and factories may capture static configuration.
+- Constructors/builders should shape data and service values only. They should not perform I/O, allocate runtime resources, read config, call providers, or start fibers.
 - Runtime code should avoid ambient `Date.now()`, `new Date()`, `Math.random()`, and `crypto.randomUUID()`. Use services/layers or explicit injected providers; boundary adapters and tests may wrap those primitives.
 - Do not call `Effect.runPromise` or `Effect.runSync` inside services. Run effects at process, test, or script edges.
 - For test seams, provide alternate layers instead of conditionals inside production services.

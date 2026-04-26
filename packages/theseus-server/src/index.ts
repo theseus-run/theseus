@@ -11,16 +11,10 @@ import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
-import {
-  DispatchRegistry,
-  DispatchRegistryLive,
-  makeToolCatalog,
-  SqliteDispatchStore,
-  TheseusDbLive,
-  TheseusRuntime,
-  TheseusRuntimeLive,
-  ToolCatalog,
-} from "@theseus.run/runtime";
+import { TheseusRuntime, TheseusRuntimeLive } from "@theseus.run/runtime";
+import { DispatchRegistry, DispatchRegistryLive } from "@theseus.run/runtime/registry";
+import { SqliteDispatchStore, TheseusDbLive } from "@theseus.run/runtime/store";
+import { makeToolCatalog, ToolCatalog } from "@theseus.run/runtime/tool-catalog";
 import { allTools } from "@theseus.run/tools";
 import { Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";

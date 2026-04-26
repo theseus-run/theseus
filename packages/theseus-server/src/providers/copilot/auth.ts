@@ -1,15 +1,15 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { encodeJson } from "@theseus.run/runtime/json";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type { RuntimeConfig } from "../../config.ts";
+import type { CopilotConfig } from "./config.ts";
 import { CopilotAuthError, CopilotParseError } from "./errors.ts";
+import { encodeJson } from "./json.ts";
 import type { TokenCache } from "./wire.ts";
 
-type RuntimeConfigService = (typeof RuntimeConfig)["Service"];
+type CopilotConfigService = (typeof CopilotConfig)["Service"];
 type HttpClientService = (typeof HttpClient.HttpClient)["Service"];
 
 export const readOauthToken: Effect.Effect<string, CopilotAuthError> = Effect.gen(function* () {
@@ -37,7 +37,7 @@ export const readOauthToken: Effect.Effect<string, CopilotAuthError> = Effect.ge
 
 export const exchangeToken = (
   http: HttpClientService,
-  config: Pick<RuntimeConfigService, "copilotAuthUrl">,
+  config: Pick<CopilotConfigService, "copilotAuthUrl">,
   oauthToken: string,
 ): Effect.Effect<TokenCache, CopilotAuthError | CopilotParseError> =>
   Effect.gen(function* () {

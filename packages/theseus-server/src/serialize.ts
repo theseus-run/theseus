@@ -1,7 +1,6 @@
 /**
  * Event serialization — handles ToolCallError.cause which may be non-serializable.
  *
- * Copied from the old protocol.ts serializeEvent helper.
  * Returns a plain JSON-safe object matching DispatchEventSchema.
  */
 

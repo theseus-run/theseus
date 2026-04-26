@@ -28,11 +28,6 @@ import { RuntimeDispatchFailed, RuntimeNotFound, RuntimeToolNotFound } from "./r
 import { TheseusDb } from "./store/sqlite.ts";
 import { ToolCatalog } from "./tool-catalog.ts";
 
-export type { StatusEntry } from "./registry.ts";
-export {
-  DispatchRegistry,
-  DispatchRegistryLive,
-} from "./registry.ts";
 export type {
   RuntimeCommand,
   RuntimeControl,
@@ -42,21 +37,9 @@ export type {
   RuntimeSnapshot,
   RuntimeSubmission,
   StartDispatchInput,
+  StatusEntry,
   TheseusRuntimeService,
 } from "./runtime/types.ts";
-export {
-  SqliteCurrentCapsuleLive,
-  SqliteDispatchStore,
-  TheseusDb,
-  TheseusDbLive,
-} from "./store/index.ts";
-export {
-  makeToolCatalog,
-  type SerializedDispatchSpec,
-  ToolCatalog,
-  ToolCatalogMissing,
-  type ToolCatalogService,
-} from "./tool-catalog.ts";
 export {
   RuntimeCommands,
   RuntimeControls,

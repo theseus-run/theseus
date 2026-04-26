@@ -1,7 +1,6 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Data, type Effect, type Stream } from "effect";
-import type { StatusEntry } from "../registry.ts";
 import type { SerializedDispatchSpec } from "../tool-catalog.ts";
 
 export class RuntimeToolNotFound extends Data.TaggedError("RuntimeToolNotFound")<{
@@ -20,6 +19,14 @@ export class RuntimeDispatchFailed extends Data.TaggedError("RuntimeDispatchFail
 }> {}
 
 export type RuntimeError = RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed;
+
+export interface StatusEntry {
+  readonly dispatchId: string;
+  readonly name: string;
+  readonly iteration: number;
+  readonly state: "running" | "done" | "failed";
+  readonly usage: Dispatch.Usage;
+}
 
 export interface StartDispatchInput {
   readonly spec: SerializedDispatchSpec;

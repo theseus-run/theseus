@@ -21,6 +21,7 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 - New runtime behavior needs focused tests.
 - Services with behavior need direct tests: registries, stores, parsers, dispatch loops, satellite rings, tool execution boundaries, persistence adapters, and protocol serializers.
 - Constructors for exported protocol variants need tests when they apply defaults, normalize input, or enforce invariants.
+- Boundary adapters that translate external/provider data into internal data need focused tests for the translation shape.
 - Pure type surfaces and thin barrels do not need runtime tests unless they contain constructors or behavior.
 - Refactors of working behavior should start with characterization tests when the current behavior is not already pinned down.
 

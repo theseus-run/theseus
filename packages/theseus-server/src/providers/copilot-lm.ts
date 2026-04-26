@@ -13,8 +13,8 @@ import type * as Prompt from "effect/unstable/ai/Prompt";
 import type * as AiTool from "effect/unstable/ai/Tool";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { RuntimeConfig, RuntimeConfigLive } from "../config.ts";
 import { exchangeToken, readOauthToken } from "./copilot/auth.ts";
+import { CopilotConfig, CopilotConfigLive } from "./copilot/config.ts";
 import {
   type CopilotAuthError,
   type CopilotEncodeError,
@@ -42,7 +42,7 @@ import { shouldUseResponsesApi } from "./copilot/wire.ts";
 
 const buildRequest = (
   getBearer: () => Effect.Effect<string, CopilotAuthError | CopilotParseError>,
-  config: (typeof RuntimeConfig)["Service"],
+  config: (typeof CopilotConfig)["Service"],
   prompt: Prompt.Prompt,
   tools: ReadonlyArray<AiTool.Any>,
   streaming: boolean,
@@ -113,7 +113,7 @@ const executeRequest = (
 export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageModel)(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const config = yield* RuntimeConfig;
+    const config = yield* CopilotConfig;
     const clock = yield* Clock.Clock;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
@@ -191,8 +191,8 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
   }),
 );
 
-/** Convenience live layer with BunHttpClient + RuntimeConfigLive. */
+/** Convenience live layer with BunHttpClient + CopilotConfigLive. */
 export const CopilotLanguageModelLive = CopilotLanguageModelLayer.pipe(
   Layer.provide(BunHttpClient.layer),
-  Layer.provide(RuntimeConfigLive),
+  Layer.provide(CopilotConfigLive),
 );

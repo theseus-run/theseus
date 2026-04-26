@@ -71,7 +71,8 @@ Core idea: a human dispatches a goal with done criteria; the system runs the wor
 
 - `packages/theseus-core` — typed primitives for agent systems.
 - `packages/theseus-tools` — Bun-native tool implementations.
-- `packages/theseus-server` — Effect RPC / HTTP server / runtime wiring.
+- `packages/theseus-runtime` — headless runtime services for live work orchestration, active dispatch tracking, persistence-backed runtime state, and capability hydration.
+- `packages/theseus-server` — Effect RPC / HTTP process assembly, provider wiring, and transport boundary.
 - `packages/jsx-md` — JSX/TSX renderer for Markdown and LLM-facing instruction components.
 - `packages/jsx-md-beautiful-mermaid` — Mermaid-to-ASCII component for `jsx-md`.
 - `packages/icarus-web` — React/Vite web interface for the runtime.
@@ -80,7 +81,8 @@ Core idea: a human dispatches a goal with done criteria; the system runs the wor
 
 - `theseus-core` defines primitives and shared runtime contracts. It must not depend on tools, server, or web packages.
 - `theseus-tools` may depend on `theseus-core`; it provides concrete tool implementations.
-- `theseus-server` wires core primitives, tools, persistence, and transport. Keep application wiring here, not in core.
+- `theseus-runtime` owns live work orchestration, active registries, runtime command/query services, persistence-backed runtime stores, and capability catalog hydration. It must not depend on server or web packages.
+- `theseus-server` owns HTTP/RPC transport, provider configuration, process startup, and final layer assembly. Keep transport concerns here, not in runtime or core.
 - `jsx-md` packages are prompt/document rendering utilities. Keep them independent from runtime orchestration.
 - `icarus-web` is a client/operator surface. It may consume runtime contracts but must not become the runtime.
 
@@ -120,6 +122,13 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Keep plain object literals for local throwaway data. Avoid `as const` at public protocol call sites when a typed constructor would make intent clearer.
 - Inject providers and backends that may change. Core primitives must not hard-code model vendors, MCP frameworks, or storage providers.
 - Constructors and factories may capture configuration. Runtime services, clocks, random/id generation, stores, language models, and mutable context should be read from the Effect environment at execution time.
+- Constructors/builders should shape data, not perform I/O, allocate runtime resources, read config, call providers, or start fibers.
+- Translate once at each boundary: external shape -> internal shape, or internal shape -> external shape. Avoid repeated half-normalization across layers.
+- Keep provider-specific shapes out of core/domain types unless deliberately promoted into a shared contract.
+- Do not let raw `Record<string, unknown>` flow past ingress or opaque passthrough boundaries; decode it into schemas or explicit extension points.
+- Protocol events/log entries should be immutable once created. Emit a new event for new facts instead of mutating prior events.
+- Logs, capsules, dispatch events, and telemetry should be append-only unless an explicit compaction/snapshot boundary says otherwise.
+- If ordering matters, encode it in the API. Do not rely on incidental object key order, registration order, import order, or array order.
 
 ## Module Shape
 
@@ -127,6 +136,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Split files when they mix protocol/type definitions, service tags, service implementations, command routing, persistence, serialization, and test helpers.
 - Keep barrels thin. A package or primitive `index.ts` should mostly export public surface; move runtime behavior into named modules.
 - Avoid `utils.ts`, `helpers.ts`, `common.ts`, giant `types.ts`, and miscellaneous service bags. Name modules by domain responsibility and keep them small and testable.
+- Avoid speculative abstractions. Add an abstraction for a real boundary, an important domain concept, or repeated use; not for a hypothetical future caller.
 - Do not keep aliases, compatibility exports, or parallel old/new paths unless the user explicitly asks for back compatibility.
 - When a refactor creates a new boundary, remove the stale boundary in the same pass when feasible.
 

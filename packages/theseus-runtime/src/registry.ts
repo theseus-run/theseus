@@ -1,12 +1,13 @@
 /**
  * DispatchRegistry — tracks active dispatches in the runtime process.
  *
- * In-memory (Ref-backed Map). Simplified from the daemon version:
- * no dependency on Daemon protocol types — uses plain status entries.
+ * In-memory (Ref-backed Map), intentionally independent from transport
+ * protocol types.
  */
 
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Clock, Context, Effect, Ref } from "effect";
+import type { StatusEntry } from "./runtime/types.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,14 +20,6 @@ interface RegistryEntry {
   iteration: number;
   usage: Dispatch.Usage;
   state: "running" | "done" | "failed";
-}
-
-export interface StatusEntry {
-  readonly dispatchId: string;
-  readonly name: string;
-  readonly iteration: number;
-  readonly state: "running" | "done" | "failed";
-  readonly usage: Dispatch.Usage;
 }
 
 // ---------------------------------------------------------------------------

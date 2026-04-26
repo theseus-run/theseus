@@ -25,6 +25,7 @@ Rules:
 - Use `Effect.onExit` or `Effect.ensuring` for cleanup that must run on success, failure, or interrupt.
 - Use `Effect.acquireUseRelease` or scoped layers for real resources.
 - Background work must have an owner: scope, registry, runtime service, or explicit detached lifecycle.
+- Queues, streams, subscriptions, and detached fibers must have a shutdown story. If it cannot be interrupted or drained, it is not ready for runtime code.
 
 ## Bounded Work
 
@@ -54,6 +55,7 @@ Rules:
 
 - Who owns this fiber?
 - What interrupts it?
+- Where is shutdown/drain handled?
 - Can producers outrun consumers?
 - What happens when the consumer fails?
 - Are failures logged, surfaced, or intentionally ignored?

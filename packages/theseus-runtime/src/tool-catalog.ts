@@ -1,5 +1,5 @@
 /**
- * ToolCatalog — server-side capability catalog.
+ * ToolCatalog — runtime-side capability catalog.
  *
  * Client specs name tools; the runtime resolves those names to executable
  * Tool values. Empty selections mean no tools. Intentional presets such as

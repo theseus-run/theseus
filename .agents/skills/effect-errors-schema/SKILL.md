@@ -65,6 +65,7 @@ Rules:
 - Decode unknown inputs with `Schema.decodeUnknownEffect(schema)(raw)` when failures should stay typed.
 - Keep schemas near the boundary they protect unless they are shared API contracts.
 - Put JSON parse/stringify for protocol, provider, RPC, and persistence data behind schema-backed boundary helpers when practical. Raw JSON is acceptable for tests, debug output, or truly opaque passthrough data.
+- Keep raw `Record<string, unknown>` at ingress or opaque passthrough boundaries. Domain code should receive decoded schemas or explicit extension points.
 - Prefer narrow schemas for commands and events. Avoid `Schema.Unknown` except for explicitly open extension points.
 
 ## Checks

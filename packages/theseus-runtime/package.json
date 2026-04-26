@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./json": "./src/json.ts",
+    "./registry": "./src/registry.ts",
+    "./tool-catalog": "./src/tool-catalog.ts",
     "./store": "./src/store/index.ts"
   },
   "scripts": {
