@@ -52,9 +52,9 @@ export const DispatchOutputSchema = Schema.Struct({
   usage: UsageSchema,
 });
 
-export interface DispatchOutput extends Schema.Schema.Type<typeof DispatchOutputSchema> {
+export type DispatchOutput = Omit<Schema.Schema.Type<typeof DispatchOutputSchema>, "messages"> & {
   readonly messages: ReadonlyArray<Prompt.MessageEncoded>;
-}
+};
 
 // ---------------------------------------------------------------------------
 // DispatchError — raw operational failures from the loop

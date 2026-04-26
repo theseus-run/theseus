@@ -11,7 +11,7 @@
  * Requires LanguageModel from effect/unstable/ai.
  */
 
-import { Effect, type Stream } from "effect";
+import { Effect, Match, type Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
 import {
@@ -38,25 +38,37 @@ export interface GruntHandle {
   readonly result: Effect.Effect<AgentResult, AgentError>;
 }
 
-const toAgentError = (error: DispatchError): AgentError => {
-  switch (error._tag) {
-    case "DispatchInterrupted":
-      return new AgentInterrupted({
-        agent: error.name,
-        ...(error.reason !== undefined ? { reason: error.reason } : {}),
-      });
-    case "DispatchCycleExceeded":
-      return new AgentCycleExceeded({ agent: error.name, max: error.max, usage: error.usage });
-    case "DispatchModelFailed":
-      return new AgentLLMError({ agent: error.name, message: error.message, cause: error.cause });
-    case "DispatchToolFailed":
-      return new AgentToolFailed({
-        agent: error.name,
-        tool: error.tool,
-        cause: error.error,
-      });
-  }
-};
+const toAgentError = (error: DispatchError): AgentError =>
+  Match.value(error).pipe(
+    Match.tag(
+      "DispatchInterrupted",
+      (error): AgentError =>
+        new AgentInterrupted({
+          agent: error.name,
+          ...(error.reason !== undefined ? { reason: error.reason } : {}),
+        }),
+    ),
+    Match.tag(
+      "DispatchCycleExceeded",
+      (error): AgentError =>
+        new AgentCycleExceeded({ agent: error.name, max: error.max, usage: error.usage }),
+    ),
+    Match.tag(
+      "DispatchModelFailed",
+      (error): AgentError =>
+        new AgentLLMError({ agent: error.name, message: error.message, cause: error.cause }),
+    ),
+    Match.tag(
+      "DispatchToolFailed",
+      (error): AgentError =>
+        new AgentToolFailed({
+          agent: error.name,
+          tool: error.tool,
+          cause: error.error,
+        }),
+    ),
+    Match.exhaustive,
+  );
 
 const toAgentResult = (output: {
   readonly content: string;

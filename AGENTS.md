@@ -47,6 +47,9 @@ When asked for a review, lead with findings. Prioritize defects, behavioral regr
 
 - Package manager: `bun`.
 - Root scripts:
+  - `bun run effect:diagnostics` — Effect language-service diagnostics for configured non-web packages.
+  - `bun run effect:ls:check` — check whether local TypeScript is patched for Effect diagnostics.
+  - `bun run effect:ls:patch` — patch local TypeScript so Effect diagnostics surface through build-time checks.
   - `bun run lint` — Biome check.
   - `bun run test` — Bun tests.
   - `bun run typecheck` — TypeScript checks for the configured packages.

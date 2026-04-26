@@ -30,6 +30,7 @@ import type {
   CheckpointDecision,
   SatelliteAbort,
   SatelliteAny,
+  SatelliteCheckpoint,
   SatelliteContext,
   SatelliteDecision,
   SatelliteRequirements,
@@ -61,6 +62,24 @@ type StateCell = {
   readonly satellite: SatelliteAny;
 };
 
+type HookSelector<Phase, Decision extends SatelliteDecision> = (
+  satellite: SatelliteAny,
+) =>
+  | ((
+      phase: Phase,
+      ctx: SatelliteContext,
+      state: unknown,
+    ) => Effect.Effect<
+      { readonly decision: Decision; readonly state: unknown },
+      SatelliteAbort,
+      unknown
+    >)
+  | undefined;
+
+type DecisionGuard<Decision extends SatelliteDecision> = (
+  decision: SatelliteDecision,
+) => decision is Decision;
+
 const closeCells = (cells: ReadonlyArray<StateCell>): Effect.Effect<void, never, unknown> =>
   Effect.forEach(
     cells,
@@ -73,25 +92,13 @@ const closeCells = (cells: ReadonlyArray<StateCell>): Effect.Effect<void, never,
     { discard: true },
   );
 
-const runHook = <Phase, Decision extends SatelliteDecision>(
+const runUntypedPhaseHook = <Phase, Decision extends SatelliteDecision>(
   cells: ReadonlyArray<StateCell>,
   phase: Phase,
   phaseLabel: string,
   ctx: SatelliteContext,
-  getHook: (
-    satellite: SatelliteAny,
-  ) =>
-    | ((
-        phase: Phase,
-        ctx: SatelliteContext,
-        state: unknown,
-      ) => Effect.Effect<
-        { readonly decision: Decision; readonly state: unknown },
-        SatelliteAbort,
-        unknown
-      >)
-    | undefined,
-  isDecision: (decision: SatelliteDecision) => decision is Decision,
+  getHook: HookSelector<Phase, Decision>,
+  isDecision: DecisionGuard<Decision>,
   applyDecision: (phase: Phase, decision: Decision) => Phase,
   onAction?: SatelliteActionCallback,
 ): Effect.Effect<Decision, SatelliteAbort, unknown> =>
@@ -108,12 +115,10 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
       yield* Ref.set(cell.ref, nextState);
 
       if (!isDecision(decision)) {
-        return yield* Effect.fail(
-          new SatelliteAbortError({
-            satellite: cell.name,
-            reason: `Invalid ${phaseLabel} decision: ${decision._tag}`,
-          }),
-        );
+        return yield* new SatelliteAbortError({
+          satellite: cell.name,
+          reason: `Invalid ${phaseLabel} decision: ${decision._tag}`,
+        });
       }
 
       if (decision._tag === "Pass") continue;
@@ -126,6 +131,133 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
 
     return lastDecision;
   });
+
+const runPhaseHook = <Phase, Decision extends SatelliteDecision, R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Phase,
+  phaseLabel: string,
+  ctx: SatelliteContext,
+  getHook: HookSelector<Phase, Decision>,
+  isDecision: DecisionGuard<Decision>,
+  applyDecision: (phase: Phase, decision: Decision) => Phase,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<Decision, SatelliteAbort, R> =>
+  // The static ring stores heterogeneous satellites, so TypeScript cannot
+  // retain each hook's service environment through the array. The public
+  // SatelliteScope type carries the unioned R; this is the one adapter that
+  // narrows the internal unknown environment back to that public contract.
+  runUntypedPhaseHook(
+    cells,
+    phase,
+    phaseLabel,
+    ctx,
+    getHook,
+    isDecision,
+    applyDecision,
+    onAction,
+  ) as Effect.Effect<Decision, SatelliteAbort, R>;
+
+const runCheckpointHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  checkpoint: Parameters<SatelliteScope<R>["checkpoint"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<CheckpointDecision, SatelliteAbort, R> =>
+  runPhaseHook<SatelliteCheckpoint, CheckpointDecision, R>(
+    cells,
+    checkpoint,
+    `checkpoint:${checkpoint}`,
+    ctx,
+    (satellite) => satellite.checkpoint,
+    isCheckpointDecision,
+    applyCheckpointDecision,
+    onAction,
+  );
+
+const runBeforeCallHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Parameters<SatelliteScope<R>["beforeCall"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<BeforeCallDecision, SatelliteAbort, R> =>
+  runPhaseHook(
+    cells,
+    phase,
+    "beforeCall",
+    ctx,
+    (satellite) => satellite.beforeCall,
+    isBeforeCallDecision,
+    applyBeforeCallDecision,
+    onAction,
+  );
+
+const runAfterCallHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Parameters<SatelliteScope<R>["afterCall"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<AfterCallDecision, SatelliteAbort, R> =>
+  runPhaseHook(
+    cells,
+    phase,
+    "afterCall",
+    ctx,
+    (satellite) => satellite.afterCall,
+    isAfterCallDecision,
+    applyAfterCallDecision,
+    onAction,
+  );
+
+const runBeforeToolHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Parameters<SatelliteScope<R>["beforeTool"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<BeforeToolDecision, SatelliteAbort, R> =>
+  runPhaseHook(
+    cells,
+    phase,
+    "beforeTool",
+    ctx,
+    (satellite) => satellite.beforeTool,
+    isBeforeToolDecision,
+    applyBeforeToolDecision,
+    onAction,
+  );
+
+const runAfterToolHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Parameters<SatelliteScope<R>["afterTool"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<AfterToolDecision, SatelliteAbort, R> =>
+  runPhaseHook(
+    cells,
+    phase,
+    "afterTool",
+    ctx,
+    (satellite) => satellite.afterTool,
+    isAfterToolDecision,
+    applyAfterToolDecision,
+    onAction,
+  );
+
+const runToolErrorHook = <R>(
+  cells: ReadonlyArray<StateCell>,
+  phase: Parameters<SatelliteScope<R>["toolError"]>[0],
+  ctx: SatelliteContext,
+  onAction?: SatelliteActionCallback,
+): Effect.Effect<ToolErrorDecision, SatelliteAbort, R> =>
+  runPhaseHook(
+    cells,
+    phase,
+    "toolError",
+    ctx,
+    (satellite) => satellite.toolError,
+    isToolErrorDecision,
+    applyToolErrorDecision,
+    onAction,
+  );
 
 export const makeSatelliteRing = <const Satellites extends ReadonlyArray<SatelliteAny>>(
   satellites: Satellites,
@@ -147,100 +279,52 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
 
         const scope: SatelliteScope<SatelliteRequirements<Satellites[number]>> = {
           checkpoint: (checkpoint, ctx, onAction) =>
-            runHook(
+            runCheckpointHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               checkpoint,
-              `checkpoint:${checkpoint}`,
               ctx,
-              (satellite) => satellite.checkpoint,
-              isCheckpointDecision,
-              applyCheckpointDecision,
               onAction,
-            ) as Effect.Effect<
-              CheckpointDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           beforeCall: (phase, ctx, onAction) =>
-            runHook(
+            runBeforeCallHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               phase,
-              "beforeCall",
               ctx,
-              (satellite) => satellite.beforeCall,
-              isBeforeCallDecision,
-              applyBeforeCallDecision,
               onAction,
-            ) as Effect.Effect<
-              BeforeCallDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           afterCall: (phase, ctx, onAction) =>
-            runHook(
+            runAfterCallHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               phase,
-              "afterCall",
               ctx,
-              (satellite) => satellite.afterCall,
-              isAfterCallDecision,
-              applyAfterCallDecision,
               onAction,
-            ) as Effect.Effect<
-              AfterCallDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           beforeTool: (phase, ctx, onAction) =>
-            runHook(
+            runBeforeToolHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               phase,
-              "beforeTool",
               ctx,
-              (satellite) => satellite.beforeTool,
-              isBeforeToolDecision,
-              applyBeforeToolDecision,
               onAction,
-            ) as Effect.Effect<
-              BeforeToolDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           afterTool: (phase, ctx, onAction) =>
-            runHook(
+            runAfterToolHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               phase,
-              "afterTool",
               ctx,
-              (satellite) => satellite.afterTool,
-              isAfterToolDecision,
-              applyAfterToolDecision,
               onAction,
-            ) as Effect.Effect<
-              AfterToolDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           toolError: (phase, ctx, onAction) =>
-            runHook(
+            runToolErrorHook<SatelliteRequirements<Satellites[number]>>(
               cells,
               phase,
-              "toolError",
               ctx,
-              (satellite) => satellite.toolError,
-              isToolErrorDecision,
-              applyToolErrorDecision,
               onAction,
-            ) as Effect.Effect<
-              ToolErrorDecision,
-              SatelliteAbort,
-              SatelliteRequirements<Satellites[number]>
-            >,
+            ),
 
           close: closeCells(cells) as Effect.Effect<
             void,

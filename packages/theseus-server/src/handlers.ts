@@ -6,7 +6,7 @@
  */
 
 import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
-import { Effect, Stream } from "effect";
+import { Effect, Match, Stream } from "effect";
 import {
   RuntimeCommands,
   RuntimeControls,
@@ -23,20 +23,22 @@ import { serializeEvent } from "./serialize.ts";
 // ---------------------------------------------------------------------------
 
 const toRpcError = (error: RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed) =>
-  new RpcError({
-    code:
-      error._tag === "RuntimeToolNotFound"
-        ? "TOOL_NOT_FOUND"
-        : error._tag === "RuntimeNotFound"
-          ? "NOT_FOUND"
-          : "INTERNAL",
-    message:
-      error._tag === "RuntimeToolNotFound"
-        ? `Unknown tools: ${error.names.join(", ")}`
-        : error._tag === "RuntimeNotFound"
-          ? `Dispatch ${error.id} not found`
-          : `Dispatch error: ${error.reason}`,
-  });
+  Match.value(error).pipe(
+    Match.tag(
+      "RuntimeToolNotFound",
+      ({ names }) =>
+        new RpcError({ code: "TOOL_NOT_FOUND", message: `Unknown tools: ${names.join(", ")}` }),
+    ),
+    Match.tag(
+      "RuntimeNotFound",
+      ({ id }) => new RpcError({ code: "NOT_FOUND", message: `Dispatch ${id} not found` }),
+    ),
+    Match.tag(
+      "RuntimeDispatchFailed",
+      ({ reason }) => new RpcError({ code: "INTERNAL", message: `Dispatch error: ${reason}` }),
+    ),
+    Match.exhaustive,
+  );
 
 // ---------------------------------------------------------------------------
 // Handlers Layer

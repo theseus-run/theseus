@@ -23,6 +23,7 @@
  */
 
 import { Effect, Schema } from "effect";
+import type { SchemaError } from "effect/Schema";
 import { type Presentation, textPresentation } from "./content.ts";
 import { ToolDefect, ToolFailureError, ToolInputError, ToolOutputError } from "./errors.ts";
 import type { Tool } from "./index.ts";
@@ -102,6 +103,40 @@ const defaultPresentValue = <O, F>(value: ToolValue<O, F>): Presentation =>
   value._tag === "Success" ? defaultPresent(value.output) : defaultPresentFailure(value.failure);
 
 // ---------------------------------------------------------------------------
+// Schema boundary helpers
+// ---------------------------------------------------------------------------
+
+const decodeSchema = <A, E>(
+  schema: Schema.Schema<A>,
+  value: unknown,
+  mapError: (cause: SchemaError) => E,
+): Effect.Effect<A, E> =>
+  // Effect Schema carries no runtime dependency for these tool schemas. Keep
+  // the narrowing in one place so callTool remains about the execution flow.
+  Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError(mapError)) as Effect.Effect<
+    A,
+    E,
+    never
+  >;
+
+const decodeInput = <I, O, F, R>(tool: Tool<I, O, F, R>, raw: unknown) =>
+  decodeSchema(tool.input, raw, (cause) => new ToolInputError({ tool: tool.name, cause }));
+
+const validateOutput = <I, O, F, R>(tool: Tool<I, O, F, R>, output: O) =>
+  decodeSchema(
+    tool.output,
+    output,
+    (cause) => new ToolOutputError({ tool: tool.name, output, cause }),
+  );
+
+const validateFailure = <I, O, F, R>(tool: Tool<I, O, F, R>, failure: F) =>
+  decodeSchema(
+    tool.failure,
+    failure,
+    (cause) => new ToolFailureError({ tool: tool.name, failure, cause }),
+  );
+
+// ---------------------------------------------------------------------------
 // callTool
 // ---------------------------------------------------------------------------
 
@@ -120,33 +155,19 @@ export const callTool = <I, O, F, R>(
   const present = (value: ToolValue<O, F>): Effect.Effect<Presentation, never, R> =>
     tool.present ? tool.present(value) : Effect.succeed(defaultPresentValue(value));
 
-  // Tool schemas are pure; Effect Schema currently exposes an unconstrained
-  // context here, so the primitive boundary narrows it once.
-  const decodeStep = Schema.decodeUnknownEffect(tool.input)(raw).pipe(
-    Effect.mapError((cause) => new ToolInputError({ tool: tool.name, cause })),
-  ) as Effect.Effect<I, ToolInputError, never>;
+  const decodeStep = decodeInput(tool, raw);
 
   const executeStep = (input: I): Effect.Effect<O, F, R> => {
     const run = tool.execute(input);
     return tool.retry ? Effect.retry(run, tool.retry) : run;
   };
 
-  const validateOutput = (output: O): Effect.Effect<O, ToolOutputError> =>
-    Schema.decodeUnknownEffect(tool.output)(output).pipe(
-      Effect.mapError((cause) => new ToolOutputError({ tool: tool.name, output, cause })),
-    ) as Effect.Effect<O, ToolOutputError, never>;
-
-  const validateFailure = (failure: F): Effect.Effect<F, ToolFailureError> =>
-    Schema.decodeUnknownEffect(tool.failure)(failure).pipe(
-      Effect.mapError((cause) => new ToolFailureError({ tool: tool.name, failure, cause })),
-    ) as Effect.Effect<F, ToolFailureError, never>;
-
   return decodeStep.pipe(
     Effect.flatMap((input) =>
       executeStep(input).pipe(
         Effect.matchEffect({
           onSuccess: (output) =>
-            validateOutput(output).pipe(
+            validateOutput(tool, output).pipe(
               Effect.flatMap((validated) =>
                 present(ToolValue.success(validated)).pipe(
                   Effect.map((presentation) => ToolOutcome.success(input, validated, presentation)),
@@ -154,7 +175,7 @@ export const callTool = <I, O, F, R>(
               ),
             ),
           onFailure: (failure) =>
-            validateFailure(failure).pipe(
+            validateFailure(tool, failure).pipe(
               Effect.flatMap((validated) =>
                 present(ToolValue.failure(validated)).pipe(
                   Effect.map((presentation) => ToolOutcome.failure(input, validated, presentation)),

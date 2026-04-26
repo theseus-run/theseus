@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.codex/hooks/post_tool_use_check.ts\"",
+            "timeout": 10,
+            "statusMessage": "Recording deterministic checks"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.codex/hooks/stop_self_check.ts\"",
+            "timeout": 10,
+            "statusMessage": "Checking verification status"
+          }
+        ]
+      }
+    ]
+  }
+}

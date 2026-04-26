@@ -97,7 +97,7 @@ const program = Effect.gen(function* () {
   console.log(`[theseus-server] listening on port ${port}`);
 
   // Keep the server alive
-  yield* Effect.never;
+  return yield* Effect.never;
 });
 
 Effect.runFork(

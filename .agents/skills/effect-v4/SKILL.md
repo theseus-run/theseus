@@ -50,6 +50,12 @@ rg "export declare const catch|forkDetach|TaggedErrorClass" node_modules
 
 The repo already has `@effect/language-service` configured in root `tsconfig.json`. Trust its diagnostics when Effect types look strange.
 
+Effect language-service commands:
+
+- `bun run effect:diagnostics` - run Effect diagnostics across configured non-web packages.
+- `bun run effect:ls:check` - check whether local TypeScript is patched for build-time Effect diagnostics.
+- `bun run effect:ls:patch` - patch local TypeScript so Effect diagnostics surface through compiler tooling.
+
 ## Type Shape
 
 `Effect.Effect<Success, Error, Requirements>` means:
