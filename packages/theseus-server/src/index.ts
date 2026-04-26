@@ -11,6 +11,16 @@ import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
+import {
+  DispatchRegistry,
+  DispatchRegistryLive,
+  makeToolCatalog,
+  SqliteDispatchStore,
+  TheseusDbLive,
+  TheseusRuntime,
+  TheseusRuntimeLive,
+  ToolCatalog,
+} from "@theseus.run/runtime";
 import { allTools } from "@theseus.run/tools";
 import { Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -18,11 +28,6 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { HandlersLive } from "./handlers.ts";
 import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
-import { DispatchRegistry, DispatchRegistryLive } from "./registry.ts";
-import { TheseusRuntime, TheseusRuntimeLive } from "./runtime.ts";
-import { TheseusDbLive } from "./store/sqlite.ts";
-import { SqliteDispatchStore } from "./store/sqlite-dispatch-store.ts";
-import { makeToolCatalog, ToolCatalog } from "./tool-catalog.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration

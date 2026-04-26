@@ -109,7 +109,10 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Keep runtime data serializable when it crosses process, tool, or dispatch boundaries.
 - Prefer explicit required internal data over optional/default soup. Normalize optional inputs once at the boundary; avoid defaults creep, silent fallbacks, conditional object spreads, and scattered nullish fallbacks in function bodies.
 - Prefer hard boundaries. Validate external input at the edge and normalize it into explicit internal types. Inside controlled code, do not recover from impossible states, unsupported internal variants, or violated invariants; fail early and loudly.
+- Exported domain/protocol variants should have named constructors. Avoid repeated public `_tag` object literals outside local throwaway data.
+- IDs crossing package, persistence, tool, RPC, dispatch, or mission boundaries should be branded/schema-backed, not raw `string`.
 - Use strict types for closed sets. Use `string` only for externally extensible runtime sets.
+- Avoid booleans by default for domain state. Boolean matrices are usually hidden state machines; prefer discriminated unions for simple states and explicit state-machine modules/services for complex flows.
 - Prefer ordered enums/unions over correlated boolean flags.
 - Prefer strict discriminated unions for domain states, protocol packets, outcomes, and lifecycle phases.
 - Match closed discriminated unions exhaustively. Use `switch` with `never` checks or a local exhaustive matcher pattern; do not rely on fallthrough defaults for known protocol states.
@@ -123,6 +126,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Prefer small modules with one clear responsibility over large coordination files.
 - Split files when they mix protocol/type definitions, service tags, service implementations, command routing, persistence, serialization, and test helpers.
 - Keep barrels thin. A package or primitive `index.ts` should mostly export public surface; move runtime behavior into named modules.
+- Avoid `utils.ts`, `helpers.ts`, `common.ts`, giant `types.ts`, and miscellaneous service bags. Name modules by domain responsibility and keep them small and testable.
 - Do not keep aliases, compatibility exports, or parallel old/new paths unless the user explicitly asks for back compatibility.
 - When a refactor creates a new boundary, remove the stale boundary in the same pass when feasible.
 
@@ -140,6 +144,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Expected failures should be typed and recoverable.
 - Recovery is for expected uncertainty at external boundaries: user input, network, filesystem, subprocesses, model providers, persistence, and environment.
 - Defects are program bugs or violated internal contracts; do not hide them behind generic error bags, default branches, silent drops, or best-effort recovery.
+- Generic errors are acceptable as outer-boundary salvage or defect wrappers; domain code should prefer narrow tagged errors that name the failed invariant or external operation.
 - Prefer flat tagged errors with primitive-specific prefixes such as `Tool*`, `Mission*`, or `Capsule*`.
 
 ## Compatibility

@@ -1,6 +1,6 @@
+import { decodeJsonEffect } from "@theseus.run/runtime/json";
 import { Effect, Match } from "effect";
 import type * as Response from "effect/unstable/ai/Response";
-import { decodeJsonEffect } from "../../json.ts";
 import { CopilotParseError } from "./errors.ts";
 import type { ChatCompletionsWire, ResponsesWire } from "./wire.ts";
 import { makeFinishPart, sanitizeCallId } from "./wire.ts";

@@ -6,7 +6,6 @@
  */
 
 import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
-import { Effect, Match, Stream } from "effect";
 import {
   RuntimeCommands,
   RuntimeControls,
@@ -15,7 +14,8 @@ import {
   RuntimeQueries,
   type RuntimeToolNotFound,
   TheseusRuntime,
-} from "./runtime.ts";
+} from "@theseus.run/runtime";
+import { Effect, Match, Stream } from "effect";
 import { serializeEvent } from "./serialize.ts";
 
 // ---------------------------------------------------------------------------

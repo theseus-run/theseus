@@ -11,12 +11,12 @@
     "packages/*"
   ],
   "scripts": {
-    "effect:diagnostics": "bunx effect-language-service diagnostics --project packages/theseus-core/tsconfig.json && bunx effect-language-service diagnostics --project packages/theseus-tools/tsconfig.json && bunx effect-language-service diagnostics --project packages/theseus-server/tsconfig.json && bunx effect-language-service diagnostics --project packages/jsx-md/tsconfig.json && bunx effect-language-service diagnostics --project packages/jsx-md-beautiful-mermaid/tsconfig.json",
+    "effect:diagnostics": "bunx effect-language-service diagnostics --project packages/theseus-core/tsconfig.json && bunx effect-language-service diagnostics --project packages/theseus-tools/tsconfig.json && bunx effect-language-service diagnostics --project packages/theseus-runtime/tsconfig.json && bunx effect-language-service diagnostics --project packages/theseus-server/tsconfig.json && bunx effect-language-service diagnostics --project packages/jsx-md/tsconfig.json && bunx effect-language-service diagnostics --project packages/jsx-md-beautiful-mermaid/tsconfig.json",
     "effect:ls:check": "bunx effect-language-service check",
     "effect:ls:patch": "bunx effect-language-service patch",
     "lint": "bunx biome check",
     "test": "bun test",
-    "typecheck": "bunx tsc -p packages/theseus-core/tsconfig.json --noEmit && bunx tsc -p packages/theseus-tools/tsconfig.json --noEmit && bunx tsc -p packages/theseus-server/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md-beautiful-mermaid/tsconfig.json --noEmit"
+    "typecheck": "bunx tsc -p packages/theseus-core/tsconfig.json --noEmit && bunx tsc -p packages/theseus-tools/tsconfig.json --noEmit && bunx tsc -p packages/theseus-runtime/tsconfig.json --noEmit && bunx tsc -p packages/theseus-server/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md/tsconfig.json --noEmit && bunx tsc -p packages/jsx-md-beautiful-mermaid/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.8",

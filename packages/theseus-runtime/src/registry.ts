@@ -1,5 +1,5 @@
 /**
- * DispatchRegistry — tracks active dispatches in the server process.
+ * DispatchRegistry — tracks active dispatches in the runtime process.
  *
  * In-memory (Ref-backed Map). Simplified from the daemon version:
  * no dependency on Daemon protocol types — uses plain status entries.

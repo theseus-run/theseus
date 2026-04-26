@@ -1,9 +1,9 @@
 /**
- * TheseusRuntime — live work boundary for the server process.
+ * TheseusRuntime — live work boundary for the process.
  *
- * HTTP/RPC handlers adapt wire calls into runtime commands. The runtime owns
- * live work orchestration; submodules own dispatch running, controls, queries,
- * and convenience client helpers.
+ * Transport adapters submit commands, controls, and queries. The runtime owns
+ * live work orchestration; submodules own dispatch running, active registry
+ * updates, persistence-backed reads, and convenience client helpers.
  */
 
 import * as Dispatch from "@theseus.run/core/Dispatch";
@@ -28,6 +28,11 @@ import { RuntimeDispatchFailed, RuntimeNotFound, RuntimeToolNotFound } from "./r
 import { TheseusDb } from "./store/sqlite.ts";
 import { ToolCatalog } from "./tool-catalog.ts";
 
+export type { StatusEntry } from "./registry.ts";
+export {
+  DispatchRegistry,
+  DispatchRegistryLive,
+} from "./registry.ts";
 export type {
   RuntimeCommand,
   RuntimeControl,
@@ -39,6 +44,19 @@ export type {
   StartDispatchInput,
   TheseusRuntimeService,
 } from "./runtime/types.ts";
+export {
+  SqliteCurrentCapsuleLive,
+  SqliteDispatchStore,
+  TheseusDb,
+  TheseusDbLive,
+} from "./store/index.ts";
+export {
+  makeToolCatalog,
+  type SerializedDispatchSpec,
+  ToolCatalog,
+  ToolCatalogMissing,
+  type ToolCatalogService,
+} from "./tool-catalog.ts";
 export {
   RuntimeCommands,
   RuntimeControls,

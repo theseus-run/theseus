@@ -41,6 +41,8 @@ Rules:
 - Make illegal states unrepresentable with discriminated unions instead of correlated optional fields or boolean flags.
 - Use branded/schema-backed IDs for values that cross package, persistence, tool, or RPC boundaries.
 - Prefer constructors/builders for exported protocol variants so defaults and `_tag` literals are centralized.
+- Avoid booleans by default for domain state. Use booleans only for truly binary values that are unlikely to grow into a state space.
+- Prefer discriminated unions for simple states and an explicit state-machine module/service for complex state transitions.
 - Prefer explicit required inputs over optional-parameter soup. If a value has a meaningful default, normalize it once at the boundary into a required field.
 - Use explicit domain sentinels or variants when absence has semantics; do not rely on omission to mean a real state.
 - Use exhaustive matching for closed internal protocols. Unknown internal variants are defects, not fallback cases.
@@ -80,8 +82,10 @@ Rules:
 - Do not add default exports to packages that use named export style.
 - Do not hide package-boundary type errors by changing root compiler options.
 - Do not model mutually exclusive states as one object with many optional fields.
+- Do not model lifecycle or protocol state as a matrix of booleans.
 - Do not use broad index signatures when explicit keys or a typed map would preserve more information.
 - Do not build object literals with conditional spread fragments like `...(x !== undefined ? { x } : {})`. Normalize options first and pass an explicit required object.
 - Do not scatter nullish defaults through function bodies. Defaults should live in constructors, boundary normalizers, config layers, or clearly named constants.
 - Do not let defaults creep inward through multiple call layers. Once normalized, pass the explicit normalized value.
 - Do not add default branches that hide unsupported internal message types, protocol variants, or state transitions.
+- Do not use `Partial<T>` for domain update APIs. Prefer named commands such as `recordUsage`, `markCompleted`, or `setIteration`. `Partial<T>` is acceptable for tests, low-level persistence plumbing, or external patch surfaces after normalization.

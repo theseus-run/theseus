@@ -1,22 +1,20 @@
 {
-  "name": "@theseus.run/server",
+  "name": "@theseus.run/runtime",
   "version": "0.0.1",
-  "description": "Theseus server — Effect RPC + HttpServer + SQLite persistence",
+  "description": "Theseus runtime — live dispatch orchestration, active registry, capability hydration, and persistence",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./json": "./src/json.ts",
+    "./store": "./src/store/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-beta.50",
     "@theseus.run/core": "workspace:*",
-    "@theseus.run/runtime": "workspace:*",
-    "@theseus.run/tools": "workspace:*",
-    "effect": "4.0.0-beta.50",
-    "zod": "4.3.6"
+    "effect": "4.0.0-beta.50"
   },
   "devDependencies": {
     "@types/bun": "^1.3.10",

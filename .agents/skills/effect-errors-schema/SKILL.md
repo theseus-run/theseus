@@ -43,7 +43,7 @@ Inside the domain, keep typed values and typed failures. Do not repeatedly decod
 
 ## Schema
 
-Use Schema at external boundaries: tool inputs/outputs, RPC, persistence serialization, and config.
+Use Schema at external boundaries: tool inputs/outputs, RPC, persistence serialization, provider payloads, and config.
 
 ```typescript
 import { Schema } from "effect"
@@ -64,6 +64,7 @@ Rules:
 - Use branded schemas for IDs that cross service/package boundaries.
 - Decode unknown inputs with `Schema.decodeUnknownEffect(schema)(raw)` when failures should stay typed.
 - Keep schemas near the boundary they protect unless they are shared API contracts.
+- Put JSON parse/stringify for protocol, provider, RPC, and persistence data behind schema-backed boundary helpers when practical. Raw JSON is acceptable for tests, debug output, or truly opaque passthrough data.
 - Prefer narrow schemas for commands and events. Avoid `Schema.Unknown` except for explicitly open extension points.
 
 ## Checks

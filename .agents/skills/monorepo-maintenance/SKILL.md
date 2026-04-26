@@ -32,6 +32,7 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Split files when they mix public types, service tags, service implementations, persistence, command routing, serialization, fixtures, and test helpers.
 - Keep orchestration files shallow: wire named pieces together, but move behavior into focused modules.
 - Avoid "god files" that accumulate every variant of a primitive. A large file is a smell when unrelated sections can change independently.
+- Avoid `utils.ts`, `helpers.ts`, `common.ts`, giant `types.ts`, and miscellaneous service bags. Prefer small named modules/services with a domain responsibility and direct tests.
 - Do not split only by syntax category if the result separates code that must always be read together.
 - Keep test fixtures and mocks out of production modules unless they are explicitly exported test utilities.
 
@@ -58,6 +59,8 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 - Avoid defaults creep: after a boundary normalizes input, downstream code should receive explicit values, not repeat fallbacks.
 - Prefer explicit sentinel/domain values over absence when absence changes semantics, such as a root dispatch id instead of omitted `parentDispatchId`.
 - Public/internal boundaries should make trust explicit: external inputs are decoded and normalized; internal protocol violations fail loudly instead of being recovered with fallback behavior.
+- Avoid `Partial<T>` patch APIs for domain records. Prefer named domain commands with explicit invariants.
+- Internal event/action names should be literal unions, schemas, or constructors. Plain `string` is for externally extensible names or raw undecoded input.
 - Avoid overloads unless they materially improve call-site clarity and have a single coherent implementation model.
 - Prefer stable constructors for protocol variants and errors over repeated object literals at call sites.
 - Keep generic names descriptive in public examples and docs: `Input`, `Output`, `Error`, `Requirements` over single-letter aliases.

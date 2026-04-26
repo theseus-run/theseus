@@ -1,3 +1,4 @@
+import { Match } from "effect";
 import type { Presentation } from "../tool/index.ts";
 import { presentationToText, tryParseArgs } from "./step.ts";
 import type {
@@ -7,6 +8,23 @@ import type {
   ToolCallError,
   ToolCallResult,
 } from "./types.ts";
+
+export const isTerminal = (event: DispatchEvent): boolean =>
+  Match.value(event).pipe(
+    Match.tags({
+      Calling: () => false,
+      Text: () => false,
+      Thinking: () => false,
+      ToolCalling: () => false,
+      ToolResult: () => false,
+      ToolError: () => false,
+      SatelliteAction: () => false,
+      Injected: () => false,
+      Done: () => true,
+      Failed: () => true,
+    }),
+    Match.exhaustive,
+  );
 
 export const calling = (name: string, iteration: number): DispatchEvent => ({
   _tag: "Calling",

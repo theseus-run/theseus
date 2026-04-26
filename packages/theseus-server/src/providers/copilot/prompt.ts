@@ -1,7 +1,7 @@
+import { encodeJsonEffect } from "@theseus.run/runtime/json";
 import { Effect, Match } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
-import { encodeJsonEffect } from "../../json.ts";
 import { CopilotEncodeError } from "./errors.ts";
 
 const textFromParts = (parts: ReadonlyArray<Prompt.Part>): string =>

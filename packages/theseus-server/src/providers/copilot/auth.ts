@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { encodeJson } from "@theseus.run/runtime/json";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { RuntimeConfig } from "../../config.ts";
-import { encodeJson } from "../../json.ts";
 import { CopilotAuthError, CopilotParseError } from "./errors.ts";
 import type { TokenCache } from "./wire.ts";
 
