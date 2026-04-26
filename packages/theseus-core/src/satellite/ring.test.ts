@@ -80,4 +80,33 @@ describe("SatelliteRing", () => {
     expect(error._tag).toBe("SatelliteAbort");
     expect(error.satellite).toBe("scanner");
   });
+
+  test("aborts when a loosely typed satellite returns a decision for the wrong phase", async () => {
+    const invalid: Satellite<void> = {
+      name: "invalid",
+      open: () => Effect.void,
+      beforeCall: () =>
+        Effect.succeed({
+          decision: { _tag: "RecoverToolError", result: {} },
+          state: undefined,
+        } as never),
+    };
+
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const ring = yield* makeSatelliteRing([invalid]);
+        const scope = yield* ring.openScope({ dispatchId: "a", name: "runner", task: "one" });
+        return yield* Effect.flip(
+          scope.beforeCall(
+            { messages: [] },
+            { dispatchId: "a", name: "runner", task: "one", iteration: 0 },
+          ),
+        );
+      }),
+    );
+
+    expect(error._tag).toBe("SatelliteAbort");
+    expect(error.satellite).toBe("invalid");
+    expect(error.reason).toContain("Invalid beforeCall decision");
+  });
 });

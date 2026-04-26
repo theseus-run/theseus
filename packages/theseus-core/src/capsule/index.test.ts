@@ -164,25 +164,18 @@ describe("Capsule tools", () => {
     expect(output).toContain("bound at execution");
   });
 
-  test("read capsule clamps tail to the documented maximum", async () => {
-    const output = await run(
+  test("read capsule rejects tail outside documented bounds", async () => {
+    const error = await run(
       Effect.gen(function* () {
         const capsule = yield* CurrentCapsule;
         for (let i = 0; i < 60; i++) {
           yield* capsule.log({ type: "mission.note", by: "test", data: { summary: `event-${i}` } });
         }
 
-        const run = yield* Tool.callTool(readCapsuleTool, { tail: 100 });
-        const text = run.presentation.content
-          .map((content) => (content._tag === "text" ? content.text : ""))
-          .join("");
-        return text;
+        return yield* Effect.flip(Tool.callTool(readCapsuleTool, { tail: 100 }));
       }),
     );
 
-    expect(output.split("\n")).toHaveLength(50);
-    expect(output).toContain("event-10");
-    expect(output).toContain("event-59");
-    expect(output).not.toContain("event-9");
+    expect(error._tag).toBe("ToolInputError");
   });
 });

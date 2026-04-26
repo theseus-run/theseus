@@ -16,7 +16,11 @@ import { defineTool, type Tool, textPresentation } from "../tool/index.ts";
 import { GruntPrompt } from "./briefing.tsx";
 import { type DispatchGruntInput, DispatchGruntInputSchema } from "./order.ts";
 import { type Report, ReportSchema, report } from "./report.ts";
-import { type DispatchGruntResult, DispatchGruntResultSchema } from "./result.ts";
+import {
+  DispatchGruntResult,
+  DispatchGruntResultSchema,
+  type DispatchGruntResult as DispatchGruntResultType,
+} from "./result.ts";
 
 export class DispatchGruntFailed extends Schema.TaggedErrorClass<DispatchGruntFailed>()(
   "DispatchGruntFailed",
@@ -57,7 +61,7 @@ const captureReport = (
       })
     : Effect.void;
 
-const presentDispatchGruntResult = (result: DispatchGruntResult): string => {
+const presentDispatchGruntResult = (result: DispatchGruntResultType): string => {
   if (result._tag === "Reported") {
     const { report: packet } = result;
     const evidence =
@@ -72,7 +76,7 @@ const presentDispatchGruntResult = (result: DispatchGruntResult): string => {
 
 export const dispatchGruntTool: Tool<
   DispatchGruntInput,
-  DispatchGruntResult,
+  DispatchGruntResultType,
   DispatchGruntFailed,
   BlueprintRegistry | LanguageModel.LanguageModel | SatelliteRing | DispatchStore
 > = defineTool({
@@ -115,17 +119,15 @@ export const dispatchGruntTool: Tool<
 
       if (Exit.isSuccess(exit)) {
         if (captured !== undefined) {
-          return {
-            _tag: "Reported" as const,
+          return DispatchGruntResult.reported({
             target,
             dispatchId: exit.value.dispatchId,
             report: captured,
             usage: exit.value.usage,
-          };
+          });
         }
 
-        return {
-          _tag: "Unstructured" as const,
+        return DispatchGruntResult.unstructured({
           target,
           dispatchId: exit.value.dispatchId,
           reason: `No valid ${report.name} packet was captured before the grunt stopped.`,
@@ -134,7 +136,7 @@ export const dispatchGruntTool: Tool<
             content: exit.value.content,
           },
           usage: exit.value.usage,
-        };
+        });
       }
 
       return yield* Effect.fail(

@@ -55,7 +55,7 @@ export const logCapsuleTool: Tool<LogInputType, string, never, CurrentCapsule | 
 
 const ReadCapsuleInput = Schema.Struct({
   tail: Schema.optional(
-    Schema.Int.annotate({
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).annotate({
       description: "Number of most recent events to return (1-50, default: 10)",
     }),
   ),
@@ -63,10 +63,7 @@ const ReadCapsuleInput = Schema.Struct({
 
 type ReadCapsuleInputType = Schema.Schema.Type<typeof ReadCapsuleInput>;
 
-const clampTail = (tail: number | undefined): number => {
-  if (tail === undefined) return 10;
-  return Math.min(50, Math.max(1, tail));
-};
+const tailOrDefault = (tail: number | undefined): number => tail ?? 10;
 
 export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, CurrentCapsule> =
   defineTool({
@@ -81,7 +78,7 @@ export const readCapsuleTool: Tool<ReadCapsuleInputType, string, never, CurrentC
       Effect.gen(function* () {
         const capsule = yield* CurrentCapsule;
         const events = yield* capsule.read();
-        const recent = events.slice(-clampTail(tail));
+        const recent = events.slice(-tailOrDefault(tail));
         return (
           recent
             .map(

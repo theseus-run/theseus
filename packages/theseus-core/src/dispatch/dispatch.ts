@@ -11,14 +11,21 @@
  * Uses LanguageModel from effect/unstable/ai via generateText.
  */
 
-import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Match, Queue, Ref, Stream } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
-import type { Presentation } from "../tool/index.ts";
-import { presentationToText, runToolCall, step, tryParseArgs } from "./step.ts";
+import { drainInjections } from "./injections.ts";
+import {
+  assistantToolMessage,
+  defaultMessages,
+  finalAssistantMessages,
+  toolResultMessages,
+} from "./messages.ts";
+import { step } from "./step.ts";
 import { CurrentDispatch, DispatchStore } from "./store.ts";
+import { runDispatchToolCalls } from "./tool-loop.ts";
 import type {
   DispatchError,
   DispatchEvent,
@@ -27,23 +34,9 @@ import type {
   DispatchOutput,
   DispatchSpec,
   Injection,
-  ToolCallError,
-  ToolCallResult,
   Usage,
 } from "./types.ts";
-import { DispatchCycleExceeded, DispatchInterrupted, DispatchToolFailed } from "./types.ts";
-
-const presentationResult = (
-  tc: { id: string; name: string },
-  args: unknown,
-  presentation: Presentation,
-): ToolCallResult => ({
-  callId: tc.id,
-  name: tc.name,
-  args,
-  presentation,
-  textContent: presentationToText(presentation),
-});
+import { DispatchCycleExceeded, DispatchInterrupted } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // addUsage — accumulate token counts
@@ -53,40 +46,6 @@ const addUsage = (a: Usage, b: Usage): Usage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
 });
-
-// ---------------------------------------------------------------------------
-// drainInjections — apply all pending injections at iteration boundary.
-// Returns modified messages, or null if Interrupt was seen.
-// ---------------------------------------------------------------------------
-
-const drainInjections = (
-  injectionQueue: Queue.Queue<Injection>,
-  messages: ReadonlyArray<Prompt.MessageEncoded>,
-  onInjection: (injection: Injection) => Effect.Effect<void>,
-): Effect.Effect<ReadonlyArray<Prompt.MessageEncoded> | undefined> =>
-  Effect.gen(function* () {
-    let current = messages;
-    let opt = yield* Queue.poll(injectionQueue);
-    while (Option.isSome(opt)) {
-      yield* onInjection(opt.value);
-      const prev = current;
-      const next = Match.value(opt.value).pipe(
-        Match.tag("Interrupt", () => undefined),
-        Match.tag("AppendMessages", (i) => [...prev, ...i.messages]),
-        Match.tag("ReplaceMessages", (i) => i.messages),
-        Match.tag("Redirect", (i) => [
-          prev[0] ?? { role: "system" as const, content: "" },
-          { role: "user" as const, content: i.task },
-        ]),
-        Match.tag("CollapseContext", () => prev),
-        Match.exhaustive,
-      );
-      if (next === undefined) return undefined;
-      current = next;
-      opt = yield* Queue.poll(injectionQueue);
-    }
-    return current;
-  });
 
 // ---------------------------------------------------------------------------
 // dispatch
@@ -133,12 +92,6 @@ export const dispatch = <R = never>(
       Queue.offer(eventQueue, event).pipe(
         Effect.tap(() => store.record(dispatchId, event)),
         Effect.asVoid,
-      );
-
-    const emitAll = <T>(items: ReadonlyArray<T>, toEvent: (item: T) => DispatchEvent) =>
-      Effect.all(
-        items.map((i) => emit(toEvent(i))),
-        { concurrency: "unbounded" },
       );
 
     // -----------------------------------------------------------------------
@@ -208,8 +161,11 @@ export const dispatch = <R = never>(
             satCtx,
             onSatAction,
           );
-          const checkpointMessages =
-            iterationStart._tag === "TransformMessages" ? iterationStart.messages : next;
+          const checkpointMessages = Match.value(iterationStart).pipe(
+            Match.tag("Pass", () => next),
+            Match.tag("TransformMessages", (decision) => decision.messages),
+            Match.exhaustive,
+          );
 
           // --- Phase: BeforeCall ---
           const beforeCallAction = yield* satelliteScope.beforeCall(
@@ -217,10 +173,11 @@ export const dispatch = <R = never>(
             satCtx,
             onSatAction,
           );
-          const callMessages =
-            beforeCallAction._tag === "TransformMessages"
-              ? beforeCallAction.messages
-              : checkpointMessages;
+          const callMessages = Match.value(beforeCallAction).pipe(
+            Match.tag("Pass", () => checkpointMessages),
+            Match.tag("TransformMessages", (decision) => decision.messages),
+            Match.exhaustive,
+          );
 
           yield* emit({ _tag: "Calling", name: spec.name, iteration: iterations });
 
@@ -255,14 +212,14 @@ export const dispatch = <R = never>(
             satCtx,
             onSatAction,
           );
-          const result =
-            afterCallAction._tag === "TransformStepResult" ? afterCallAction.stepResult : rawResult;
+          const result = Match.value(afterCallAction).pipe(
+            Match.tag("Pass", () => rawResult),
+            Match.tag("TransformStepResult", (decision) => decision.stepResult),
+            Match.exhaustive,
+          );
 
           if (result.toolCalls.length === 0) {
-            const finalMessages: ReadonlyArray<Prompt.MessageEncoded> = [
-              ...callMessages,
-              { role: "assistant" as const, content: result.content },
-            ];
+            const finalMessages = finalAssistantMessages(callMessages, result.content);
             yield* Ref.set(messagesRef, finalMessages);
             return {
               dispatchId,
@@ -273,118 +230,21 @@ export const dispatch = <R = never>(
             };
           }
 
-          // Emit ALL ToolCalling events BEFORE any tool runs (interrupt window).
-          yield* emitAll(result.toolCalls, (tc) => ({
-            _tag: "ToolCalling" as const,
+          const calls = yield* runDispatchToolCalls<R>({
+            dispatchId,
             name: spec.name,
             iteration: iterations,
-            tool: tc.name,
-            args: tryParseArgs(tc),
-          }));
-
-          yield* satelliteScope.checkpoint("before-tools", satCtx, onSatAction);
-
-          // Sequential by design: satellite state, tool effects, and events follow model order.
-          const calls: ToolCallResult[] = [];
-          for (const tc of result.toolCalls) {
-            const beforeAction = yield* satelliteScope.beforeTool(
-              { tool: tc },
-              satCtx,
-              onSatAction,
-            );
-
-            const callResult: ToolCallResult =
-              beforeAction._tag === "BlockTool"
-                ? presentationResult(tc, tryParseArgs(tc), beforeAction.presentation)
-                : yield* runToolCall<R>(
-                    spec.tools,
-                    beforeAction._tag === "ModifyArgs"
-                      ? { ...tc, arguments: JSON.stringify(beforeAction.args) }
-                      : tc,
-                  ).pipe(
-                    Effect.catch((err: ToolCallError) =>
-                      emit({
-                        _tag: "ToolError",
-                        name: spec.name,
-                        iteration: iterations,
-                        tool: tc.name,
-                        error: err,
-                      }).pipe(
-                        Effect.flatMap(() =>
-                          satelliteScope
-                            .toolError({ tool: tc, error: err }, satCtx, onSatAction)
-                            .pipe(
-                              Effect.flatMap((action) =>
-                                action._tag === "RecoverToolError"
-                                  ? Effect.succeed(action.result)
-                                  : Effect.fail(
-                                      new DispatchToolFailed({
-                                        dispatchId,
-                                        name: spec.name,
-                                        tool: tc.name,
-                                        error: err,
-                                      }),
-                                    ),
-                              ),
-                            ),
-                        ),
-                      ),
-                    ),
-                  );
-
-            const afterAction = yield* satelliteScope.afterTool(
-              { tool: tc, result: callResult },
-              satCtx,
-              onSatAction,
-            );
-
-            const finalResult =
-              afterAction._tag === "ReplaceToolResult"
-                ? presentationResult(tc, callResult.args, afterAction.presentation)
-                : callResult;
-
-            calls.push(finalResult);
-          }
-
-          yield* satelliteScope.checkpoint("after-tools", satCtx, onSatAction);
-
-          yield* emitAll(calls, (c) => ({
-            _tag: "ToolResult" as const,
-            name: spec.name,
-            iteration: iterations,
-            tool: c.name,
-            content: c.textContent,
-            isError: c.presentation.isError ?? false,
-          }));
+            tools: spec.tools,
+            toolCalls: result.toolCalls,
+            satelliteScope,
+            satelliteContext: satCtx,
+            onSatelliteAction: onSatAction,
+            emit,
+          });
 
           // Build messages for next iteration (native Prompt.MessageEncoded format)
-          const toolMessages: ReadonlyArray<Prompt.MessageEncoded> = calls.map((r) => ({
-            role: "tool" as const,
-            content: [
-              {
-                type: "tool-result" as const,
-                id: r.callId,
-                name: r.name,
-                isFailure: r.presentation.isError ?? false,
-                result: r.textContent,
-              },
-            ],
-          }));
-
-          const assistantMsg: Prompt.MessageEncoded = {
-            role: "assistant" as const,
-            content: [
-              ...(result.content
-                ? ([{ type: "text" as const, text: result.content }] as const)
-                : []),
-              ...result.toolCalls.map((tc) => ({
-                type: "tool-call" as const,
-                id: tc.id,
-                name: tc.name,
-                params: tryParseArgs(tc),
-              })),
-            ],
-          };
+          const toolMessages = toolResultMessages(calls);
+          const assistantMsg = assistantToolMessage(result.content, result.toolCalls);
 
           return yield* loop(
             [...callMessages, assistantMsg, ...toolMessages],
@@ -394,10 +254,8 @@ export const dispatch = <R = never>(
         }),
       );
 
-    const initialMessages: ReadonlyArray<Prompt.MessageEncoded> = options?.messages ?? [
-      { role: "system", content: spec.systemPrompt },
-      { role: "user", content: task },
-    ];
+    const initialMessages: ReadonlyArray<Prompt.MessageEncoded> =
+      options?.messages ?? defaultMessages(spec.systemPrompt, task);
     const initialUsage = options?.usage ?? zeroUsage;
     const initialIteration = options?.iteration ?? 0;
 

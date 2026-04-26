@@ -55,6 +55,34 @@ export type ToolOutcome<I, O, F> =
       readonly presentation: Presentation;
     };
 
+export const ToolValue = {
+  success: <O>(output: O): ToolValue<O, never> => ({
+    _tag: "Success",
+    output,
+  }),
+
+  failure: <F>(failure: F): ToolValue<never, F> => ({
+    _tag: "Failure",
+    failure,
+  }),
+} as const;
+
+export const ToolOutcome = {
+  success: <I, O>(input: I, output: O, presentation: Presentation): ToolOutcome<I, O, never> => ({
+    _tag: "Success",
+    input,
+    output,
+    presentation,
+  }),
+
+  failure: <I, F>(input: I, failure: F, presentation: Presentation): ToolOutcome<I, never, F> => ({
+    _tag: "Failure",
+    input,
+    failure,
+    presentation,
+  }),
+} as const;
+
 // ---------------------------------------------------------------------------
 // Default presenters
 // ---------------------------------------------------------------------------
@@ -120,26 +148,20 @@ export const callTool = <I, O, F, R>(
           onSuccess: (output) =>
             validateOutput(output).pipe(
               Effect.flatMap((validated) =>
-                present({ _tag: "Success", output: validated }).pipe(
-                  Effect.map((presentation) => ({
-                    _tag: "Success" as const,
-                    input,
-                    output: validated,
-                    presentation,
-                  })),
+                present(ToolValue.success(validated)).pipe(
+                  Effect.map((presentation) =>
+                    ToolOutcome.success(input, validated, presentation),
+                  ),
                 ),
               ),
             ),
           onFailure: (failure) =>
             validateFailure(failure).pipe(
               Effect.flatMap((validated) =>
-                present({ _tag: "Failure", failure: validated }).pipe(
-                  Effect.map((presentation) => ({
-                    _tag: "Failure" as const,
-                    input,
-                    failure: validated,
-                    presentation,
-                  })),
+                present(ToolValue.failure(validated)).pipe(
+                  Effect.map((presentation) =>
+                    ToolOutcome.failure(input, validated, presentation),
+                  ),
                 ),
               ),
             ),

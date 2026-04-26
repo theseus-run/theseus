@@ -24,7 +24,7 @@ Good Effect code keeps these facts in the type signature until a deliberate boun
 Effect APIs move. Before using an unfamiliar API:
 
 1. Search current repo usage.
-2. Search installed Effect v4 types under `node_modules/.bun/effect@4.0.0-beta.50/node_modules/effect/dist/`.
+2. Resolve the installed `effect` package from the lockfile or package manager layout, then inspect its local type declarations.
 3. Prefer patterns already used in `packages/theseus-core` and `packages/theseus-server`.
 4. Treat web examples as v3 unless verified against local v4 types.
 
@@ -32,7 +32,8 @@ Useful searches:
 
 ```bash
 rg "Context.Service|Layer.mergeAll|Layer.provideMerge|Effect.catchTag|Effect.forkDetach" packages
-rg "export declare const catch|forkDetach|TaggedErrorClass" node_modules/.bun/effect@4.0.0-beta.50/node_modules/effect/dist
+find node_modules -path '*effect*/dist/Effect.d.ts' -o -path '*effect*/dist/Schema.d.ts'
+rg "export declare const catch|forkDetach|TaggedErrorClass" node_modules
 ```
 
 The repo already has `@effect/language-service` configured in root `tsconfig.json`. Trust its diagnostics when Effect types look strange.
@@ -367,4 +368,4 @@ Before finalizing Effect changes:
 - Check whether the code is at a boundary or inside the domain; choose schemas/errors accordingly.
 - Run the narrow package test when behavior changed.
 - Run `bun run typecheck` after service, layer, schema, or error-channel changes.
-- If an API was inferred from external material, verify it in local Effect v4 `.d.ts` files before committing the pattern.
+- If an API was inferred from external material, verify it in the locally installed Effect type declarations before committing the pattern.

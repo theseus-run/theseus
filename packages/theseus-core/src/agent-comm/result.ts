@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { UsageSchema } from "../dispatch/types.ts";
-import { ReportSchema } from "./report.ts";
+import { type Usage, UsageSchema } from "../dispatch/types.ts";
+import { type Report, ReportSchema } from "./report.ts";
 
 export const SalvageSchema = Schema.Struct({
   summary: Schema.String,
@@ -28,3 +28,26 @@ export const DispatchGruntResultSchema = Schema.Union([
 ]);
 
 export type DispatchGruntResult = Schema.Schema.Type<typeof DispatchGruntResultSchema>;
+
+export const DispatchGruntResult = {
+  reported: (input: {
+    readonly target: string;
+    readonly dispatchId: string;
+    readonly report: Report;
+    readonly usage: Usage;
+  }): DispatchGruntResult => ({
+    _tag: "Reported",
+    ...input,
+  }),
+
+  unstructured: (input: {
+    readonly target: string;
+    readonly dispatchId: string;
+    readonly reason: string;
+    readonly salvage: Salvage;
+    readonly usage: Usage;
+  }): DispatchGruntResult => ({
+    _tag: "Unstructured",
+    ...input,
+  }),
+} as const;

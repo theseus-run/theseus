@@ -91,6 +91,7 @@ export const DispatchEventSchema = Schema.Union([
     iteration: Schema.Number,
     tool: Schema.String,
     content: Schema.String,
+    isError: Schema.Boolean,
   }),
   Schema.Struct({
     _tag: Schema.Literal("ToolError"),

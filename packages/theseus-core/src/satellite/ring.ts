@@ -27,7 +27,7 @@ import type {
   ToolError,
   ToolErrorDecision,
 } from "./types.ts";
-import { Pass } from "./types.ts";
+import { Pass, SatelliteAbort as SatelliteAbortError } from "./types.ts";
 
 export type SatelliteActionCallback = (
   satellite: string,
@@ -47,6 +47,78 @@ const isTerminalDecision = (decision: SatelliteDecision): boolean =>
   decision._tag === "BlockTool" || decision._tag === "RecoverToolError";
 
 const phaseName = (phase: string) => phase;
+
+const isCheckpointDecision = (decision: SatelliteDecision): decision is CheckpointDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformStepResult", () => false),
+    Match.tag("ModifyArgs", () => false),
+    Match.tag("BlockTool", () => false),
+    Match.tag("ReplaceToolResult", () => false),
+    Match.tag("RecoverToolError", () => false),
+    Match.exhaustive,
+  );
+
+const isBeforeCallDecision = (decision: SatelliteDecision): decision is BeforeCallDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => true),
+    Match.tag("TransformStepResult", () => false),
+    Match.tag("ModifyArgs", () => false),
+    Match.tag("BlockTool", () => false),
+    Match.tag("ReplaceToolResult", () => false),
+    Match.tag("RecoverToolError", () => false),
+    Match.exhaustive,
+  );
+
+const isAfterCallDecision = (decision: SatelliteDecision): decision is AfterCallDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformStepResult", () => true),
+    Match.tag("ModifyArgs", () => false),
+    Match.tag("BlockTool", () => false),
+    Match.tag("ReplaceToolResult", () => false),
+    Match.tag("RecoverToolError", () => false),
+    Match.exhaustive,
+  );
+
+const isBeforeToolDecision = (decision: SatelliteDecision): decision is BeforeToolDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformStepResult", () => false),
+    Match.tag("ModifyArgs", () => true),
+    Match.tag("BlockTool", () => true),
+    Match.tag("ReplaceToolResult", () => false),
+    Match.tag("RecoverToolError", () => false),
+    Match.exhaustive,
+  );
+
+const isAfterToolDecision = (decision: SatelliteDecision): decision is AfterToolDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformStepResult", () => false),
+    Match.tag("ModifyArgs", () => false),
+    Match.tag("BlockTool", () => false),
+    Match.tag("ReplaceToolResult", () => true),
+    Match.tag("RecoverToolError", () => false),
+    Match.exhaustive,
+  );
+
+const isToolErrorDecision = (decision: SatelliteDecision): decision is ToolErrorDecision =>
+  Match.value(decision).pipe(
+    Match.tag("Pass", () => true),
+    Match.tag("TransformMessages", () => false),
+    Match.tag("TransformStepResult", () => false),
+    Match.tag("ModifyArgs", () => false),
+    Match.tag("BlockTool", () => false),
+    Match.tag("ReplaceToolResult", () => false),
+    Match.tag("RecoverToolError", () => true),
+    Match.exhaustive,
+  );
 
 type StateCell = {
   readonly name: string;
@@ -84,12 +156,13 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
         unknown
       >)
     | undefined,
+  isDecision: (decision: SatelliteDecision) => decision is Decision,
   applyDecision: (phase: Phase, decision: Decision) => Phase,
   onAction?: SatelliteActionCallback,
 ): Effect.Effect<Decision, SatelliteAbort, unknown> =>
   Effect.gen(function* () {
     let currentPhase = phase;
-    let lastDecision: SatelliteDecision = Pass;
+    let lastDecision: Decision = Pass as Decision;
 
     for (const cell of cells) {
       const hook = getHook(cell.satellite);
@@ -99,6 +172,15 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
       const { decision, state: nextState } = yield* hook(currentPhase, ctx, state);
       yield* Ref.set(cell.ref, nextState);
 
+      if (!isDecision(decision)) {
+        return yield* Effect.fail(
+          new SatelliteAbortError({
+            satellite: cell.name,
+            reason: `Invalid ${phaseLabel} decision: ${decision._tag}`,
+          }),
+        );
+      }
+
       if (decision._tag === "Pass") continue;
       if (onAction) yield* onAction(cell.name, phaseName(phaseLabel), decision._tag);
 
@@ -107,7 +189,7 @@ const runHook = <Phase, Decision extends SatelliteDecision>(
       currentPhase = applyDecision(currentPhase, decision);
     }
 
-    return lastDecision as Decision;
+    return lastDecision;
   });
 
 const applyCheckpointDecision = <Phase extends string>(
@@ -169,6 +251,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               `checkpoint:${checkpoint}`,
               ctx,
               (satellite) => satellite.checkpoint,
+              isCheckpointDecision,
               applyCheckpointDecision,
               onAction,
             ) as Effect.Effect<
@@ -184,6 +267,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               "beforeCall",
               ctx,
               (satellite) => satellite.beforeCall,
+              isBeforeCallDecision,
               applyBeforeCallDecision,
               onAction,
             ) as Effect.Effect<
@@ -199,6 +283,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               "afterCall",
               ctx,
               (satellite) => satellite.afterCall,
+              isAfterCallDecision,
               applyAfterCallDecision,
               onAction,
             ) as Effect.Effect<
@@ -214,6 +299,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               "beforeTool",
               ctx,
               (satellite) => satellite.beforeTool,
+              isBeforeToolDecision,
               applyBeforeToolDecision,
               onAction,
             ) as Effect.Effect<
@@ -229,6 +315,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               "afterTool",
               ctx,
               (satellite) => satellite.afterTool,
+              isAfterToolDecision,
               applyAfterToolDecision,
               onAction,
             ) as Effect.Effect<
@@ -244,6 +331,7 @@ export const makeSatelliteRing = <const Satellites extends ReadonlyArray<Satelli
               "toolError",
               ctx,
               (satellite) => satellite.toolError,
+              isToolErrorDecision,
               applyToolErrorDecision,
               onAction,
             ) as Effect.Effect<
