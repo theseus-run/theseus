@@ -6,7 +6,7 @@ This `docs/` directory is the Theseus Obsidian vault.
 
 - `01-direction/` — product intent, goals, and north star
 - `02-primitives/` — public primitive design and tool-system notes
-- `03-runtime/` — runtime architecture, mission model, and crew
+- `03-runtime/` — active runtime architecture, mission model, and crew scaffolding
 - `04-clients/` — interface and client plans
 - `90-archive/` — superseded designs kept for archaeology
 - `99-design-notes/` — dated design notes and ADR-like decisions

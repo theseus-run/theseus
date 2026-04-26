@@ -1,12 +1,15 @@
 # Crew
 
-Canonical reference for the Theseus agent roster, dispatch topology, agent traits, and the mission workflow. Sourced from `.theseus/` in the cockpit workspace (v0 OpenCode implementation). Updated to reflect the evolved Mission/Session model — see [[mission-system]] for the full mission system design.
+Reference for Theseus crew scaffolding: possible agent roster, dispatch topology,
+agent traits, and mission workflow. This is not active runtime architecture.
+Runtime doctrine lives in [[architecture]]. The mission/session model lives in
+[[mission-system]].
 
 ---
 
 ## Tiers
 
-Three tiers, matching the runtime architecture in [[architecture]]:
+Three scaffolding tiers for a future crew harness:
 
 | Tier | Agents | Lifetime |
 |---|---|---|

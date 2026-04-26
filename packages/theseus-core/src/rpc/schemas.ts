@@ -132,6 +132,40 @@ export const DispatchSummarySchema = Schema.Struct({
 });
 
 // ---------------------------------------------------------------------------
+// Runtime mission / dispatch sessions
+// ---------------------------------------------------------------------------
+
+export const MissionSessionSchema = Schema.Struct({
+  missionId: Schema.String,
+  capsuleId: Schema.String,
+  goal: Schema.String,
+  criteria: Schema.Array(Schema.String),
+  state: Schema.Literals(["pending", "running", "done", "failed"]),
+});
+
+export const DispatchSessionSchema = Schema.Struct({
+  dispatchId: Schema.String,
+  missionId: Schema.String,
+  capsuleId: Schema.String,
+  name: Schema.String,
+  iteration: Schema.Number,
+  state: Schema.Literals(["running", "done", "failed"]),
+  usage: UsageSchema,
+});
+
+export const RuntimeDispatchEventSchema = Schema.Union([
+  Schema.TaggedStruct("DispatchSessionStarted", {
+    session: DispatchSessionSchema,
+  }),
+  Schema.TaggedStruct("DispatchEvent", {
+    dispatchId: Schema.String,
+    missionId: Schema.String,
+    capsuleId: Schema.String,
+    event: DispatchEventSchema,
+  }),
+]);
+
+// ---------------------------------------------------------------------------
 // CapsuleEvent (serialized)
 // ---------------------------------------------------------------------------
 

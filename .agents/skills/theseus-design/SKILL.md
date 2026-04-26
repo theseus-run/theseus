@@ -15,6 +15,10 @@ Human intent: "I need X done. Go do it."
 
 The system tracks the mission, dispatches work, records what happened, and returns a result.
 
+Theseus is also a self-editable harness: agents should be able to evolve the
+source by adding typed systems, satellites, projections, sinks, and capability
+modules. It is not a plugin host.
+
 ## Primitive Floor
 
 Everything else is built on these or is scaffolding:
@@ -25,9 +29,9 @@ Everything else is built on these or is scaffolding:
 | Tool | Models need typed, controlled world access |
 | Capsule | Humans need durable run logs for debugging and improvement |
 | Dispatch | The system needs to invoke a model with context and get a result |
-| Satellite | Running dispatches need scoped observation and policy middleware |
+| Satellite | Dispatches need scoped observation and policy middleware |
 
-`RuntimeBus` is not a synonym for Satellite. RuntimeBus is the operator/client transport concept for runtime UIs.
+`RuntimeBus` is not a synonym for Satellite. RuntimeBus is the operator/client transport concept for runtime UIs and should adapt to the runtime command/control/query surface if implemented.
 
 ## Design Tests
 
@@ -58,7 +62,13 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Define the human/operator concept before defining runtime machinery.
 - Keep Mission, Tool, Capsule, Dispatch, and Satellite distinct.
 - Do not rename concepts casually. If a new term appears, decide whether it replaces or refines an existing term.
-- Keep UI transport separate from dispatch semantics.
+- Keep UI transport separate from dispatch semantics and runtime host semantics.
+- Treat the runtime host as live composition of primitives, not as a new primitive.
+- Treat fixed crews, named agents, and planning loops as harness scaffolding unless promoted by a current design note.
+- Prefer source-editable modules over plugin APIs, dynamic loading, manifests,
+  or extension registries.
+- Keep Mission/Capsule composition replaceable where possible; do not bake one
+  current mission system into unrelated runtime concepts.
 - Keep design notes honest about status: current doctrine, draft idea, or superseded history.
 - Treat skills, crews, agents, retries, and planning loops as harness/scaffolding unless the primitive floor would break without them.
 
@@ -71,3 +81,5 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Does it create duplicate terminology?
 - Does it accidentally turn scaffolding into a primitive?
 - Is it useful to an operator dispatching real work?
+- Does it need a plugin API, or can Theseus add a typed source module and static wiring?
+- Could an alternate mission or audit model replace this part without rewriting unrelated packages?

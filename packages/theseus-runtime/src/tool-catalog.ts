@@ -29,20 +29,18 @@ export class ToolCatalogMissing extends Data.TaggedError("ToolCatalogMissing")<{
 export interface ToolCatalogService {
   readonly resolve: (
     names: ReadonlyArray<string>,
-  ) => Effect.Effect<ReadonlyArray<Tool.ToolAnyWith<never>>, ToolCatalogMissing>;
+  ) => Effect.Effect<ReadonlyArray<Tool.ToolAny>, ToolCatalogMissing>;
   readonly hydrate: (
     spec: SerializedDispatchSpec,
-  ) => Effect.Effect<Dispatch.DispatchSpec, ToolCatalogMissing>;
+  ) => Effect.Effect<Dispatch.DispatchSpec<unknown>, ToolCatalogMissing>;
 }
 
-export const makeToolCatalog = (
-  tools: ReadonlyArray<Tool.ToolAnyWith<never>>,
-): ToolCatalogService => {
+export const makeToolCatalog = (tools: ReadonlyArray<Tool.ToolAny>): ToolCatalogService => {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
   const resolve = (
     names: ReadonlyArray<string>,
-  ): Effect.Effect<ReadonlyArray<Tool.ToolAnyWith<never>>, ToolCatalogMissing> =>
+  ): Effect.Effect<ReadonlyArray<Tool.ToolAny>, ToolCatalogMissing> =>
     Effect.gen(function* () {
       const missing = names.filter((name) => !byName.has(name));
       if (missing.length > 0) {

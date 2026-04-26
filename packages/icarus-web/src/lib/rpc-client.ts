@@ -27,6 +27,7 @@ export interface DispatchEvent {
   readonly content?: string;
   readonly args?: unknown;
   readonly error?: unknown;
+  readonly isError?: boolean;
   readonly satellite?: string;
   readonly phase?: string;
   readonly action?: string;
@@ -39,6 +40,37 @@ export interface DispatchEvent {
     readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   };
 }
+
+export interface MissionSession {
+  readonly missionId: string;
+  readonly capsuleId: string;
+  readonly goal: string;
+  readonly criteria: ReadonlyArray<string>;
+  readonly state: "pending" | "running" | "done" | "failed";
+}
+
+export interface DispatchSession {
+  readonly dispatchId: string;
+  readonly missionId: string;
+  readonly capsuleId: string;
+  readonly name: string;
+  readonly iteration: number;
+  readonly state: "running" | "done" | "failed";
+  readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
+}
+
+export type RuntimeDispatchEvent =
+  | {
+      readonly _tag: "DispatchSessionStarted";
+      readonly session: DispatchSession;
+    }
+  | {
+      readonly _tag: "DispatchEvent";
+      readonly dispatchId: string;
+      readonly missionId: string;
+      readonly capsuleId: string;
+      readonly event: DispatchEvent;
+    };
 
 export interface Message {
   readonly role: string;
@@ -59,10 +91,28 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   onChunk?: (values: unknown[]) => void;
+  timeout?: ReturnType<typeof setTimeout>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const rpcErrorMessage = (value: unknown, fallback: string): string => {
+  if (typeof value === "string") return value;
+  if (isRecord(value)) {
+    const message = value["message"];
+    if (typeof message === "string") return message;
+    const error = value["error"];
+    if (error !== undefined) return rpcErrorMessage(error, fallback);
+    const defect = value["defect"];
+    if (defect !== undefined) return rpcErrorMessage(defect, fallback);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return fallback;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // TheseusClient
@@ -152,14 +202,17 @@ export class TheseusClient {
     if (!isRecord(msg)) return;
 
     if (msg["_tag"] === "Chunk") {
-      const req = this.pending.get(String(msg["requestId"] ?? ""));
+      const requestId = String(msg["requestId"] ?? "");
+      const req = this.pending.get(requestId);
       if (req?.onChunk) {
         req.onChunk(Array.isArray(msg["values"]) ? msg["values"] : []);
       }
+      this.ack(requestId);
     } else if (msg["_tag"] === "Exit") {
       const req = this.pending.get(String(msg["requestId"] ?? ""));
       if (req) {
         this.pending.delete(String(msg["requestId"] ?? ""));
+        if (req.timeout) clearTimeout(req.timeout);
         const exit = isRecord(msg["exit"]) ? msg["exit"] : {};
         if (exit["_tag"] === "Success") {
           req.resolve(exit["value"]);
@@ -176,9 +229,27 @@ export class TheseusClient {
           );
         }
       }
+    } else if (msg["_tag"] === "Defect") {
+      const error = new Error(rpcErrorMessage(msg["defect"], "RPC server defect"));
+      for (const [id, req] of this.pending) {
+        this.pending.delete(id);
+        if (req.timeout) clearTimeout(req.timeout);
+        req.reject(error);
+      }
+    } else if (msg["_tag"] === "ClientProtocolError") {
+      const error = new Error(rpcErrorMessage(msg["error"], "RPC protocol error"));
+      for (const [id, req] of this.pending) {
+        this.pending.delete(id);
+        if (req.timeout) clearTimeout(req.timeout);
+        req.reject(error);
+      }
     } else if (msg["_tag"] === "Pong") {
       // ignore pongs
     }
+  }
+
+  private ack(requestId: string) {
+    this.ws?.send(`${JSON.stringify({ _tag: "Ack", requestId })}\n`);
   }
 
   private send(tag: string, payload: unknown): string {
@@ -236,9 +307,20 @@ export class TheseusClient {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const id = this.send("dispatch", { spec, task, continueFrom });
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("Dispatch stream timed out before completing"));
+      }, 120_000);
       this.pending.set(id, {
-        resolve: () => resolve(),
-        reject,
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+        timeout,
         onChunk: (values) => {
           for (const v of values) {
             onEvent(v as DispatchEvent);
@@ -246,6 +328,77 @@ export class TheseusClient {
         },
       });
     });
+  }
+
+  async createMission(input: {
+    readonly slug?: string;
+    readonly goal: string;
+    readonly criteria: ReadonlyArray<string>;
+  }): Promise<MissionSession> {
+    return await this.request<MissionSession>("createMission", input);
+  }
+
+  startMissionDispatch(
+    input: {
+      readonly missionId: string;
+      readonly spec: {
+        readonly name: string;
+        readonly systemPrompt: string;
+        readonly tools: ReadonlyArray<{ readonly name: string }>;
+        readonly maxIterations?: number;
+      };
+      readonly task: string;
+      readonly continueFrom?: string;
+    },
+    onEvent: (event: RuntimeDispatchEvent) => void,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const id = this.send("startMissionDispatch", input);
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("Runtime dispatch stream timed out before completing"));
+      }, 120_000);
+      this.pending.set(id, {
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+        timeout,
+        onChunk: (values) => {
+          for (const v of values) {
+            onEvent(v as RuntimeDispatchEvent);
+          }
+        },
+      });
+    });
+  }
+
+  async listMissions(): Promise<ReadonlyArray<MissionSession>> {
+    try {
+      return await this.request<MissionSession[]>("listMissions", undefined);
+    } catch {
+      return [];
+    }
+  }
+
+  async getMission(missionId: string): Promise<MissionSession | null> {
+    try {
+      return await this.request<MissionSession>("getMission", { missionId });
+    } catch {
+      return null;
+    }
+  }
+
+  async listRuntimeDispatches(limit?: number): Promise<ReadonlyArray<DispatchSession>> {
+    try {
+      return await this.request<DispatchSession[]>("listRuntimeDispatches", { limit });
+    } catch {
+      return [];
+    }
   }
 
   async listDispatches(limit?: number): Promise<ReadonlyArray<DispatchSummary>> {
@@ -272,9 +425,25 @@ export class TheseusClient {
     await this.request("interrupt", { dispatchId });
   }
 
+  async getDispatchResult(dispatchId: string): Promise<DispatchEvent["result"] | null> {
+    try {
+      return await this.request<DispatchEvent["result"]>("getResult", { dispatchId });
+    } catch {
+      return null;
+    }
+  }
+
   async getCapsuleEvents(capsuleId: string): Promise<ReadonlyArray<CapsuleEvent>> {
     try {
       return await this.request<CapsuleEvent[]>("getCapsuleEvents", { capsuleId });
+    } catch {
+      return [];
+    }
+  }
+
+  async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
+    try {
+      return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
     } catch {
       return [];
     }

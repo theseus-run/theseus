@@ -2,18 +2,49 @@ import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Effect, Match, type Stream } from "effect";
 import type {
+  DispatchSession,
+  MissionCreateInput,
+  MissionSession,
+  MissionStartDispatchInput,
+  RuntimeDispatchEvent,
   RuntimeError,
-  StartDispatchInput,
   StatusEntry,
   TheseusRuntimeService,
 } from "./types.ts";
 
+const unexpectedQueryResult = Effect.die("Runtime query returned unexpected result");
+
 export const RuntimeCommands = {
-  startDispatch: (
+  createMission: (
     runtime: TheseusRuntimeService,
-    input: StartDispatchInput,
-  ): Effect.Effect<Stream.Stream<Dispatch.DispatchEvent>, RuntimeError> =>
-    runtime.submit({ _tag: "DispatchStart", input }).pipe(Effect.map((result) => result.events)),
+    input: MissionCreateInput,
+  ): Effect.Effect<MissionSession, RuntimeError> =>
+    runtime.submit({ _tag: "MissionCreate", input }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("MissionCreated", ({ mission }) => Effect.succeed(mission)),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
+
+  startMissionDispatch: (
+    runtime: TheseusRuntimeService,
+    input: MissionStartDispatchInput,
+  ): Effect.Effect<
+    { readonly session: DispatchSession; readonly events: Stream.Stream<RuntimeDispatchEvent> },
+    RuntimeError
+  > =>
+    runtime.submit({ _tag: "MissionStartDispatch", input }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("DispatchStarted", ({ session, events }) =>
+            Effect.succeed({ session, events }),
+          ),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
 };
 
 export const RuntimeControls = {
@@ -32,17 +63,42 @@ export const RuntimeControls = {
 };
 
 export const RuntimeQueries = {
+  listMissions: (
+    runtime: TheseusRuntimeService,
+  ): Effect.Effect<ReadonlyArray<MissionSession>, RuntimeError> =>
+    runtime.query({ _tag: "MissionList" }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("MissionList", ({ missions }) => Effect.succeed(missions)),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
+
+  getMission: (
+    runtime: TheseusRuntimeService,
+    missionId: string,
+  ): Effect.Effect<MissionSession, RuntimeError> =>
+    runtime.query({ _tag: "MissionGet", missionId }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("MissionGet", ({ mission }) => Effect.succeed(mission)),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
+
   listDispatches: (
     runtime: TheseusRuntimeService,
     options?: { readonly limit?: number },
-  ): Effect.Effect<ReadonlyArray<Dispatch.DispatchSummary>, RuntimeError> =>
+  ): Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeError> =>
     runtime
       .query(options === undefined ? { _tag: "DispatchList" } : { _tag: "DispatchList", options })
       .pipe(
         Effect.flatMap((result) =>
           Match.value(result).pipe(
             Match.tag("DispatchList", ({ dispatches }) => Effect.succeed(dispatches)),
-            Match.orElse(() => Effect.die("Runtime query returned unexpected result")),
+            Match.orElse(() => unexpectedQueryResult),
           ),
         ),
       ),
@@ -58,7 +114,7 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("DispatchMessages", ({ messages }) => Effect.succeed(messages)),
-          Match.orElse(() => Effect.die("Runtime query returned unexpected result")),
+          Match.orElse(() => unexpectedQueryResult),
         ),
       ),
     ),
@@ -71,7 +127,7 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("DispatchResult", ({ result }) => Effect.succeed(result)),
-          Match.orElse(() => Effect.die("Runtime query returned unexpected result")),
+          Match.orElse(() => unexpectedQueryResult),
         ),
       ),
     ),
@@ -84,7 +140,20 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("CapsuleEvents", ({ events }) => Effect.succeed(events)),
-          Match.orElse(() => Effect.die("Runtime query returned unexpected result")),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
+
+  getDispatchCapsuleEvents: (
+    runtime: TheseusRuntimeService,
+    dispatchId: string,
+  ): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeError> =>
+    runtime.query({ _tag: "DispatchCapsuleEvents", dispatchId }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("DispatchCapsuleEvents", ({ events }) => Effect.succeed(events)),
+          Match.orElse(() => unexpectedQueryResult),
         ),
       ),
     ),
@@ -96,7 +165,7 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("ActiveStatus", ({ status }) => Effect.succeed(status)),
-          Match.orElse(() => Effect.die("Runtime query returned unexpected result")),
+          Match.orElse(() => unexpectedQueryResult),
         ),
       ),
     ),

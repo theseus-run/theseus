@@ -4,11 +4,20 @@ import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { Cause, Effect, Exit, Layer, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import type { DispatchRegistry } from "../registry.ts";
-import { TheseusDb } from "../store/sqlite.ts";
-import { SqliteCurrentCapsuleLive } from "../store/sqlite-capsule.ts";
-import type { ToolCatalog } from "../tool-catalog.ts";
-import { RuntimeNotFound, RuntimeToolNotFound, type StartDispatchInput } from "./types.ts";
+import type { DispatchRegistry } from "../../../registry.ts";
+import { TheseusDb } from "../../../store/sqlite.ts";
+import { SqliteCurrentCapsuleByIdLive } from "../../../store/sqlite-capsule.ts";
+import type { ToolCatalog } from "../../../tool-catalog.ts";
+import { RuntimeEvents } from "../../events.ts";
+import { getMissionCapsuleId, recordDispatchSession } from "../../projections/session/store.ts";
+import { CapsuleSink } from "../../sinks/capsule/sink.ts";
+import {
+  type DispatchSession,
+  type MissionStartDispatchInput,
+  type RuntimeDispatchEvent,
+  RuntimeNotFound,
+  RuntimeToolNotFound,
+} from "../../types.ts";
 
 const SKIP_EVENT_TAGS = new Set(["Thinking"]);
 
@@ -32,8 +41,17 @@ export interface DispatchRunnerDeps {
   readonly languageModel: (typeof LanguageModel.LanguageModel)["Service"];
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
+  readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
 }
+
+type RuntimeToolRequirements =
+  | Agent.BlueprintRegistry
+  | LanguageModel.LanguageModel
+  | Satellite.SatelliteRing
+  | Dispatch.DispatchStore
+  | CapsuleNs.CurrentCapsule
+  | Agent.AgentIdentity;
 
 const restoreOptions = (
   store: (typeof Dispatch.DispatchStore)["Service"],
@@ -54,12 +72,12 @@ const restoreOptions = (
 
 const makeCurrentCapsule = (
   db: (typeof TheseusDb)["Service"],
-  name: string,
+  capsuleId: string,
 ): Effect.Effect<CapsuleNs.CapsuleRecord> => {
   const dbLayer = Layer.succeed(TheseusDb)(db);
   return Effect.provide(
     Effect.service(CapsuleNs.CurrentCapsule),
-    Layer.provide(SqliteCurrentCapsuleLive(name), dbLayer),
+    Layer.provide(SqliteCurrentCapsuleByIdLive(capsuleId), dbLayer),
   );
 };
 
@@ -72,6 +90,7 @@ const makeDispatchDepsLayer = (
     Layer.succeed(LanguageModel.LanguageModel)(deps.languageModel),
     Layer.succeed(Satellite.SatelliteRing)(deps.satelliteRing),
     Layer.succeed(Dispatch.DispatchStore)(deps.dispatchStore),
+    Layer.succeed(Agent.BlueprintRegistry)(deps.blueprintRegistry),
     Layer.succeed(CapsuleNs.CurrentCapsule)(currentCapsule),
     Agent.AgentIdentityLive(specName),
   );
@@ -89,11 +108,11 @@ const watchDispatchCompletion = (input: {
         onSuccess: (result) =>
           Effect.gen(function* () {
             yield* input.store.snapshot(input.handle.dispatchId, -1, result.messages, result.usage);
-            yield* input.capsule.log({
-              type: "dispatch.done",
-              by: "runtime",
-              data: { dispatchId: input.handle.dispatchId, content: result.content },
+            yield* CapsuleSink.dispatchDone(input.capsule, {
+              dispatchId: input.handle.dispatchId,
+              result,
             });
+            yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
             yield* input.registry.updateStatus(input.handle.dispatchId, {
               state: "done",
               usage: result.usage,
@@ -102,11 +121,11 @@ const watchDispatchCompletion = (input: {
         onFailure: (cause) =>
           Effect.gen(function* () {
             const reason = reasonFromCause(cause);
-            yield* input.capsule.log({
-              type: "dispatch.failed",
-              by: "runtime",
-              data: { dispatchId: input.handle.dispatchId, reason },
+            yield* CapsuleSink.dispatchFailed(input.capsule, {
+              dispatchId: input.handle.dispatchId,
+              reason,
             });
+            yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
             yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
           }),
       }),
@@ -114,40 +133,72 @@ const watchDispatchCompletion = (input: {
   );
 
 const observableEvents = (
+  session: DispatchSession,
   handle: Dispatch.DispatchHandle,
   registry: (typeof DispatchRegistry)["Service"],
-): Stream.Stream<Dispatch.DispatchEvent> =>
-  handle.events.pipe(
-    Stream.filter((event) => !SKIP_EVENT_TAGS.has(event._tag)),
-    Stream.tap((event) =>
-      event._tag === "Calling"
-        ? registry.updateStatus(handle.dispatchId, { iteration: event.iteration })
-        : Effect.void,
+): Stream.Stream<RuntimeDispatchEvent> =>
+  Stream.make(RuntimeEvents.dispatchSessionStarted(session)).pipe(
+    Stream.concat(
+      handle.events.pipe(
+        Stream.filter((event) => !SKIP_EVENT_TAGS.has(event._tag)),
+        Stream.tap((event) =>
+          event._tag === "Calling"
+            ? registry.updateStatus(handle.dispatchId, { iteration: event.iteration })
+            : Effect.void,
+        ),
+        Stream.map((event): RuntimeDispatchEvent => RuntimeEvents.dispatchObserved(session, event)),
+      ),
     ),
   );
 
 export const startDispatch = (
   deps: DispatchRunnerDeps,
-  { spec: serializedSpec, task, continueFrom }: StartDispatchInput,
-): Effect.Effect<Stream.Stream<Dispatch.DispatchEvent>, RuntimeNotFound | RuntimeToolNotFound> =>
+  { missionId, spec: serializedSpec, task, continueFrom }: MissionStartDispatchInput,
+): Effect.Effect<
+  { readonly session: DispatchSession; readonly events: Stream.Stream<RuntimeDispatchEvent> },
+  RuntimeNotFound | RuntimeToolNotFound
+> =>
   Effect.gen(function* () {
-    const spec = yield* deps.toolCatalog
+    const hydratedSpec = yield* deps.toolCatalog
       .hydrate(serializedSpec)
       .pipe(Effect.mapError((error) => new RuntimeToolNotFound({ names: error.names })));
+    // The catalog is heterogeneous by design. Runtime dispatch provides the
+    // known service envelope for first-party tools such as dispatch_grunt.
+    const spec = hydratedSpec as Dispatch.DispatchSpec<RuntimeToolRequirements>;
     const options = yield* restoreOptions(deps.dispatchStore, continueFrom, task);
-    const currentCapsule = yield* makeCurrentCapsule(deps.db, spec.name);
+    const capsuleId = yield* getMissionCapsuleId(deps.db, missionId).pipe(
+      Effect.flatMap((id) =>
+        id === undefined
+          ? Effect.fail(new RuntimeNotFound({ kind: "mission", id: missionId }))
+          : Effect.succeed(id),
+      ),
+    );
+    const currentCapsule = yield* makeCurrentCapsule(deps.db, capsuleId);
 
-    yield* currentCapsule.log({
-      type: "dispatch.start",
-      by: "runtime",
-      data: { task, name: spec.name, continueFrom },
-    });
+    yield* CapsuleSink.missionTransition(currentCapsule, "pending", "running");
 
     const handle = yield* Effect.provide(
       Dispatch.dispatch(spec, task, options),
       makeDispatchDepsLayer(deps, spec.name, currentCapsule),
     );
-    yield* deps.registry.register(handle, spec.name);
+    const session: DispatchSession = {
+      dispatchId: handle.dispatchId,
+      missionId,
+      capsuleId,
+      name: spec.name,
+      iteration: 0,
+      state: "running",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+    yield* recordDispatchSession(deps.db, session);
+    yield* CapsuleSink.dispatchStart(currentCapsule, {
+      task,
+      name: spec.name,
+      continueFrom,
+      dispatchId: handle.dispatchId,
+      missionId,
+    });
+    yield* deps.registry.register(handle, session);
 
     yield* Effect.forkDetach({ startImmediately: true })(
       watchDispatchCompletion({
@@ -158,5 +209,5 @@ export const startDispatch = (
       }),
     );
 
-    return observableEvents(handle, deps.registry);
+    return { session, events: observableEvents(session, handle, deps.registry) };
   });

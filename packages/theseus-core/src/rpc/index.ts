@@ -10,14 +10,20 @@
  */
 
 export {
+  CreateMission,
   Dispatch,
   GetCapsuleEvents,
+  GetDispatchCapsuleEvents,
   GetMessages,
+  GetMission,
   GetResult,
   Inject,
   Interrupt,
   ListDispatches,
+  ListMissions,
+  ListRuntimeDispatches,
   RpcError,
+  StartMissionDispatch,
   Status,
   TheseusRpc,
 } from "./procedures.ts";
@@ -26,9 +32,12 @@ export {
   CapsuleEventSchema,
   DispatchEventSchema,
   DispatchOutputSchema,
+  DispatchSessionSchema,
   DispatchSpecSchema,
   DispatchSummarySchema,
   MessageSchema,
+  MissionSessionSchema,
+  RuntimeDispatchEventSchema,
   SerializedToolCallErrorSchema,
   SerializedToolRefSchema,
   UsageSchema,

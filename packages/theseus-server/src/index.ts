@@ -9,19 +9,22 @@
 
 import { join } from "node:path";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as Agent from "@theseus.run/core/Agent";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
-import { TheseusRuntime, TheseusRuntimeLive } from "@theseus.run/runtime";
+import { TheseusRuntime } from "@theseus.run/runtime";
+import { TheseusRuntimeLive } from "@theseus.run/runtime/live";
 import { DispatchRegistry, DispatchRegistryLive } from "@theseus.run/runtime/registry";
 import { SqliteDispatchStore, TheseusDbLive } from "@theseus.run/runtime/store";
 import { makeToolCatalog, ToolCatalog } from "@theseus.run/runtime/tool-catalog";
 import { allTools } from "@theseus.run/tools";
-import { Effect, Layer } from "effect";
+import { type Cause, Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { HandlersLive } from "./handlers.ts";
 import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
+import { RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -39,6 +42,7 @@ const ToolCatalogLive = Layer.succeed(ToolCatalog)(makeToolCatalog(allTools));
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+const BlueprintRegistryLive = Agent.BlueprintRegistryLive([]);
 
 // SQLite persistence
 const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
@@ -64,20 +68,18 @@ const ServicesLayer = Layer.mergeAll(
   RingLive,
   ToolCatalogLive,
   RegistryLive,
+  BlueprintRegistryLive,
   DbLive,
 );
 
 const RuntimeLive = Layer.provide(Layer.effect(TheseusRuntime)(TheseusRuntimeLive), ServicesLayer);
+const RuntimeRpcAdapterLayer = Layer.provide(RuntimeRpcAdapterLive, RuntimeLive);
 
 // The app layer that configures the HttpRouter with RPC routes
-const RouterAppLayer = Layer.provideMerge(
-  RpcLayer,
-  Layer.mergeAll(
-    HttpRouter.layer,
-    RpcSerialization.layerJson,
-    Layer.provideMerge(HandlersLive, RuntimeLive),
-  ),
-);
+const HandlerLayer = Layer.provideMerge(HandlersLive, RuntimeRpcAdapterLayer);
+const RpcDepsLayer = Layer.provideMerge(HandlerLayer, RpcSerialization.layerJson);
+const RpcRoutesLayer = Layer.provideMerge(RpcLayer, RpcDepsLayer);
+const RouterAppLayer = Layer.provideMerge(RpcRoutesLayer, HttpRouter.layer);
 
 // ---------------------------------------------------------------------------
 // Start
@@ -99,15 +101,13 @@ const program = Effect.gen(function* () {
   return yield* Effect.never;
 });
 
-Effect.runFork(
-  program.pipe(
-    Effect.provide(HttpLive),
-    Effect.scoped,
-    Effect.tapCause(
-      (cause): Effect.Effect<void> => Effect.logError("[theseus-server] fatal", cause),
-    ),
-  ),
-);
+const main = program.pipe(
+  Effect.provide(HttpLive),
+  Effect.scoped,
+  Effect.catchCause((cause: Cause.Cause<unknown>) => Effect.logError("[theseus-server] fatal", cause)),
+) as Effect.Effect<void, never, never>;
+
+Effect.runFork(main);
 
 const shutdown = () => {
   console.log("[theseus-server] shutting down...");

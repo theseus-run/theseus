@@ -20,9 +20,12 @@ import {
   CapsuleEventSchema,
   DispatchEventSchema,
   DispatchOutputSchema,
+  DispatchSessionSchema,
   DispatchSpecSchema,
   DispatchSummarySchema,
   MessageSchema,
+  MissionSessionSchema,
+  RuntimeDispatchEventSchema,
   UsageSchema,
 } from "./schemas.ts";
 
@@ -121,6 +124,64 @@ export const Status = Rpc.make("status", {
   error: RpcError,
 });
 
+/** Create a runtime mission session. */
+export const CreateMission = Rpc.make("createMission", {
+  payload: Schema.Struct({
+    slug: Schema.optional(Schema.String),
+    goal: Schema.String,
+    criteria: Schema.Array(Schema.String),
+  }),
+  success: MissionSessionSchema,
+  error: RpcError,
+});
+
+/** Start a coordinator dispatch inside an existing mission. */
+export const StartMissionDispatch = Rpc.make("startMissionDispatch", {
+  stream: true,
+  payload: Schema.Struct({
+    missionId: Schema.String,
+    spec: DispatchSpecSchema,
+    task: Schema.String,
+    continueFrom: Schema.optional(Schema.String),
+  }),
+  success: RuntimeDispatchEventSchema,
+  error: RpcError,
+});
+
+/** List runtime mission sessions. */
+export const ListMissions = Rpc.make("listMissions", {
+  payload: Schema.Void,
+  success: Schema.Array(MissionSessionSchema),
+  error: RpcError,
+});
+
+/** Get one runtime mission session. */
+export const GetMission = Rpc.make("getMission", {
+  payload: Schema.Struct({
+    missionId: Schema.String,
+  }),
+  success: MissionSessionSchema,
+  error: RpcError,
+});
+
+/** List runtime dispatch sessions. */
+export const ListRuntimeDispatches = Rpc.make("listRuntimeDispatches", {
+  payload: Schema.Struct({
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(DispatchSessionSchema),
+  error: RpcError,
+});
+
+/** Get capsule events by dispatch identity. */
+export const GetDispatchCapsuleEvents = Rpc.make("getDispatchCapsuleEvents", {
+  payload: Schema.Struct({
+    dispatchId: Schema.String,
+  }),
+  success: Schema.Array(CapsuleEventSchema),
+  error: RpcError,
+});
+
 // ---------------------------------------------------------------------------
 // Group — the full Theseus API surface
 // ---------------------------------------------------------------------------
@@ -134,4 +195,10 @@ export const TheseusRpc = RpcGroup.make(
   GetResult,
   GetCapsuleEvents,
   Status,
+  CreateMission,
+  StartMissionDispatch,
+  ListMissions,
+  GetMission,
+  ListRuntimeDispatches,
+  GetDispatchCapsuleEvents,
 );

@@ -15,6 +15,8 @@ import type { StatusEntry } from "./runtime/types.ts";
 
 interface RegistryEntry {
   readonly handle: Dispatch.DispatchHandle;
+  readonly missionId: string;
+  readonly capsuleId: string;
   readonly name: string;
   readonly startedAt: number;
   iteration: number;
@@ -29,7 +31,10 @@ interface RegistryEntry {
 export class DispatchRegistry extends Context.Service<
   DispatchRegistry,
   {
-    readonly register: (handle: Dispatch.DispatchHandle, name: string) => Effect.Effect<void>;
+    readonly register: (
+      handle: Dispatch.DispatchHandle,
+      session: Pick<StatusEntry, "missionId" | "capsuleId" | "name">,
+    ) => Effect.Effect<void>;
     readonly get: (dispatchId: string) => Effect.Effect<Dispatch.DispatchHandle | null>;
     readonly remove: (dispatchId: string) => Effect.Effect<void>;
     readonly updateStatus: (
@@ -48,14 +53,19 @@ export const DispatchRegistryLive = Effect.gen(function* () {
   const ref = yield* Ref.make<Map<string, RegistryEntry>>(new Map());
 
   return {
-    register: (handle: Dispatch.DispatchHandle, name: string) =>
+    register: (
+      handle: Dispatch.DispatchHandle,
+      session: Pick<StatusEntry, "missionId" | "capsuleId" | "name">,
+    ) =>
       Effect.gen(function* () {
         const startedAt = yield* Clock.currentTimeMillis;
         yield* Ref.update(ref, (m) => {
           const next = new Map(m);
           next.set(handle.dispatchId, {
             handle,
-            name,
+            missionId: session.missionId,
+            capsuleId: session.capsuleId,
+            name: session.name,
             startedAt,
             iteration: 0,
             usage: { inputTokens: 0, outputTokens: 0 },
@@ -98,6 +108,8 @@ export const DispatchRegistryLive = Effect.gen(function* () {
           Array.from(m.values()).map(
             (e): StatusEntry => ({
               dispatchId: e.handle.dispatchId,
+              missionId: e.missionId,
+              capsuleId: e.capsuleId,
               name: e.name,
               iteration: e.iteration,
               state: e.state,

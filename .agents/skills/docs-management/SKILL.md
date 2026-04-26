@@ -43,7 +43,7 @@ docs/
 |---|---|
 | `01-direction/` | product intent, goals, constraints, north star |
 | `02-primitives/` | publishable core abstractions and tool-system design |
-| `03-runtime/` | runtime composition, mission model, crew, architecture |
+| `03-runtime/` | active runtime architecture, mission model, crew scaffolding |
 | `04-clients/` | interface/client notes such as Icarus |
 | `90-archive/` | superseded designs kept for archaeology |
 | `99-design-notes/` | dated notes, decision records, external-trigger analyses |
@@ -61,7 +61,7 @@ Prefer a single durable concept per note.
 Good:
 - `tool.md`
 - `mission-system.md`
-- `persistent-runtime.md`
+- `architecture.md`
 
 Bad:
 - one giant file with multiple unrelated decisions
@@ -241,12 +241,16 @@ Do not collapse these into one mega-note.
 ### Runtime docs
 
 Keep these distinct:
-- `architecture.md` — broad runtime shape
+- `architecture.md` — current runtime host shape: commands, controls, queries, systems, sinks, projections, stores, catalogs, active registry
 - `mission-system.md` — mission/session model
-- `crew.md` — roster, roles, ownership
-- `persistent-runtime.md` — daemon/headless runtime model
+- `mission-hardening.md` — converting raw intent into dispatchable mission posture
+- `crew.md` — harness/crew scaffolding, not required runtime architecture
 
 If two runtime notes overlap, tighten their boundaries rather than merging by default.
+
+The old persistent named-agent daemon model is archived at
+`docs/90-archive/persistent-agent-runtime.md`. Do not treat it as active
+doctrine.
 
 ---
 

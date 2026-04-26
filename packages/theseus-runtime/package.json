@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./live": "./src/live.ts",
     "./registry": "./src/registry.ts",
     "./tool-catalog": "./src/tool-catalog.ts",
     "./store": "./src/store/index.ts"

@@ -9,7 +9,7 @@ export class RuntimeToolNotFound extends Data.TaggedError("RuntimeToolNotFound")
 
 export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
   readonly id: string;
-  readonly kind: "dispatch";
+  readonly kind: "dispatch" | "mission";
 }> {}
 
 export class RuntimeDispatchFailed extends Data.TaggedError("RuntimeDispatchFailed")<{
@@ -20,29 +20,78 @@ export class RuntimeDispatchFailed extends Data.TaggedError("RuntimeDispatchFail
 
 export type RuntimeError = RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed;
 
-export interface StatusEntry {
+export type MissionSessionState = "pending" | "running" | "done" | "failed";
+export type DispatchSessionState = "running" | "done" | "failed";
+
+export interface MissionSession {
+  readonly missionId: string;
+  readonly capsuleId: string;
+  readonly goal: string;
+  readonly criteria: ReadonlyArray<string>;
+  readonly state: MissionSessionState;
+}
+
+export interface DispatchSession {
   readonly dispatchId: string;
+  readonly missionId: string;
+  readonly capsuleId: string;
   readonly name: string;
   readonly iteration: number;
-  readonly state: "running" | "done" | "failed";
+  readonly state: DispatchSessionState;
   readonly usage: Dispatch.Usage;
 }
 
-export interface StartDispatchInput {
+export type StatusEntry = DispatchSession;
+
+export interface MissionDispatchInput {
   readonly spec: SerializedDispatchSpec;
   readonly task: string;
   readonly continueFrom?: string | undefined;
 }
 
-export type RuntimeCommand = {
-  readonly _tag: "DispatchStart";
-  readonly input: StartDispatchInput;
-};
+export interface MissionCreateInput {
+  readonly slug?: string;
+  readonly goal: string;
+  readonly criteria: ReadonlyArray<string>;
+}
 
-export type RuntimeSubmission = {
-  readonly _tag: "DispatchStarted";
-  readonly events: Stream.Stream<Dispatch.DispatchEvent>;
-};
+export interface MissionStartDispatchInput extends MissionDispatchInput {
+  readonly missionId: string;
+}
+
+export type RuntimeCommand =
+  | {
+      readonly _tag: "MissionCreate";
+      readonly input: MissionCreateInput;
+    }
+  | {
+      readonly _tag: "MissionStartDispatch";
+      readonly input: MissionStartDispatchInput;
+    };
+
+export type RuntimeDispatchEvent =
+  | {
+      readonly _tag: "DispatchSessionStarted";
+      readonly session: DispatchSession;
+    }
+  | {
+      readonly _tag: "DispatchEvent";
+      readonly dispatchId: string;
+      readonly missionId: string;
+      readonly capsuleId: string;
+      readonly event: Dispatch.DispatchEvent;
+    };
+
+export type RuntimeSubmission =
+  | {
+      readonly _tag: "MissionCreated";
+      readonly mission: MissionSession;
+    }
+  | {
+      readonly _tag: "DispatchStarted";
+      readonly session: DispatchSession;
+      readonly events: Stream.Stream<RuntimeDispatchEvent>;
+    };
 
 export type RuntimeControl =
   | {
@@ -56,6 +105,13 @@ export type RuntimeControl =
     };
 
 export type RuntimeQuery =
+  | {
+      readonly _tag: "MissionList";
+    }
+  | {
+      readonly _tag: "MissionGet";
+      readonly missionId: string;
+    }
   | {
       readonly _tag: "DispatchList";
       readonly options?: { readonly limit?: number };
@@ -73,13 +129,25 @@ export type RuntimeQuery =
       readonly capsuleId: string;
     }
   | {
+      readonly _tag: "DispatchCapsuleEvents";
+      readonly dispatchId: string;
+    }
+  | {
       readonly _tag: "ActiveStatus";
     };
 
 export type RuntimeQueryResult =
   | {
+      readonly _tag: "MissionList";
+      readonly missions: ReadonlyArray<MissionSession>;
+    }
+  | {
+      readonly _tag: "MissionGet";
+      readonly mission: MissionSession;
+    }
+  | {
       readonly _tag: "DispatchList";
-      readonly dispatches: ReadonlyArray<Dispatch.DispatchSummary>;
+      readonly dispatches: ReadonlyArray<DispatchSession>;
     }
   | {
       readonly _tag: "DispatchMessages";
@@ -94,11 +162,16 @@ export type RuntimeQueryResult =
       readonly events: ReadonlyArray<CapsuleNs.CapsuleEvent>;
     }
   | {
+      readonly _tag: "DispatchCapsuleEvents";
+      readonly events: ReadonlyArray<CapsuleNs.CapsuleEvent>;
+    }
+  | {
       readonly _tag: "ActiveStatus";
       readonly status: ReadonlyArray<StatusEntry>;
     };
 
 export interface RuntimeSnapshot {
+  readonly missions: ReadonlyArray<MissionSession>;
   readonly active: ReadonlyArray<StatusEntry>;
 }
 

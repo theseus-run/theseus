@@ -36,6 +36,9 @@ export function RootLayout() {
             theseus
           </Link>
           <ConnectionStatus />
+          <Link to="/poc" className="text-muted-foreground hover:text-foreground transition-colors">
+            poc
+          </Link>
         </div>
       </header>
 

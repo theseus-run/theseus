@@ -1,7 +1,7 @@
 # Theseus — Goals
 
 > Status: active direction
-> Last updated: 2026-04-25
+> Last updated: 2026-04-26
 
 ---
 
@@ -84,7 +84,7 @@ is behind an interface.
 
 **Best leverage first.**
 Build the things everything else can be built on. The five primitives (Mission, Tool,
-Capsule, Dispatch, RuntimeBus) are the floor. The harness, the crew, the skill system
+Capsule, Dispatch, Satellite) are the floor. The runtime host, harness, crew, and skill system
 are built on top.
 
 **Work products over chat residue.**
@@ -109,7 +109,11 @@ not as the mission itself.
 | Tool | Models always need typed, controlled world access |
 | Capsule | Humans always need voyage logs — to debug, to improve |
 | Dispatch | You always need to invoke an AI with context and get a result |
-| RuntimeBus | You always need to observe a running job and occasionally intervene |
+| Satellite | Dispatches need scoped observation, policy, and intervention hooks |
+
+`RuntimeBus` remains the operator/client transport concept: runtime facts out,
+operator intent in. It is not the same thing as Satellite and should adapt to
+the runtime command/control/query surface when implemented.
 
 ---
 
@@ -154,6 +158,32 @@ a direct user request. Theseus should turn that source into a validated mission,
 carry the coherent thread through execution, and project the right artifacts
 back to the systems of record.
 
+## Self-editable harness
+
+Theseus is a harness that can build itself.
+
+The design target is not a plugin host. Plugins are the wrong center of gravity
+for an AI-maintained harness: they push the system toward manifests, dynamic
+loading, compatibility promises, and opaque extension boundaries before the
+source model is stable.
+
+The extension model is source evolution:
+
+- need stricter dispatch policy: add or change a [[primitives|Satellite]]
+- need a minimap of touched files: add a runtime system, durable facts, and a
+  projection
+- need a new audit channel: add a sink
+- need different mission behavior: replace or fork the mission system wiring
+- need different capability selection: change the capability/catalog module
+
+These changes should be normal code changes that Theseus can make, test, and
+review. The harness should therefore optimize for small typed modules, explicit
+ownership, durable event seams, static wiring, and focused tests.
+
+Do not build plugin manifests, dynamic loading, extension marketplaces, generic
+plugin lifecycle hooks, or compatibility layers unless explicitly scheduled.
+
 Related research notes:
 
 - [[theseus-outcome-execution-layer]]
+- [[002-self-editable-harness]]

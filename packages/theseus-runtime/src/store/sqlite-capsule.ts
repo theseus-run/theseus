@@ -12,12 +12,12 @@ import { Clock, Effect, Layer } from "effect";
 import { decodeJson, encodeJson } from "../json.ts";
 import { TheseusDb } from "./sqlite.ts";
 
-export const SqliteCurrentCapsuleLive = (
-  slug: string,
+const makeSqliteCapsuleLayer = (
+  idEffect: Effect.Effect<CapsuleNs.CapsuleId>,
 ): Layer.Layer<CapsuleNs.CurrentCapsule, never, TheseusDb> =>
   Layer.effect(CapsuleNs.CurrentCapsule)(
     Effect.gen(function* () {
-      const id = yield* CapsuleNs.makeCapsuleId(slug);
+      const id = yield* idEffect;
       const { db } = yield* TheseusDb;
 
       const insertEvent = db.prepare(
@@ -84,3 +84,13 @@ export const SqliteCurrentCapsuleLive = (
       });
     }),
   );
+
+export const SqliteCurrentCapsuleLive = (
+  slug: string,
+): Layer.Layer<CapsuleNs.CurrentCapsule, never, TheseusDb> =>
+  makeSqliteCapsuleLayer(CapsuleNs.makeCapsuleId(slug));
+
+export const SqliteCurrentCapsuleByIdLive = (
+  capsuleId: string,
+): Layer.Layer<CapsuleNs.CurrentCapsule, never, TheseusDb> =>
+  makeSqliteCapsuleLayer(Effect.succeed(capsuleId as CapsuleNs.CapsuleId));

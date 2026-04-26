@@ -79,6 +79,19 @@ const SCHEMA = `
     content TEXT NOT NULL,
     PRIMARY KEY (capsule_id, name)
   );
+
+  -- Runtime session links. Mission state remains capsule-backed; these tables
+  -- only make identity joins cheap and unambiguous.
+  CREATE TABLE IF NOT EXISTS runtime_mission_capsules (
+    mission_id TEXT PRIMARY KEY,
+    capsule_id TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS runtime_dispatch_sessions (
+    dispatch_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL,
+    capsule_id TEXT NOT NULL
+  );
 `;
 
 // ---------------------------------------------------------------------------
