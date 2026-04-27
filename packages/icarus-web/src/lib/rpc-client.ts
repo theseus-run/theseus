@@ -15,7 +15,6 @@
  */
 
 import type { CapsuleEvent } from "@theseus.run/core/Capsule";
-import type { DispatchSummary } from "@theseus.run/core/Dispatch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,8 +53,12 @@ export interface MissionSession {
 }
 
 export interface DispatchSession {
+  readonly workNodeId: string;
+  readonly parentWorkNodeId?: string;
+  readonly kind: "dispatch";
+  readonly relation: "root" | "delegated" | "continued" | "branched" | "prepared" | "spawned";
+  readonly label: string;
   readonly dispatchId: string;
-  readonly parentDispatchId?: string;
   readonly missionId: string;
   readonly capsuleId: string;
   readonly name: string;
@@ -63,6 +66,19 @@ export interface DispatchSession {
   readonly iteration: number;
   readonly state: "running" | "done" | "failed";
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
+}
+
+export interface WorkNodeSession {
+  readonly workNodeId: string;
+  readonly missionId: string;
+  readonly capsuleId: string;
+  readonly parentWorkNodeId?: string;
+  readonly kind: "dispatch" | "task" | "external";
+  readonly relation: "root" | "delegated" | "continued" | "branched" | "prepared" | "spawned";
+  readonly label: string;
+  readonly state: "pending" | "running" | "done" | "failed";
+  readonly startedAt?: number;
+  readonly completedAt?: number;
 }
 
 export type ModelRequest =
@@ -81,11 +97,16 @@ export type ModelRequest =
 
 export type RuntimeDispatchEvent =
   | {
+      readonly _tag: "WorkNodeStarted";
+      readonly node: WorkNodeSession;
+    }
+  | {
       readonly _tag: "DispatchSessionStarted";
       readonly session: DispatchSession;
     }
   | {
       readonly _tag: "DispatchEvent";
+      readonly workNodeId: string;
       readonly dispatchId: string;
       readonly missionId: string;
       readonly capsuleId: string;
@@ -98,11 +119,6 @@ export type ResearchPocEvent =
       readonly mission: MissionSession;
     }
   | RuntimeDispatchEvent;
-
-export interface Message {
-  readonly role: string;
-  readonly content: string;
-}
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type ConnectionListener = (state: ConnectionState) => void;
@@ -348,30 +364,6 @@ export class TheseusClient {
   // Public API
   // ---------------------------------------------------------------------------
 
-  /**
-   * Start a dispatch — streams events via callback.
-   * Returns a promise that resolves when the dispatch completes.
-   */
-  dispatch(
-    spec: {
-      name: string;
-      systemPrompt: string;
-      tools: Array<{ name: string }>;
-      maxIterations?: number;
-      modelRequest?: ModelRequest;
-    },
-    task: string,
-    onEvent: (event: DispatchEvent) => void,
-    continueFrom?: string,
-  ): Promise<void> {
-    return this.streamRequest(
-      "dispatch",
-      { spec, task, continueFrom },
-      onEvent,
-      "Dispatch stream timed out before completing",
-    );
-  }
-
   async createMission(input: {
     readonly slug?: string;
     readonly goal: string;
@@ -415,20 +407,8 @@ export class TheseusClient {
     return await this.request<DispatchSession[]>("listRuntimeDispatches", { limit });
   }
 
-  async listDispatches(limit?: number): Promise<ReadonlyArray<DispatchSummary>> {
-    try {
-      return await this.request<DispatchSummary[]>("listDispatches", { limit });
-    } catch {
-      return [];
-    }
-  }
-
-  async getMessages(dispatchId: string): Promise<ReadonlyArray<Message>> {
-    try {
-      return await this.request<Message[]>("getMessages", { dispatchId });
-    } catch {
-      return [];
-    }
+  async getMissionWorkTree(missionId: string): Promise<ReadonlyArray<WorkNodeSession>> {
+    return await this.request<WorkNodeSession[]>("getMissionWorkTree", { missionId });
   }
 
   async inject(dispatchId: string, text: string): Promise<void> {

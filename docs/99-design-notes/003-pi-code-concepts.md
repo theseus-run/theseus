@@ -30,7 +30,7 @@ References:
 
 The strongest ideas are not plugin APIs. They are durable execution substrate:
 
-- tree-shaped work history
+- tree-shaped work history, now already core to Theseus runtime topology
 - branch summaries
 - compaction as durable data
 - split visible tool output from full tool evidence
@@ -42,32 +42,29 @@ The strongest ideas are not plugin APIs. They are durable execution substrate:
 These fit Theseus better than Pi because [[mission-system]] and Capsule give them
 mission-level meaning.
 
-## Candidate Concepts
+## Adopted And Candidate Concepts
 
-### 1. Dispatch Trees
+### 1. Work Tree Topology
 
 Pi stores session history as JSONL entries with `id` and `parentId`, so a
-session can branch in place. Theseus should apply this to dispatches inside a
-Mission.
+session can branch in place. Theseus has already moved the equivalent runtime
+idea into the core work tree: mission-scoped `WorkNode` rows, work-node
+relations, and dispatch sessions derived from dispatch work nodes.
 
-Current simple shape:
-
-```txt
-Mission
-  Dispatch[]
-```
-
-Target shape:
+The important Theseus distinction is that the work tree is broader than a
+dispatch transcript. Dispatch is one current work-node kind, not the topology
+itself.
 
 ```txt
 Mission
-  Dispatch root
+  WorkNode root
     Dispatch continuation
-    Dispatch alternate branch
-      Dispatch review branch
+    Dispatch branch
+    Future delegated task
+    Future external work item
 ```
 
-A dispatch tree gives the runtime native answers to:
+The runtime tree gives native answers to:
 
 - continue from a known checkpoint
 - fork before a failed approach
@@ -75,7 +72,9 @@ A dispatch tree gives the runtime native answers to:
 - preserve abandoned work without keeping it in active context
 - show Icarus a navigable mission history
 
-This should be runtime structure, not UI-only state.
+Status: adopted as core direction. The remaining Pi lesson is not "add a tree";
+it is "use the tree as the natural home for summaries, compaction boundaries,
+model changes, tool artifacts, and operator-visible navigation."
 
 ### 2. Branch Summaries
 
@@ -88,8 +87,8 @@ Possible event:
 type DispatchBranchSummarized = {
   readonly _tag: "DispatchBranchSummarized";
   readonly missionId: Mission.Id;
-  readonly dispatchId: Dispatch.Id;
-  readonly fromDispatchId: Dispatch.Id;
+  readonly workNodeId: string;
+  readonly fromWorkNodeId: string;
   readonly summary: string;
   readonly evidenceRefs: ReadonlyArray<string>;
 };
@@ -338,13 +337,17 @@ command/control/query surface.
 
 ## Priority
 
-Highest value candidates:
+Already adopted as core direction:
 
-1. Dispatch tree with `parentId`
-2. Branch summaries as durable runtime/capsule events
-3. Compaction as durable, inspectable data
-4. Tool result split: compact visible result plus full artifact
-5. Tool execution mode for parallel-safe vs sequential tools
+- Mission-scoped work tree topology for dispatches and future runtime work.
+
+Highest remaining candidates:
+
+1. Branch summaries as durable runtime/capsule events over work-tree nodes
+2. Compaction as durable, inspectable data
+3. Tool result split: compact visible result plus full artifact
+4. Tool execution mode for parallel-safe vs sequential tools
+5. Streaming tool progress events
 
 These are runtime substrate decisions. They should be considered before the
 runtime event/store/projection shape hardens.

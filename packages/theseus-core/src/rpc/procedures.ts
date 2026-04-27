@@ -8,26 +8,20 @@
  *   import { TheseusRpc } from "@theseus.run/core/Rpc"
  *
  *   // Server: implement handlers
- *   TheseusRpc.toHandlers({ dispatch: ..., listDispatches: ... })
- *
- *   // Client: call typed methods
- *   client.dispatch({ spec, task })
+ *   TheseusRpc.toHandlers({ createMission: ..., startMissionDispatch: ... })
  */
 
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
   CapsuleEventSchema,
-  DispatchEventSchema,
   DispatchOutputSchema,
   DispatchSessionSchema,
   DispatchSpecSchema,
-  DispatchSummarySchema,
-  MessageSchema,
   MissionSessionSchema,
   ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
-  UsageSchema,
+  WorkNodeSessionSchema,
 } from "./schemas.ts";
 
 // ---------------------------------------------------------------------------
@@ -42,36 +36,6 @@ export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
 // ---------------------------------------------------------------------------
 // Procedures
 // ---------------------------------------------------------------------------
-
-/** Start a dispatch — returns a stream of events as the agent works. */
-export const Dispatch = Rpc.make("dispatch", {
-  stream: true,
-  payload: Schema.Struct({
-    spec: DispatchSpecSchema,
-    task: Schema.String,
-    continueFrom: Schema.optional(Schema.String),
-  }),
-  success: DispatchEventSchema,
-  error: RpcError,
-});
-
-/** List past dispatches with optional limit. */
-export const ListDispatches = Rpc.make("listDispatches", {
-  payload: Schema.Struct({
-    limit: Schema.optional(Schema.Number),
-  }),
-  success: Schema.Array(DispatchSummarySchema),
-  error: RpcError,
-});
-
-/** Get the message history for a completed dispatch. */
-export const GetMessages = Rpc.make("getMessages", {
-  payload: Schema.Struct({
-    dispatchId: Schema.String,
-  }),
-  success: Schema.Array(MessageSchema),
-  error: RpcError,
-});
 
 /** Inject a user message into a running dispatch. */
 export const Inject = Rpc.make("inject", {
@@ -113,15 +77,7 @@ export const GetCapsuleEvents = Rpc.make("getCapsuleEvents", {
 /** Get active dispatch status. */
 export const Status = Rpc.make("status", {
   payload: Schema.Void,
-  success: Schema.Array(
-    Schema.Struct({
-      dispatchId: Schema.String,
-      name: Schema.String,
-      iteration: Schema.Number,
-      state: Schema.Literals(["running", "done", "failed"]),
-      usage: UsageSchema,
-    }),
-  ),
+  success: Schema.Array(DispatchSessionSchema),
   error: RpcError,
 });
 
@@ -174,6 +130,15 @@ export const ListRuntimeDispatches = Rpc.make("listRuntimeDispatches", {
   error: RpcError,
 });
 
+/** Read the mission-scoped runtime work tree. */
+export const GetMissionWorkTree = Rpc.make("getMissionWorkTree", {
+  payload: Schema.Struct({
+    missionId: Schema.String,
+  }),
+  success: Schema.Array(WorkNodeSessionSchema),
+  error: RpcError,
+});
+
 /** Get capsule events by dispatch identity. */
 export const GetDispatchCapsuleEvents = Rpc.make("getDispatchCapsuleEvents", {
   payload: Schema.Struct({
@@ -198,9 +163,6 @@ export const StartResearchPoc = Rpc.make("startResearchPoc", {
 // ---------------------------------------------------------------------------
 
 export const TheseusRpc = RpcGroup.make(
-  Dispatch,
-  ListDispatches,
-  GetMessages,
   Inject,
   Interrupt,
   GetResult,
@@ -211,6 +173,7 @@ export const TheseusRpc = RpcGroup.make(
   ListMissions,
   GetMission,
   ListRuntimeDispatches,
+  GetMissionWorkTree,
   GetDispatchCapsuleEvents,
   StartResearchPoc,
 );

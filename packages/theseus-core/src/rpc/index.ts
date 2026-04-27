@@ -3,23 +3,21 @@
  *
  *   import * as Rpc from "@theseus.run/core/Rpc"
  *
- *   Rpc.TheseusRpc       // RpcGroup — full API surface
- *   Rpc.Dispatch          // streaming dispatch procedure
- *   Rpc.ListDispatches    // query procedure
+ *   Rpc.TheseusRpc                 // RpcGroup — full API surface
+ *   Rpc.StartMissionDispatch       // streaming runtime dispatch procedure
+ *   Rpc.ListRuntimeDispatches      // runtime dispatch session query
  *   ...
  */
 
 export {
   CreateMission,
-  Dispatch,
   GetCapsuleEvents,
   GetDispatchCapsuleEvents,
-  GetMessages,
   GetMission,
+  GetMissionWorkTree,
   GetResult,
   Inject,
   Interrupt,
-  ListDispatches,
   ListMissions,
   ListRuntimeDispatches,
   RpcError,
@@ -35,12 +33,11 @@ export {
   DispatchOutputSchema,
   DispatchSessionSchema,
   DispatchSpecSchema,
-  DispatchSummarySchema,
-  MessageSchema,
   MissionSessionSchema,
   ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
   SerializedToolCallErrorSchema,
   SerializedToolRefSchema,
   UsageSchema,
+  WorkNodeSessionSchema,
 } from "./schemas.ts";

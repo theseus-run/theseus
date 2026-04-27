@@ -22,6 +22,15 @@ export type RuntimeError = RuntimeToolNotFound | RuntimeNotFound | RuntimeDispat
 
 export type MissionSessionState = "pending" | "running" | "done" | "failed";
 export type DispatchSessionState = "running" | "done" | "failed";
+export type WorkNodeKind = "dispatch" | "task" | "external";
+export type WorkNodeRelation =
+  | "root"
+  | "delegated"
+  | "continued"
+  | "branched"
+  | "prepared"
+  | "spawned";
+export type WorkNodeState = "pending" | "running" | "done" | "failed";
 
 export interface MissionSession {
   readonly missionId: string;
@@ -31,11 +40,22 @@ export interface MissionSession {
   readonly state: MissionSessionState;
 }
 
-export interface DispatchSession {
-  readonly dispatchId: string;
-  readonly parentDispatchId?: string;
+export interface WorkNodeSession {
+  readonly workNodeId: string;
   readonly missionId: string;
   readonly capsuleId: string;
+  readonly parentWorkNodeId?: string;
+  readonly kind: WorkNodeKind;
+  readonly relation: WorkNodeRelation;
+  readonly label: string;
+  readonly state: WorkNodeState;
+  readonly startedAt?: number;
+  readonly completedAt?: number;
+}
+
+export interface DispatchSession extends WorkNodeSession {
+  readonly kind: "dispatch";
+  readonly dispatchId: string;
   readonly name: string;
   readonly modelRequest?: Dispatch.ModelRequest;
   readonly iteration: number;
@@ -49,6 +69,8 @@ export interface MissionDispatchInput {
   readonly spec: SerializedDispatchSpec;
   readonly task: string;
   readonly continueFrom?: string | undefined;
+  readonly parentWorkNodeId?: string | undefined;
+  readonly relation?: WorkNodeRelation | undefined;
 }
 
 export interface MissionCreateInput {
@@ -73,11 +95,16 @@ export type RuntimeCommand =
 
 export type RuntimeDispatchEvent =
   | {
+      readonly _tag: "WorkNodeStarted";
+      readonly node: WorkNodeSession;
+    }
+  | {
       readonly _tag: "DispatchSessionStarted";
       readonly session: DispatchSession;
     }
   | {
       readonly _tag: "DispatchEvent";
+      readonly workNodeId: string;
       readonly dispatchId: string;
       readonly missionId: string;
       readonly capsuleId: string;
@@ -119,8 +146,8 @@ export type RuntimeQuery =
       readonly options?: { readonly limit?: number };
     }
   | {
-      readonly _tag: "DispatchMessages";
-      readonly dispatchId: string;
+      readonly _tag: "MissionWorkTree";
+      readonly missionId: string;
     }
   | {
       readonly _tag: "DispatchResult";
@@ -152,8 +179,8 @@ export type RuntimeQueryResult =
       readonly dispatches: ReadonlyArray<DispatchSession>;
     }
   | {
-      readonly _tag: "DispatchMessages";
-      readonly messages: ReadonlyArray<{ readonly role: string; readonly content: string }>;
+      readonly _tag: "MissionWorkTree";
+      readonly nodes: ReadonlyArray<WorkNodeSession>;
     }
   | {
       readonly _tag: "DispatchResult";

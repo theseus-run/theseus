@@ -12,15 +12,6 @@ import { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
 export { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
 
 // ---------------------------------------------------------------------------
-// Shared primitives
-// ---------------------------------------------------------------------------
-
-export const MessageSchema = Schema.Struct({
-  role: Schema.String,
-  content: Schema.String,
-});
-
-// ---------------------------------------------------------------------------
 // DispatchSpec (serialized — tool references, not implementations)
 // ---------------------------------------------------------------------------
 
@@ -134,37 +125,6 @@ export const DispatchEventSchema = Schema.Union([
 ]);
 
 // ---------------------------------------------------------------------------
-// DispatchSummary (query result for list)
-// ---------------------------------------------------------------------------
-
-export const DispatchSummarySchema = Schema.Struct({
-  dispatchId: Schema.String,
-  parentDispatchId: Schema.optional(Schema.String),
-  modelRequest: Schema.optional(
-    Schema.Union([
-      Schema.Struct({
-        provider: Schema.Literal("openai"),
-        model: Schema.String,
-        maxOutputTokens: Schema.optional(Schema.Number),
-        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
-        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
-      }),
-      Schema.Struct({
-        provider: Schema.Literal("copilot"),
-        model: Schema.String,
-        maxTokens: Schema.optional(Schema.Number),
-      }),
-    ]),
-  ),
-  name: Schema.String,
-  task: Schema.String,
-  startedAt: Schema.Number,
-  completedAt: Schema.NullOr(Schema.Number),
-  status: Schema.Literals(["running", "done", "failed"]),
-  usage: UsageSchema,
-});
-
-// ---------------------------------------------------------------------------
 // Runtime mission / dispatch sessions
 // ---------------------------------------------------------------------------
 
@@ -176,11 +136,23 @@ export const MissionSessionSchema = Schema.Struct({
   state: Schema.Literals(["pending", "running", "done", "failed"]),
 });
 
-export const DispatchSessionSchema = Schema.Struct({
-  dispatchId: Schema.String,
-  parentDispatchId: Schema.optional(Schema.String),
+export const WorkNodeSessionSchema = Schema.Struct({
+  workNodeId: Schema.String,
   missionId: Schema.String,
   capsuleId: Schema.String,
+  parentWorkNodeId: Schema.optional(Schema.String),
+  kind: Schema.Literals(["dispatch", "task", "external"]),
+  relation: Schema.Literals(["root", "delegated", "continued", "branched", "prepared", "spawned"]),
+  label: Schema.String,
+  state: Schema.Literals(["pending", "running", "done", "failed"]),
+  startedAt: Schema.optional(Schema.Number),
+  completedAt: Schema.optional(Schema.Number),
+});
+
+export const DispatchSessionSchema = Schema.Struct({
+  ...WorkNodeSessionSchema.fields,
+  kind: Schema.Literal("dispatch"),
+  dispatchId: Schema.String,
   name: Schema.String,
   modelRequest: Schema.optional(
     Schema.Union([
@@ -204,10 +176,14 @@ export const DispatchSessionSchema = Schema.Struct({
 });
 
 export const RuntimeDispatchEventSchema = Schema.Union([
+  Schema.TaggedStruct("WorkNodeStarted", {
+    node: WorkNodeSessionSchema,
+  }),
   Schema.TaggedStruct("DispatchSessionStarted", {
     session: DispatchSessionSchema,
   }),
   Schema.TaggedStruct("DispatchEvent", {
+    workNodeId: Schema.String,
     dispatchId: Schema.String,
     missionId: Schema.String,
     capsuleId: Schema.String,

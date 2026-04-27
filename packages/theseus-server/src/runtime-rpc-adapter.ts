@@ -10,6 +10,7 @@ import {
   type RuntimeError,
   RuntimeQueries,
   TheseusRuntime,
+  type WorkNodeSession,
 } from "@theseus.run/runtime";
 import { Context, Effect, Stream as EffectStream, Layer, type Stream } from "effect";
 import { researchPocCoordinatorSpec } from "./poc/research.ts";
@@ -33,12 +34,9 @@ export interface RuntimeRpcAdapterService {
   readonly listRuntimeDispatches: (options?: {
     readonly limit?: number;
   }) => Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeError>;
-  readonly getMessages: (
-    dispatchId: string,
-  ) => Effect.Effect<
-    ReadonlyArray<{ readonly role: string; readonly content: string }>,
-    RuntimeError
-  >;
+  readonly getMissionWorkTree: (
+    missionId: string,
+  ) => Effect.Effect<ReadonlyArray<WorkNodeSession>, RuntimeError>;
   readonly getResult: (dispatchId: string) => Effect.Effect<Dispatch.DispatchOutput, RuntimeError>;
   readonly getCapsuleEvents: (
     capsuleId: string,
@@ -67,8 +65,8 @@ export const RuntimeRpcAdapterLive = Layer.effect(RuntimeRpcAdapter)(
       startMissionDispatch: (input) => RuntimeCommands.startMissionDispatch(runtime, input),
       listMissions: () => RuntimeQueries.listMissions(runtime),
       getMission: (missionId) => RuntimeQueries.getMission(runtime, missionId),
-      listRuntimeDispatches: (options) => RuntimeQueries.listDispatches(runtime, options),
-      getMessages: (dispatchId) => RuntimeQueries.getMessages(runtime, dispatchId),
+      listRuntimeDispatches: (options) => RuntimeQueries.listRuntimeDispatches(runtime, options),
+      getMissionWorkTree: (missionId) => RuntimeQueries.getMissionWorkTree(runtime, missionId),
       getResult: (dispatchId) => RuntimeQueries.getResult(runtime, dispatchId),
       getCapsuleEvents: (capsuleId) => RuntimeQueries.getCapsuleEvents(runtime, capsuleId),
       getDispatchCapsuleEvents: (dispatchId) =>

@@ -33,7 +33,6 @@ const indexRoute = createRoute({
 // ---------------------------------------------------------------------------
 
 import { NewMissionPage } from "./routes/missions/new";
-import { RuntimePocPage } from "./routes/poc";
 import { RuntimeTreePocPage } from "./routes/poc-tree";
 
 const newMissionRoute = createRoute({
@@ -43,15 +42,6 @@ const newMissionRoute = createRoute({
 });
 
 // ---------------------------------------------------------------------------
-// /poc
-// ---------------------------------------------------------------------------
-
-const runtimePocRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/poc",
-  component: RuntimePocPage,
-});
-
 const runtimeTreePocRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/poc-tree",
@@ -88,7 +78,6 @@ const missionDefineRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  runtimePocRoute,
   runtimeTreePocRoute,
   newMissionRoute,
   missionDefineRoute,

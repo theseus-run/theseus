@@ -4,9 +4,13 @@ import { Effect, Layer, Stream } from "effect";
 import { RuntimeRpcAdapter, RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
 const session = {
+  workNodeId: "work-1",
   dispatchId: "dispatch-1",
   missionId: "mission-1",
   capsuleId: "capsule-1",
+  kind: "dispatch",
+  relation: "root",
+  label: "coordinator",
   name: "coordinator",
   iteration: 0,
   state: "running",
@@ -39,6 +43,9 @@ const fakeRuntime: TheseusRuntimeService = {
     }
     if (query._tag === "DispatchList") {
       return Effect.succeed({ _tag: "DispatchList", dispatches: [session] });
+    }
+    if (query._tag === "MissionWorkTree") {
+      return Effect.succeed({ _tag: "MissionWorkTree", nodes: [session] });
     }
     return Effect.die("unexpected query");
   },
@@ -91,6 +98,17 @@ describe("RuntimeRpcAdapter", () => {
     );
 
     expect(listed).toEqual({ missions: [mission], dispatches: [session] });
+  });
+
+  test("reads the mission work tree through the runtime contract", async () => {
+    const nodes = await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* RuntimeRpcAdapter;
+        return yield* adapter.getMissionWorkTree("mission-1");
+      }).pipe(Effect.provide(TestLayer)),
+    );
+
+    expect(nodes).toEqual([session]);
   });
 
   test("starts the server-owned research POC without caller-supplied tools", async () => {

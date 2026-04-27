@@ -5,7 +5,13 @@
  * theseus_report         — terminal protocol report packet
  */
 
-export { DispatchGruntFailed, dispatchGruntTool } from "./dispatch-grunt.tsx";
+export type { DispatchGruntLaunchInput } from "./dispatch-grunt.tsx";
+export {
+  DispatchGruntFailed,
+  DispatchGruntLauncher,
+  DispatchGruntLauncherLive,
+  dispatchGruntTool,
+} from "./dispatch-grunt.tsx";
 export type { ProtocolEnvelope } from "./envelope.ts";
 export { ProtocolEnvelopeSchema } from "./envelope.ts";
 export type { Authority, Bounds, ContextBlock, DispatchGruntInput, Order } from "./order.ts";

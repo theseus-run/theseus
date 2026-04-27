@@ -34,9 +34,13 @@ describe("runtime RPC schemas", () => {
   test("DispatchSessionSchema includes mission and capsule identity", async () => {
     const decoded = await Effect.runPromise(
       Schema.decodeUnknownEffect(DispatchSessionSchema)({
+        workNodeId: "work-1",
         dispatchId: "dispatch-1",
         missionId: "mission-1",
         capsuleId: "capsule-1",
+        kind: "dispatch",
+        relation: "root",
+        label: "coordinator",
         name: "coordinator",
         iteration: 2,
         state: "running",
@@ -55,9 +59,13 @@ describe("runtime RPC schemas", () => {
     const started = {
       _tag: "DispatchSessionStarted",
       session: {
+        workNodeId: "work-1",
         dispatchId: "dispatch-1",
         missionId: "mission-1",
         capsuleId: "capsule-1",
+        kind: "dispatch",
+        relation: "root",
+        label: "coordinator",
         name: "coordinator",
         iteration: 0,
         state: "running",
@@ -66,6 +74,7 @@ describe("runtime RPC schemas", () => {
     } as const;
     const wrapped = {
       _tag: "DispatchEvent",
+      workNodeId: "work-1",
       dispatchId: "dispatch-1",
       missionId: "mission-1",
       capsuleId: "capsule-1",

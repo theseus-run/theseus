@@ -7,7 +7,6 @@
 
 import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
 import type {
-  RuntimeDispatchEvent,
   RuntimeDispatchFailed,
   RuntimeNotFound,
   RuntimeToolNotFound,
@@ -15,7 +14,7 @@ import type {
 import { Effect, Match, Stream } from "effect";
 import type { ResearchPocEvent } from "./runtime-rpc-adapter.ts";
 import { RuntimeRpcAdapter } from "./runtime-rpc-adapter.ts";
-import { serializeEvent, serializeRuntimeEvent } from "./serialize.ts";
+import { serializeRuntimeEvent } from "./serialize.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,11 +38,6 @@ const toRpcError = (error: RuntimeToolNotFound | RuntimeNotFound | RuntimeDispat
     Match.exhaustive,
   );
 
-const isWrappedDispatchEvent = (
-  event: RuntimeDispatchEvent,
-): event is Extract<RuntimeDispatchEvent, { readonly _tag: "DispatchEvent" }> =>
-  event._tag === "DispatchEvent";
-
 const startInput = <Input extends { readonly continueFrom?: string | undefined }>(
   input: Input,
 ): Omit<Input, "continueFrom"> | Input => {
@@ -66,61 +60,6 @@ const serializeResearchPocEvent = (event: ResearchPocEvent): unknown =>
 // ---------------------------------------------------------------------------
 
 export const HandlersLive = TheseusRpc.toLayer({
-  dispatch: ({ spec: bp, task, continueFrom }) =>
-    streamRpcHandler(
-      Effect.gen(function* () {
-        const adapter = yield* RuntimeRpcAdapter;
-        const mission = yield* adapter
-          .createMission({
-            slug: bp.name,
-            goal: task,
-            criteria: [],
-          })
-          .pipe(Effect.mapError(toRpcError));
-        const started = yield* adapter
-          .startMissionDispatch(
-            startInput({
-              missionId: mission.missionId,
-              spec: bp,
-              task,
-              continueFrom,
-            }),
-          )
-          .pipe(Effect.mapError(toRpcError));
-        return started.events.pipe(
-          Stream.filter(isWrappedDispatchEvent),
-          Stream.map((event) => serializeEvent(event.event)),
-        );
-      }),
-    ),
-
-  listDispatches: ({ limit }) =>
-    Effect.gen(function* () {
-      const adapter = yield* RuntimeRpcAdapter;
-      const sessions = yield* adapter
-        .listRuntimeDispatches(limit !== undefined ? { limit } : undefined)
-        .pipe(Effect.mapError(toRpcError));
-      return sessions.map((session) => ({
-        dispatchId: session.dispatchId,
-        ...(session.parentDispatchId !== undefined
-          ? { parentDispatchId: session.parentDispatchId }
-          : {}),
-        ...(session.modelRequest !== undefined ? { modelRequest: session.modelRequest } : {}),
-        name: session.name,
-        task: "",
-        startedAt: 0,
-        completedAt: session.state === "running" ? null : 0,
-        status: session.state,
-        usage: session.usage,
-      }));
-    }),
-
-  getMessages: ({ dispatchId }) =>
-    Effect.gen(function* () {
-      const adapter = yield* RuntimeRpcAdapter;
-      return yield* adapter.getMessages(dispatchId).pipe(Effect.mapError(toRpcError));
-    }),
-
   inject: ({ dispatchId, text }) =>
     Effect.gen(function* () {
       const adapter = yield* RuntimeRpcAdapter;
@@ -187,6 +126,12 @@ export const HandlersLive = TheseusRpc.toLayer({
       return yield* adapter
         .listRuntimeDispatches(limit !== undefined ? { limit } : undefined)
         .pipe(Effect.mapError(toRpcError));
+    }),
+
+  getMissionWorkTree: ({ missionId }) =>
+    Effect.gen(function* () {
+      const adapter = yield* RuntimeRpcAdapter;
+      return yield* adapter.getMissionWorkTree(missionId).pipe(Effect.mapError(toRpcError));
     }),
 
   getDispatchCapsuleEvents: ({ dispatchId }) =>

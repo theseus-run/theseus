@@ -47,4 +47,11 @@ export {
 
 // Tools
 
-export { DispatchGruntFailed, dispatchGruntTool, report } from "./agent-comm/index.ts";
+export type { DispatchGruntLaunchInput } from "./agent-comm/index.ts";
+export {
+  DispatchGruntFailed,
+  DispatchGruntLauncher,
+  DispatchGruntLauncherLive,
+  dispatchGruntTool,
+  report,
+} from "./agent-comm/index.ts";

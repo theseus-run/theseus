@@ -109,11 +109,19 @@ export function RuntimeTreePocPage() {
         return;
       }
 
+      if (event._tag === "WorkNodeStarted") {
+        append(`${event.node.relation} ${event.node.kind} ${event.node.label}`);
+        return;
+      }
+
       if (event._tag === "DispatchSessionStarted") {
-        coordinatorId.current = event.session.dispatchId;
-        setCoordinator(event.session);
+        const isRoot = event.session.relation === "root";
+        if (isRoot) {
+          coordinatorId.current = event.session.dispatchId;
+          setCoordinator(event.session);
+        }
         setDispatches((prev) => [event.session, ...prev]);
-        append(`coordinator ${event.session.dispatchId}`);
+        append(`${isRoot ? "coordinator" : "dispatch"} ${event.session.dispatchId}`);
         return;
       }
 
@@ -163,7 +171,7 @@ export function RuntimeTreePocPage() {
   }, [append, clear, goal, handleEvent, refreshDispatches, running]);
 
   const gruntSession = dispatches.find(
-    (session) => session.parentDispatchId === coordinator?.dispatchId,
+    (session) => session.parentWorkNodeId === coordinator?.workNodeId,
   );
 
   const tree: TreeNode | null =

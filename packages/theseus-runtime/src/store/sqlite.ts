@@ -81,18 +81,31 @@ const SCHEMA = `
     PRIMARY KEY (capsule_id, name)
   );
 
-  -- Runtime session links. Mission state remains capsule-backed; these tables
-  -- only make identity joins cheap and unambiguous.
+  -- Runtime projections. Mission state remains capsule-backed; these tables
+  -- make mission/capsule and work-tree identity joins cheap and unambiguous.
   CREATE TABLE IF NOT EXISTS runtime_mission_capsules (
     mission_id TEXT PRIMARY KEY,
     capsule_id TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS runtime_dispatch_sessions (
-    dispatch_id TEXT PRIMARY KEY,
+  CREATE TABLE IF NOT EXISTS runtime_work_nodes (
+    work_node_id TEXT PRIMARY KEY,
     mission_id TEXT NOT NULL,
-    capsule_id TEXT NOT NULL
+    capsule_id TEXT NOT NULL,
+    parent_work_node_id TEXT,
+    kind TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    label TEXT NOT NULL,
+    state TEXT NOT NULL,
+    started_at INTEGER,
+    completed_at INTEGER,
+    dispatch_id TEXT UNIQUE,
+    model_request_json TEXT,
+    iteration INTEGER NOT NULL DEFAULT 0,
+    usage_json TEXT NOT NULL
   );
+  CREATE INDEX IF NOT EXISTS idx_runtime_work_nodes_mission ON runtime_work_nodes(mission_id);
+  CREATE INDEX IF NOT EXISTS idx_runtime_work_nodes_dispatch ON runtime_work_nodes(dispatch_id);
 `;
 
 const ensureColumn = (db: Database, table: string, column: string, definition: string): void => {

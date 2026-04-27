@@ -15,9 +15,13 @@ import type { StatusEntry } from "./runtime/types.ts";
 
 interface RegistryEntry {
   readonly handle: Dispatch.DispatchHandle;
+  readonly workNodeId: string;
   readonly missionId: string;
   readonly capsuleId: string;
+  readonly parentWorkNodeId?: string;
+  readonly relation: StatusEntry["relation"];
   readonly name: string;
+  readonly modelRequest?: StatusEntry["modelRequest"];
   readonly startedAt: number;
   iteration: number;
   usage: Dispatch.Usage;
@@ -33,7 +37,16 @@ export class DispatchRegistry extends Context.Service<
   {
     readonly register: (
       handle: Dispatch.DispatchHandle,
-      session: Pick<StatusEntry, "missionId" | "capsuleId" | "name">,
+      session: Pick<
+        StatusEntry,
+        | "workNodeId"
+        | "missionId"
+        | "capsuleId"
+        | "parentWorkNodeId"
+        | "relation"
+        | "name"
+        | "modelRequest"
+      >,
     ) => Effect.Effect<void>;
     readonly get: (dispatchId: string) => Effect.Effect<Dispatch.DispatchHandle | null>;
     readonly remove: (dispatchId: string) => Effect.Effect<void>;
@@ -55,7 +68,16 @@ export const DispatchRegistryLive = Effect.gen(function* () {
   return {
     register: (
       handle: Dispatch.DispatchHandle,
-      session: Pick<StatusEntry, "missionId" | "capsuleId" | "name">,
+      session: Pick<
+        StatusEntry,
+        | "workNodeId"
+        | "missionId"
+        | "capsuleId"
+        | "parentWorkNodeId"
+        | "relation"
+        | "name"
+        | "modelRequest"
+      >,
     ) =>
       Effect.gen(function* () {
         const startedAt = yield* Clock.currentTimeMillis;
@@ -63,9 +85,15 @@ export const DispatchRegistryLive = Effect.gen(function* () {
           const next = new Map(m);
           next.set(handle.dispatchId, {
             handle,
+            workNodeId: session.workNodeId,
             missionId: session.missionId,
             capsuleId: session.capsuleId,
+            ...(session.parentWorkNodeId !== undefined
+              ? { parentWorkNodeId: session.parentWorkNodeId }
+              : {}),
+            relation: session.relation,
             name: session.name,
+            ...(session.modelRequest !== undefined ? { modelRequest: session.modelRequest } : {}),
             startedAt,
             iteration: 0,
             usage: { inputTokens: 0, outputTokens: 0 },
@@ -108,12 +136,19 @@ export const DispatchRegistryLive = Effect.gen(function* () {
           Array.from(m.values()).map(
             (e): StatusEntry => ({
               dispatchId: e.handle.dispatchId,
+              workNodeId: e.workNodeId,
               missionId: e.missionId,
               capsuleId: e.capsuleId,
+              ...(e.parentWorkNodeId !== undefined ? { parentWorkNodeId: e.parentWorkNodeId } : {}),
+              kind: "dispatch",
+              relation: e.relation,
+              label: e.name,
               name: e.name,
+              ...(e.modelRequest !== undefined ? { modelRequest: e.modelRequest } : {}),
               iteration: e.iteration,
               state: e.state,
               usage: e.usage,
+              startedAt: e.startedAt,
             }),
           ),
         ),

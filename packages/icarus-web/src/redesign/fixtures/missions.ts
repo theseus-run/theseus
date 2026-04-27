@@ -54,7 +54,7 @@ export const missions: Mission[] = [
       {
         stamp: "08:55",
         label: "audit",
-        detail: "Collected current prompt-kit patterns from legacy app.",
+        detail: "Collected current runtime UI interaction patterns.",
       },
       {
         stamp: "09:03",

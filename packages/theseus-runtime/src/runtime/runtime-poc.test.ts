@@ -151,7 +151,8 @@ describe("TheseusRuntime POC", () => {
         const eventsFiber = yield* collectRuntimeEvents(started.events).pipe(Effect.forkChild);
         const result = yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
         const events = yield* Fiber.join(eventsFiber);
-        const dispatches = yield* RuntimeQueries.listDispatches(runtime);
+        const dispatches = yield* RuntimeQueries.listRuntimeDispatches(runtime);
+        const workTree = yield* RuntimeQueries.getMissionWorkTree(runtime, mission.missionId);
         const missions = yield* RuntimeQueries.listMissions(runtime);
         const capsuleEvents = yield* RuntimeQueries.getCapsuleEvents(runtime, mission.capsuleId);
         const dispatchCapsuleEvents = yield* RuntimeQueries.getDispatchCapsuleEvents(
@@ -164,6 +165,7 @@ describe("TheseusRuntime POC", () => {
           result,
           events,
           dispatches,
+          workTree,
           missions,
           capsuleEvents,
           dispatchCapsuleEvents,
@@ -174,13 +176,16 @@ describe("TheseusRuntime POC", () => {
     expect(observed.result.content).toBe("coordinator final");
     expect(observed.session.missionId).toBe(observed.mission.missionId);
     expect(observed.session.capsuleId).toBe(observed.mission.capsuleId);
-    expect(observed.events[0]?._tag).toBe("DispatchSessionStarted");
+    expect(observed.events[0]?._tag).toBe("WorkNodeStarted");
+    expect(observed.events[1]?._tag).toBe("DispatchSessionStarted");
     expect(observed.events.some((event) => event._tag === "DispatchEvent")).toBe(true);
     expect(observed.dispatches[0]?.missionId).toBe(observed.mission.missionId);
     expect(observed.dispatches[0]?.capsuleId).toBe(observed.mission.capsuleId);
-    expect(observed.dispatches.map((session) => session.parentDispatchId)).toContain(
-      observed.session.dispatchId,
+    expect(observed.dispatches.map((session) => session.parentWorkNodeId)).toContain(
+      observed.session.workNodeId,
     );
+    expect(observed.workTree.map((node) => node.workNodeId)).toContain(observed.session.workNodeId);
+    expect(observed.workTree.map((node) => node.relation)).toContain("delegated");
     expect(observed.dispatches.map((session) => session.modelRequest?.model)).toContain("gpt-5.5");
     expect(observed.dispatches.map((session) => session.modelRequest?.model)).toContain(
       "gpt-5.3-codex-spark",

@@ -1,11 +1,8 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
-import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Effect } from "effect";
 import { decodeJson } from "../../../json.ts";
 import type { TheseusDb } from "../../../store/sqlite.ts";
-import type { DispatchSession, MissionSession, MissionSessionState } from "../../types.ts";
-
-const emptyUsage: Dispatch.Usage = { inputTokens: 0, outputTokens: 0 };
+import type { MissionSession, MissionSessionState } from "../../types.ts";
 
 interface MissionCreateData {
   readonly id?: string;
@@ -84,18 +81,6 @@ export const recordMissionCapsule = (
       .run(missionId, capsuleId);
   });
 
-export const recordDispatchSession = (
-  db: (typeof TheseusDb)["Service"],
-  session: Pick<DispatchSession, "dispatchId" | "missionId" | "capsuleId">,
-): Effect.Effect<void> =>
-  Effect.sync(() => {
-    db.db
-      .prepare(
-        "INSERT INTO runtime_dispatch_sessions (dispatch_id, mission_id, capsule_id) VALUES (?, ?, ?) ON CONFLICT(dispatch_id) DO UPDATE SET mission_id = excluded.mission_id, capsule_id = excluded.capsule_id",
-      )
-      .run(session.dispatchId, session.missionId, session.capsuleId);
-  });
-
 export const getMissionCapsuleId = (
   db: (typeof TheseusDb)["Service"],
   missionId: string,
@@ -105,32 +90,6 @@ export const getMissionCapsuleId = (
       .prepare("SELECT capsule_id FROM runtime_mission_capsules WHERE mission_id = ?")
       .get(missionId) as { capsule_id: string } | null;
     return row?.capsule_id;
-  });
-
-export const getDispatchSessionLink = (
-  db: (typeof TheseusDb)["Service"],
-  dispatchId: string,
-): Effect.Effect<{ readonly missionId: string; readonly capsuleId: string } | undefined> =>
-  Effect.sync(() => {
-    const row = db.db
-      .prepare("SELECT mission_id, capsule_id FROM runtime_dispatch_sessions WHERE dispatch_id = ?")
-      .get(dispatchId) as { mission_id: string; capsule_id: string } | null;
-    return row ? { missionId: row.mission_id, capsuleId: row.capsule_id } : undefined;
-  });
-
-export const getDispatchSessionLinks = (
-  db: (typeof TheseusDb)["Service"],
-): Effect.Effect<ReadonlyMap<string, { readonly missionId: string; readonly capsuleId: string }>> =>
-  Effect.sync(() => {
-    const rows = db.db
-      .prepare("SELECT dispatch_id, mission_id, capsule_id FROM runtime_dispatch_sessions")
-      .all() as Array<{ dispatch_id: string; mission_id: string; capsule_id: string }>;
-    return new Map(
-      rows.map((row) => [
-        row.dispatch_id,
-        { missionId: row.mission_id, capsuleId: row.capsule_id },
-      ]),
-    );
   });
 
 export const readMissionSession = (
@@ -193,18 +152,3 @@ export const listMissionSessions = (
       return session ? [session] : [];
     });
   });
-
-export const toDispatchSession = (
-  summary: Dispatch.DispatchSummary,
-  link: { readonly missionId: string; readonly capsuleId: string },
-): DispatchSession => ({
-  dispatchId: summary.dispatchId,
-  ...(summary.parentDispatchId !== undefined ? { parentDispatchId: summary.parentDispatchId } : {}),
-  missionId: link.missionId,
-  capsuleId: link.capsuleId,
-  name: summary.name,
-  ...(summary.modelRequest !== undefined ? { modelRequest: summary.modelRequest } : {}),
-  iteration: 0,
-  state: summary.status,
-  usage: summary.usage ?? emptyUsage,
-});

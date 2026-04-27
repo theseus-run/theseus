@@ -9,27 +9,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { client } from "./client";
 
 // ---------------------------------------------------------------------------
-// Dispatches (existing, will be replaced by missions)
-// ---------------------------------------------------------------------------
-
-export const dispatches = {
-  list: (limit?: number) =>
-    queryOptions({
-      queryKey: ["dispatches", { limit }],
-      queryFn: () => client.listDispatches(limit),
-      staleTime: 10_000,
-    }),
-
-  messages: (dispatchId: string) =>
-    queryOptions({
-      queryKey: ["dispatches", dispatchId, "messages"],
-      queryFn: () => client.getMessages(dispatchId),
-      enabled: !!dispatchId,
-    }),
-};
-
-// ---------------------------------------------------------------------------
-// Missions (stub — server doesn't have these RPCs yet)
+// Missions
 // ---------------------------------------------------------------------------
 
 export interface MissionSummary {
@@ -62,7 +42,7 @@ export interface Mission {
   closedReason?: string;
 }
 
-// Stub data for UI development — replace with real RPCs
+// Redesign fixture data. The runtime-bound POC path lives in /poc-tree.
 const STUB_MISSIONS: MissionSummary[] = [
   {
     id: "m-1",
@@ -124,7 +104,6 @@ export const missions = {
     queryOptions({
       queryKey: ["missions"],
       queryFn: (): MissionSummary[] => {
-        // TODO: replace with client.listMissions() when RPC exists
         return STUB_MISSIONS;
       },
       staleTime: 5_000,
@@ -134,7 +113,6 @@ export const missions = {
     queryOptions({
       queryKey: ["missions", missionId],
       queryFn: (): Mission => {
-        // TODO: replace with client.getMission(missionId) when RPC exists
         return { ...STUB_MISSION_DETAIL, id: missionId };
       },
       enabled: !!missionId,

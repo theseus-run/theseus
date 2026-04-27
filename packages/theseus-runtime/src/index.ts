@@ -29,6 +29,10 @@ export type {
   RuntimeSubmission,
   StatusEntry,
   TheseusRuntimeService,
+  WorkNodeKind,
+  WorkNodeRelation,
+  WorkNodeSession,
+  WorkNodeState,
 } from "./runtime/types.ts";
 
 export {

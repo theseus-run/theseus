@@ -10,6 +10,7 @@ import type {
   RuntimeError,
   StatusEntry,
   TheseusRuntimeService,
+  WorkNodeSession,
 } from "./types.ts";
 
 const unexpectedQueryResult = Effect.die("Runtime query returned unexpected result");
@@ -88,7 +89,7 @@ export const RuntimeQueries = {
       ),
     ),
 
-  listDispatches: (
+  listRuntimeDispatches: (
     runtime: TheseusRuntimeService,
     options?: { readonly limit?: number },
   ): Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeError> =>
@@ -103,17 +104,14 @@ export const RuntimeQueries = {
         ),
       ),
 
-  getMessages: (
+  getMissionWorkTree: (
     runtime: TheseusRuntimeService,
-    dispatchId: string,
-  ): Effect.Effect<
-    ReadonlyArray<{ readonly role: string; readonly content: string }>,
-    RuntimeError
-  > =>
-    runtime.query({ _tag: "DispatchMessages", dispatchId }).pipe(
+    missionId: string,
+  ): Effect.Effect<ReadonlyArray<WorkNodeSession>, RuntimeError> =>
+    runtime.query({ _tag: "MissionWorkTree", missionId }).pipe(
       Effect.flatMap((result) =>
         Match.value(result).pipe(
-          Match.tag("DispatchMessages", ({ messages }) => Effect.succeed(messages)),
+          Match.tag("MissionWorkTree", ({ nodes }) => Effect.succeed(nodes)),
           Match.orElse(() => unexpectedQueryResult),
         ),
       ),

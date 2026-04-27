@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-router";
 import { StatusMark } from "@/components/ui/status-mark";
 import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
-import { RuntimePocPage } from "@/routes/poc";
 import { RuntimeTreePocPage } from "@/routes/poc-tree";
 import { DashboardPage } from "./routes/dashboard-page";
 import { ShowcaseFieldsPage } from "./routes/showcase-fields-page";
@@ -47,9 +46,6 @@ function RedesignLayout() {
           </StatusStripItem>
           <StatusStripItem>
             <Link to="/showcase">showcase</Link>
-          </StatusStripItem>
-          <StatusStripItem>
-            <Link to="/poc">poc</Link>
           </StatusStripItem>
           <StatusStripItem>
             <Link to="/poc-tree">tree poc</Link>
@@ -99,12 +95,6 @@ const showcasePatternsRoute = createRoute({
   component: ShowcasePatternsPage,
 });
 
-const runtimePocRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/poc",
-  component: RuntimePocPage,
-});
-
 const runtimeTreePocRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/poc-tree",
@@ -118,7 +108,6 @@ const routeTree = rootRoute.addChildren([
   showcaseStatusRoute,
   showcaseFieldsRoute,
   showcasePatternsRoute,
-  runtimePocRoute,
   runtimeTreePocRoute,
 ]);
 

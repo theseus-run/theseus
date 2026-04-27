@@ -4,13 +4,12 @@ import { Effect, Match } from "effect";
 import { decodeJson } from "../json.ts";
 import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
+import { listMissionSessions, readMissionSession } from "./projections/session/store.ts";
 import {
-  getDispatchSessionLink,
-  getDispatchSessionLinks,
-  listMissionSessions,
-  readMissionSession,
-  toDispatchSession,
-} from "./projections/session/store.ts";
+  getDispatchWorkNode,
+  listDispatchSessions,
+  listWorkNodes,
+} from "./projections/work-tree/store.ts";
 import {
   type MissionSession,
   type RuntimeControl,
@@ -40,20 +39,6 @@ const getHandle = (
           : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
       ),
     );
-
-const dispatchMessages = (
-  store: (typeof Dispatch.DispatchStore)["Service"],
-  dispatchId: string,
-): Effect.Effect<ReadonlyArray<{ readonly role: string; readonly content: string }>> =>
-  store.restore(dispatchId).pipe(
-    Effect.map((restored) =>
-      (restored?.messages ?? []).map((message) => ({
-        role: String(message.role ?? ""),
-        content:
-          typeof message.content === "string" ? message.content : JSON.stringify(message.content),
-      })),
-    ),
-  );
 
 const dispatchFailureReason = (cause: Dispatch.DispatchError): string =>
   typeof cause === "object" && cause !== null && "_tag" in cause ? String(cause._tag) : "unknown";
@@ -117,70 +102,18 @@ const dispatchCapsuleEvents = (
   deps: RuntimeOperationsDeps,
   dispatchId: string,
 ): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeNotFound> =>
-  resolveDispatchSessionLink(deps, dispatchId).pipe(
-    Effect.flatMap((link) =>
-      link
-        ? capsuleEvents(deps.db, link.capsuleId)
+  getDispatchWorkNode(deps.db, dispatchId).pipe(
+    Effect.flatMap((session) =>
+      session
+        ? capsuleEvents(deps.db, session.capsuleId)
         : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
     ),
   );
 
-const resolveDispatchSessionLink = (
-  deps: RuntimeOperationsDeps,
-  dispatchId: string,
-): Effect.Effect<{ readonly missionId: string; readonly capsuleId: string } | undefined> =>
-  Effect.gen(function* () {
-    const direct = yield* getDispatchSessionLink(deps.db, dispatchId);
-    if (direct !== undefined) return direct;
-
-    const summaries = yield* deps.dispatchStore.list();
-    const byId = new Map(summaries.map((summary) => [summary.dispatchId, summary]));
-    const links = yield* getDispatchSessionLinks(deps.db);
-    let current = byId.get(dispatchId);
-
-    while (current?.parentDispatchId !== undefined) {
-      const parentLink = links.get(current.parentDispatchId);
-      if (parentLink !== undefined) return parentLink;
-      current = byId.get(current.parentDispatchId);
-    }
-
-    return undefined;
-  });
-
 const dispatchList = (
   deps: RuntimeOperationsDeps,
   options?: { readonly limit?: number },
-): Effect.Effect<ReadonlyArray<StatusEntry>> =>
-  Effect.gen(function* () {
-    const allSummaries = yield* deps.dispatchStore.list();
-    const summaries =
-      options?.limit === undefined ? allSummaries : allSummaries.slice(0, options.limit);
-    const links = yield* getDispatchSessionLinks(deps.db);
-    const byId = new Map(allSummaries.map((summary) => [summary.dispatchId, summary]));
-
-    const inheritedLink = (
-      summary: Dispatch.DispatchSummary,
-    ): { readonly missionId: string; readonly capsuleId: string } | undefined => {
-      const direct = links.get(summary.dispatchId);
-      if (direct !== undefined) return direct;
-
-      let current = summary;
-      while (current.parentDispatchId !== undefined) {
-        const parentLink = links.get(current.parentDispatchId);
-        if (parentLink !== undefined) return parentLink;
-        const parent = byId.get(current.parentDispatchId);
-        if (parent === undefined) return undefined;
-        current = parent;
-      }
-
-      return undefined;
-    };
-
-    return summaries.flatMap((summary) => {
-      const link = inheritedLink(summary);
-      return link ? [toDispatchSession(summary, link)] : [];
-    });
-  });
+): Effect.Effect<ReadonlyArray<StatusEntry>> => listDispatchSessions(deps.db, options);
 
 export const runRuntimeControl = (
   deps: RuntimeOperationsDeps,
@@ -227,9 +160,9 @@ export const runRuntimeQuery = (
         Effect.map((dispatches): RuntimeQueryResult => ({ _tag: "DispatchList", dispatches })),
       ),
     ),
-    Match.tag("DispatchMessages", ({ dispatchId }) =>
-      dispatchMessages(deps.dispatchStore, dispatchId).pipe(
-        Effect.map((messages): RuntimeQueryResult => ({ _tag: "DispatchMessages", messages })),
+    Match.tag("MissionWorkTree", ({ missionId }) =>
+      listWorkNodes(deps.db, { missionId }).pipe(
+        Effect.map((nodes): RuntimeQueryResult => ({ _tag: "MissionWorkTree", nodes })),
       ),
     ),
     Match.tag("DispatchResult", ({ dispatchId }) =>

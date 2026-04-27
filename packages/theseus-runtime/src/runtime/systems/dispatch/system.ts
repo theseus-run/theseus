@@ -1,14 +1,16 @@
 import * as Agent from "@theseus.run/core/Agent";
+import * as AgentComm from "@theseus.run/core/AgentComm";
 import * as CapsuleNs from "@theseus.run/core/Capsule";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
-import { Cause, Effect, Exit, Layer, Stream } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Stream } from "effect";
 import type { DispatchRegistry } from "../../../registry.ts";
 import { TheseusDb } from "../../../store/sqlite.ts";
 import { SqliteCurrentCapsuleByIdLive } from "../../../store/sqlite-capsule.ts";
 import type { ToolCatalog } from "../../../tool-catalog.ts";
 import { RuntimeEvents } from "../../events.ts";
-import { getMissionCapsuleId, recordDispatchSession } from "../../projections/session/store.ts";
+import { getMissionCapsuleId } from "../../projections/session/store.ts";
+import { recordWorkNode, updateWorkNodeDispatchStatus } from "../../projections/work-tree/store.ts";
 import { CapsuleSink } from "../../sinks/capsule/sink.ts";
 import {
   type DispatchSession,
@@ -16,7 +18,9 @@ import {
   type RuntimeDispatchEvent,
   RuntimeNotFound,
   RuntimeToolNotFound,
+  type WorkNodeRelation,
 } from "../../types.ts";
+import { CurrentWorkNode, type CurrentWorkNodeValue } from "../../work-context.ts";
 
 const SKIP_EVENT_TAGS = new Set(["Thinking"]);
 
@@ -46,12 +50,14 @@ export interface DispatchRunnerDeps {
 
 type RuntimeToolRequirements =
   | Agent.BlueprintRegistry
+  | AgentComm.DispatchGruntLauncher
   | Dispatch.LanguageModelGateway
   | Satellite.SatelliteRing
   | Dispatch.DispatchStore
   | Dispatch.CurrentDispatch
   | CapsuleNs.CurrentCapsule
-  | Agent.AgentIdentity;
+  | Agent.AgentIdentity
+  | CurrentWorkNode;
 
 const restoreOptions = (
   store: (typeof Dispatch.DispatchStore)["Service"],
@@ -85,6 +91,7 @@ const makeDispatchDepsLayer = (
   deps: DispatchRunnerDeps,
   specName: string,
   currentCapsule: CapsuleNs.CapsuleRecord,
+  currentWorkNode: CurrentWorkNodeValue,
 ) =>
   Layer.mergeAll(
     Layer.succeed(Dispatch.LanguageModelGateway)(deps.languageModelGateway),
@@ -92,6 +99,10 @@ const makeDispatchDepsLayer = (
     Layer.succeed(Dispatch.DispatchStore)(deps.dispatchStore),
     Layer.succeed(Agent.BlueprintRegistry)(deps.blueprintRegistry),
     Layer.succeed(CapsuleNs.CurrentCapsule)(currentCapsule),
+    Layer.succeed(CurrentWorkNode)(currentWorkNode),
+    Layer.effect(AgentComm.DispatchGruntLauncher)(
+      makeDispatchGruntLauncher(deps, currentCapsule, currentWorkNode),
+    ),
     Agent.AgentIdentityLive(specName),
   );
 
@@ -100,6 +111,7 @@ const watchDispatchCompletion = (input: {
   readonly capsule: CapsuleNs.CapsuleRecord;
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly store: (typeof Dispatch.DispatchStore)["Service"];
+  readonly db: (typeof TheseusDb)["Service"];
 }): Effect.Effect<void> =>
   input.handle.result.pipe(
     Effect.exit,
@@ -113,6 +125,12 @@ const watchDispatchCompletion = (input: {
               result,
             });
             yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
+            yield* updateWorkNodeDispatchStatus(input.db, {
+              dispatchId: input.handle.dispatchId,
+              state: "done",
+              usage: result.usage,
+              completedAt: yield* Clock.currentTimeMillis,
+            });
             yield* input.registry.updateStatus(input.handle.dispatchId, {
               state: "done",
               usage: result.usage,
@@ -126,6 +144,11 @@ const watchDispatchCompletion = (input: {
               reason,
             });
             yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
+            yield* updateWorkNodeDispatchStatus(input.db, {
+              dispatchId: input.handle.dispatchId,
+              state: "failed",
+              completedAt: yield* Clock.currentTimeMillis,
+            });
             yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
           }),
       }),
@@ -136,14 +159,24 @@ const observableEvents = (
   session: DispatchSession,
   handle: Dispatch.DispatchHandle,
   registry: (typeof DispatchRegistry)["Service"],
+  db: (typeof TheseusDb)["Service"],
 ): Stream.Stream<RuntimeDispatchEvent> =>
-  Stream.make(RuntimeEvents.dispatchSessionStarted(session)).pipe(
+  Stream.make(
+    RuntimeEvents.workNodeStarted(session),
+    RuntimeEvents.dispatchSessionStarted(session),
+  ).pipe(
     Stream.concat(
       handle.events.pipe(
         Stream.filter((event) => !SKIP_EVENT_TAGS.has(event._tag)),
         Stream.tap((event) =>
           event._tag === "Calling"
-            ? registry.updateStatus(handle.dispatchId, { iteration: event.iteration })
+            ? Effect.gen(function* () {
+                yield* registry.updateStatus(handle.dispatchId, { iteration: event.iteration });
+                yield* updateWorkNodeDispatchStatus(db, {
+                  dispatchId: handle.dispatchId,
+                  iteration: event.iteration,
+                });
+              })
             : Effect.void,
         ),
         Stream.map((event): RuntimeDispatchEvent => RuntimeEvents.dispatchObserved(session, event)),
@@ -151,9 +184,135 @@ const observableEvents = (
     ),
   );
 
+interface ConcreteDispatchInput {
+  readonly missionId: string;
+  readonly capsuleId: string;
+  readonly currentCapsule: CapsuleNs.CapsuleRecord;
+  readonly spec: Dispatch.DispatchSpec<RuntimeToolRequirements>;
+  readonly task: string;
+  readonly options?: Dispatch.DispatchOptions;
+  readonly parentWorkNodeId?: string;
+  readonly relation: WorkNodeRelation;
+}
+
+const startConcreteDispatch = (
+  deps: DispatchRunnerDeps,
+  input: ConcreteDispatchInput,
+): Effect.Effect<
+  {
+    readonly handle: Dispatch.DispatchHandle;
+    readonly session: DispatchSession;
+    readonly events: Stream.Stream<RuntimeDispatchEvent>;
+  },
+  never
+> =>
+  Effect.gen(function* () {
+    yield* CapsuleSink.missionTransition(input.currentCapsule, "pending", "running");
+
+    const workNodeId = yield* Dispatch.makeDispatchId(`work-${input.spec.name}`);
+    const currentWorkNode: CurrentWorkNodeValue = {
+      workNodeId,
+      missionId: input.missionId,
+      capsuleId: input.capsuleId,
+    };
+    const handle = yield* Effect.provide(
+      Dispatch.dispatch(input.spec, input.task, input.options),
+      makeDispatchDepsLayer(deps, input.spec.name, input.currentCapsule, currentWorkNode),
+    );
+    const startedAt = yield* Clock.currentTimeMillis;
+    const session: DispatchSession = {
+      workNodeId,
+      missionId: input.missionId,
+      capsuleId: input.capsuleId,
+      ...(input.parentWorkNodeId !== undefined ? { parentWorkNodeId: input.parentWorkNodeId } : {}),
+      kind: "dispatch",
+      relation: input.relation,
+      label: input.spec.name,
+      dispatchId: handle.dispatchId,
+      name: input.spec.name,
+      ...(input.spec.modelRequest !== undefined ? { modelRequest: input.spec.modelRequest } : {}),
+      iteration: 0,
+      state: "running",
+      usage: { inputTokens: 0, outputTokens: 0 },
+      startedAt,
+    };
+
+    yield* recordWorkNode(deps.db, {
+      workNodeId,
+      missionId: input.missionId,
+      capsuleId: input.capsuleId,
+      ...(input.parentWorkNodeId !== undefined ? { parentWorkNodeId: input.parentWorkNodeId } : {}),
+      kind: "dispatch",
+      relation: input.relation,
+      label: input.spec.name,
+      dispatchId: handle.dispatchId,
+      ...(input.spec.modelRequest !== undefined ? { modelRequest: input.spec.modelRequest } : {}),
+      startedAt,
+    });
+    yield* CapsuleSink.dispatchStart(input.currentCapsule, {
+      task: input.task,
+      name: input.spec.name,
+      continueFrom: input.options?.parentDispatchId,
+      dispatchId: handle.dispatchId,
+      missionId: input.missionId,
+    });
+    yield* deps.registry.register(handle, session);
+
+    yield* Effect.forkDetach({ startImmediately: true })(
+      watchDispatchCompletion({
+        handle,
+        capsule: input.currentCapsule,
+        registry: deps.registry,
+        store: deps.dispatchStore,
+        db: deps.db,
+      }),
+    );
+
+    return { handle, session, events: observableEvents(session, handle, deps.registry, deps.db) };
+  });
+
+const makeDispatchGruntLauncher = (
+  deps: DispatchRunnerDeps,
+  currentCapsule: CapsuleNs.CapsuleRecord,
+  parentWorkNode: CurrentWorkNodeValue,
+): Effect.Effect<(typeof AgentComm.DispatchGruntLauncher)["Service"]> =>
+  Effect.succeed({
+    launch: <R>(input: AgentComm.DispatchGruntLaunchInput<R>) =>
+      Effect.gen(function* () {
+        const parentDispatch = yield* Dispatch.CurrentDispatch;
+        const spec = {
+          ...input.blueprint,
+          systemPrompt: input.systemPrompt,
+          tools: [...input.blueprint.tools, AgentComm.report],
+        } as Dispatch.DispatchSpec<RuntimeToolRequirements>;
+        const started = yield* startConcreteDispatch(deps, {
+          missionId: parentWorkNode.missionId,
+          capsuleId: parentWorkNode.capsuleId,
+          currentCapsule,
+          spec,
+          task: input.task,
+          options: { parentDispatchId: parentDispatch.id },
+          parentWorkNodeId: parentWorkNode.workNodeId,
+          relation: "delegated",
+        });
+        return started.handle;
+      }) as Effect.Effect<
+        Dispatch.DispatchHandle,
+        AgentComm.DispatchGruntFailed,
+        R | Dispatch.CurrentDispatch
+      >,
+  });
+
 export const startDispatch = (
   deps: DispatchRunnerDeps,
-  { missionId, spec: serializedSpec, task, continueFrom }: MissionStartDispatchInput,
+  {
+    missionId,
+    spec: serializedSpec,
+    task,
+    continueFrom,
+    parentWorkNodeId,
+    relation,
+  }: MissionStartDispatchInput,
 ): Effect.Effect<
   { readonly session: DispatchSession; readonly events: Stream.Stream<RuntimeDispatchEvent> },
   RuntimeNotFound | RuntimeToolNotFound
@@ -174,44 +333,16 @@ export const startDispatch = (
       ),
     );
     const currentCapsule = yield* makeCurrentCapsule(deps.db, capsuleId);
-
-    yield* CapsuleSink.missionTransition(currentCapsule, "pending", "running");
-
-    const handle = yield* Effect.provide(
-      Dispatch.dispatch(spec, task, options),
-      makeDispatchDepsLayer(deps, spec.name, currentCapsule),
-    );
-    const session: DispatchSession = {
-      dispatchId: handle.dispatchId,
-      ...(options?.parentDispatchId !== undefined
-        ? { parentDispatchId: options.parentDispatchId }
-        : {}),
+    const started = yield* startConcreteDispatch(deps, {
       missionId,
       capsuleId,
-      name: spec.name,
-      ...(spec.modelRequest !== undefined ? { modelRequest: spec.modelRequest } : {}),
-      iteration: 0,
-      state: "running",
-      usage: { inputTokens: 0, outputTokens: 0 },
-    };
-    yield* recordDispatchSession(deps.db, session);
-    yield* CapsuleSink.dispatchStart(currentCapsule, {
+      currentCapsule,
+      spec,
       task,
-      name: spec.name,
-      continueFrom,
-      dispatchId: handle.dispatchId,
-      missionId,
+      ...(options !== undefined ? { options } : {}),
+      ...(parentWorkNodeId !== undefined ? { parentWorkNodeId } : {}),
+      relation: relation ?? (continueFrom === undefined ? "root" : "continued"),
     });
-    yield* deps.registry.register(handle, session);
 
-    yield* Effect.forkDetach({ startImmediately: true })(
-      watchDispatchCompletion({
-        handle,
-        capsule: currentCapsule,
-        registry: deps.registry,
-        store: deps.dispatchStore,
-      }),
-    );
-
-    return { session, events: observableEvents(session, handle, deps.registry) };
+    return { session: started.session, events: started.events };
   });

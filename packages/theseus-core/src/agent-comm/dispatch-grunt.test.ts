@@ -10,7 +10,11 @@ import {
   textParts,
   toolCallParts,
 } from "../test-utils/mock-language-model.ts";
-import { dispatchGruntTool } from "./dispatch-grunt.tsx";
+import {
+  DispatchGruntLauncher,
+  DispatchGruntLauncherLive,
+  dispatchGruntTool,
+} from "./dispatch-grunt.tsx";
 import { report } from "./report.ts";
 import type { DispatchGruntResult } from "./result.ts";
 
@@ -47,6 +51,7 @@ const testLayer = (responses: Parameters<typeof makeMockLanguageModel>[0]) =>
       name: "parent",
       task: "parent task",
     }),
+    Layer.effect(DispatchGruntLauncher)(DispatchGruntLauncherLive),
   );
 
 const successOutput = (outcome: Tool.ToolOutcome<unknown, DispatchGruntResult, unknown>) => {

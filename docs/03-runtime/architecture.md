@@ -143,7 +143,8 @@ packages/theseus-runtime/src/
     sinks/
       capsule/sink.ts              capsule event side effects
     projections/
-      session/store.ts             session read model from durable events
+      session/store.ts             mission session read model from capsule-backed links
+      work-tree/store.ts           mission work tree and dispatch session read model
 ```
 
 `packages/theseus-server` is a host adapter. Its handlers call
@@ -370,9 +371,10 @@ Projections are read models.
 
 Current projection:
 
-- session projection links mission ids, dispatch ids, and capsule ids, then
-  derives `MissionSession` and `DispatchSession` views from durable events and
-  dispatch summaries
+- session projection links mission ids and capsule ids, then derives
+  `MissionSession` views from durable capsule events
+- work-tree projection records mission-scoped `WorkNode` rows and derives
+  `DispatchSession` views from dispatch work nodes
 
 Projection code may read store tables directly when building a runtime read
 model. It must not start work, execute tools, or mutate orchestration state.
@@ -389,7 +391,9 @@ Current stores:
 - SQLite dispatch store: dispatch records, dispatch events, snapshots, restore,
   result/list support
 - SQLite capsule store: capsule events and artifacts
-- runtime link tables: cheap joins between missions, dispatches, and capsules
+- runtime mission-capsule links: cheap lookup for the primary mission capsule
+- runtime work nodes: mission-scoped operational topology for dispatches and
+  future operator-visible work
 
 RuntimeEvents and CapsuleEvents should both be append-only unless an explicit
 compaction or snapshot boundary says otherwise. Keep their schemas and purposes
@@ -448,6 +452,12 @@ Runtime modules should not hard-code one mission subtype unless they own that
 subtype's behavior.
 
 Dispatch is an active AI/model/tool run under a mission.
+
+The runtime records dispatches as mission-scoped work nodes. A work node is an
+operator-visible unit of runtime work, not a generic Effect fiber and not a new
+primitive. Dispatch is one current work-node kind. Delegation, continuation, and
+future branches belong to the runtime work tree; core dispatch parent links are
+trace metadata, not the source of runtime topology.
 
 Continuation creates a child dispatch with inherited context and a parent link.
 It must not mutate the old dispatch identity into a second run.
