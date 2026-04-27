@@ -9,9 +9,11 @@ import { useCallback, useRef, useState } from "react";
 import { client } from "@/lib/client";
 import type {
   DispatchEvent,
+  DispatchEventEntry,
   DispatchSession,
   MissionSession,
   ResearchPocEvent,
+  WorkNodeState,
 } from "@/lib/rpc-client";
 
 interface ReportPacket {
@@ -37,10 +39,22 @@ interface LogEntry {
 interface TreeNode {
   readonly id: string;
   readonly label: string;
+  readonly dispatchId?: string;
   readonly meta?: string;
   readonly body?: string;
-  readonly state?: "running" | "done" | "failed";
+  readonly state?: WorkNodeState;
   readonly children?: ReadonlyArray<TreeNode>;
+}
+
+interface DispatchTranscript {
+  readonly dispatchId: string;
+  readonly name: string;
+  readonly events: ReadonlyArray<DispatchEventEntry>;
+}
+
+interface PocError {
+  readonly title: string;
+  readonly detail: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -68,6 +82,39 @@ const reportBody = (packet: ReportPacket): string =>
 const finalText = (event: DispatchEvent): string | undefined =>
   event._tag === "Done" ? event.result?.content : undefined;
 
+const eventLine = (event: DispatchEvent): string => {
+  switch (event._tag) {
+    case "Calling":
+      return `calling iteration ${event.iteration ?? "?"}`;
+    case "Text":
+      return event.content ?? "";
+    case "Thinking":
+      return `[thinking] ${event.content ?? ""}`;
+    case "ToolCalling":
+      return `-> ${event.tool ?? "tool"} ${JSON.stringify(event.args ?? {})}`;
+    case "ToolResult":
+      return `<- ${event.tool ?? "tool"}${event.isError ? " error" : ""}: ${event.content ?? ""}`;
+    case "ToolError":
+      return `tool error ${event.tool ?? "tool"}: ${JSON.stringify(event.error ?? {})}`;
+    case "Injected":
+      return `injected ${event.injection ?? ""}${event.detail ? `: ${event.detail}` : ""}`;
+    case "Done":
+      return `done: ${event.result?.content ?? ""}`;
+    case "Failed":
+      return `failed: ${event.reason ?? "unknown reason"}`;
+    case "SatelliteAction":
+      return `satellite ${event.satellite ?? ""} ${event.phase ?? ""}: ${event.action ?? ""}`;
+    default:
+      return event._tag;
+  }
+};
+
+const eventKey = (entry: DispatchEventEntry): string =>
+  `${entry.dispatchId}:${entry.timestamp}:${entry.event._tag}:${eventLine(entry.event).slice(0, 160)}`;
+
+const errorDetail = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 const useEntries = () => {
   const nextId = useRef(0);
   const [entries, setEntries] = useState<ReadonlyArray<LogEntry>>([]);
@@ -93,12 +140,36 @@ export function RuntimeTreePocPage() {
   const [dispatches, setDispatches] = useState<ReadonlyArray<DispatchSession>>([]);
   const [gruntReport, setGruntReport] = useState<ReportPacket | null>(null);
   const [coordinatorFinal, setCoordinatorFinal] = useState<string>("");
+  const [failureReason, setFailureReason] = useState<string>("");
+  const [pocError, setPocError] = useState<PocError | null>(null);
+  const [transcripts, setTranscripts] = useState<ReadonlyArray<DispatchTranscript>>([]);
   const { entries, append, clear } = useEntries();
   const coordinatorId = useRef<string | null>(null);
 
   const refreshDispatches = useCallback(async () => {
     const listed = await client.listRuntimeDispatches(20);
     setDispatches(listed);
+    const relevant = listed.filter(
+      (session) =>
+        coordinatorId.current === null ||
+        session.dispatchId === coordinatorId.current ||
+        session.parentWorkNodeId ===
+          listed.find((candidate) => candidate.dispatchId === coordinatorId.current)?.workNodeId,
+    );
+    const loaded = await Promise.all(
+      relevant.map(async (session): Promise<DispatchTranscript> => {
+        try {
+          return {
+            dispatchId: session.dispatchId,
+            name: session.name,
+            events: await client.getDispatchEvents(session.dispatchId),
+          };
+        } catch {
+          return { dispatchId: session.dispatchId, name: session.name, events: [] };
+        }
+      }),
+    );
+    setTranscripts(loaded);
   }, []);
 
   const handleEvent = useCallback(
@@ -141,9 +212,16 @@ export function RuntimeTreePocPage() {
         append(`${dispatchEvent.name} done`);
       }
       if (dispatchEvent._tag === "Failed") {
+        const name = dispatchEvent.name ?? "dispatch";
+        const reason = dispatchEvent.reason ?? "dispatch failed";
+        setFailureReason(reason);
+        setPocError({
+          title: `${name} failed`,
+          detail: reason,
+        });
         setCoordinator((current) => (current ? { ...current, state: "failed" } : current));
         setMission((current) => (current ? { ...current, state: "failed" } : current));
-        append(`${dispatchEvent.name} failed`);
+        append(`${name} failed: ${reason}`);
       }
     },
     [append],
@@ -157,15 +235,25 @@ export function RuntimeTreePocPage() {
     setDispatches([]);
     setGruntReport(null);
     setCoordinatorFinal("");
+    setFailureReason("");
+    setPocError(null);
+    setTranscripts([]);
     coordinatorId.current = null;
     clear();
 
+    let poll: ReturnType<typeof setInterval> | undefined;
     try {
+      poll = setInterval(() => {
+        void refreshDispatches();
+      }, 1500);
       await client.startResearchPoc({ goal: goal.trim() }, handleEvent);
       await refreshDispatches();
     } catch (error) {
-      append(error instanceof Error ? error.message : String(error));
+      const detail = errorDetail(error);
+      setPocError({ title: "stream failed", detail });
+      append(detail);
     } finally {
+      if (poll !== undefined) clearInterval(poll);
       setRunning(false);
     }
   }, [append, clear, goal, handleEvent, refreshDispatches, running]);
@@ -189,28 +277,38 @@ export function RuntimeTreePocPage() {
                   {
                     id: coordinator.dispatchId,
                     label: "Coordinator",
+                    dispatchId: coordinator.dispatchId,
                     meta: [coordinator.state, modelLabel(coordinator)].filter(Boolean).join(" / "),
-                    body: coordinatorFinal || "Waiting for coordinator summary...",
+                    body: failureReason || coordinatorFinal || "Waiting for coordinator summary...",
                     state: coordinator.state,
                     children:
-                      gruntReport === null
+                      gruntSession === undefined && gruntReport === null
                         ? []
                         : [
                             {
-                              id: gruntReport.dispatchId,
-                              label: `Research Grunt: ${gruntReport.target}`,
-                              meta: [gruntSession?.state ?? "done", modelLabel(gruntSession)]
+                              id: gruntReport?.dispatchId ?? gruntSession?.dispatchId ?? "grunt",
+                              label: `Research Grunt${
+                                gruntReport === null ? "" : `: ${gruntReport.target}`
+                              }`,
+                              dispatchId: gruntReport?.dispatchId ?? gruntSession?.dispatchId,
+                              meta: [gruntSession?.state ?? "running", modelLabel(gruntSession)]
                                 .filter(Boolean)
                                 .join(" / "),
-                              body: reportSummary(gruntReport),
-                              state: gruntSession?.state ?? "done",
-                              children: [
-                                {
-                                  id: `${gruntReport.dispatchId}:report`,
-                                  label: "Structured Report",
-                                  body: reportBody(gruntReport),
-                                },
-                              ],
+                              body:
+                                gruntReport === null
+                                  ? "Inspecting repository and preparing report..."
+                                  : reportSummary(gruntReport),
+                              state: gruntSession?.state ?? "running",
+                              children:
+                                gruntReport === null
+                                  ? []
+                                  : [
+                                      {
+                                        id: `${gruntReport.dispatchId}:report`,
+                                        label: "Structured Report",
+                                        body: reportBody(gruntReport),
+                                      },
+                                    ],
                             },
                           ],
                   },
@@ -242,36 +340,47 @@ export function RuntimeTreePocPage() {
           placeholder="mission goal..."
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
-          <div className="border border-border p-3">
-            <div className="text-muted-foreground uppercase tracking-wider mb-3">tree</div>
-            {tree === null ? (
-              <div className="text-zinc-600">-- no mission --</div>
-            ) : (
-              <TreeView node={tree} />
-            )}
-          </div>
-
-          <div className="border border-border p-3">
-            <div className="text-muted-foreground uppercase tracking-wider mb-3">events</div>
-            <div className="font-mono text-sm space-y-1">
-              {entries.length === 0 && <div className="text-zinc-600">-- no events --</div>}
-              {entries.map((entry) => (
-                <div key={entry.id} className="text-foreground break-words">
-                  {entry.line}
-                </div>
-              ))}
+        {pocError !== null && (
+          <div className="border border-red-900/60 bg-red-950/20 p-3">
+            <div className="text-red-200 uppercase tracking-wider font-semibold">
+              {pocError.title}
             </div>
+            <div className="text-red-100 whitespace-pre-wrap mt-2">{pocError.detail}</div>
           </div>
+        )}
+
+        <div className="border border-border p-3">
+          <div className="text-muted-foreground uppercase tracking-wider mb-3">mission tree</div>
+          {tree === null ? (
+            <div className="text-zinc-600">-- no mission --</div>
+          ) : (
+            <TreeView node={tree} entries={entries} transcripts={transcripts} />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function TreeView({ node, depth = 0 }: { readonly node: TreeNode; readonly depth?: number }) {
+function TreeView({
+  node,
+  entries,
+  transcripts,
+  depth = 0,
+}: {
+  readonly node: TreeNode;
+  readonly entries: ReadonlyArray<LogEntry>;
+  readonly transcripts: ReadonlyArray<DispatchTranscript>;
+  readonly depth?: number;
+}) {
+  const transcript =
+    node.dispatchId === undefined
+      ? undefined
+      : transcripts.find((candidate) => candidate.dispatchId === node.dispatchId);
+  const isRoot = depth === 0;
+
   return (
-    <div className={depth === 0 ? "" : "ml-5 border-l border-border pl-4 mt-3"}>
+    <div className={isRoot ? "" : "ml-5 border-l border-border pl-4 mt-3"}>
       <div className="border border-border bg-background p-3">
         <div className="flex items-center justify-between gap-3">
           <div className="text-foreground font-semibold">{node.label}</div>
@@ -280,10 +389,67 @@ function TreeView({ node, depth = 0 }: { readonly node: TreeNode; readonly depth
         {node.body && (
           <div className="text-sm text-zinc-300 whitespace-pre-wrap mt-2">{node.body}</div>
         )}
+        {isRoot && entries.length > 0 && (
+          <details className="mt-3 border-t border-border pt-3">
+            <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
+              mission events
+            </summary>
+            <div className="font-mono text-xs space-y-1 mt-2">
+              {entries.map((entry) => (
+                <div key={entry.id} className="text-zinc-300 break-words">
+                  {entry.line}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+        {transcript !== undefined && (
+          <DispatchLog
+            transcript={transcript}
+            defaultOpen={transcript.name === "poc-research-grunt"}
+          />
+        )}
       </div>
       {node.children?.map((child) => (
-        <TreeView key={child.id} node={child} depth={depth + 1} />
+        <TreeView
+          key={child.id}
+          node={child}
+          entries={entries}
+          transcripts={transcripts}
+          depth={depth + 1}
+        />
       ))}
     </div>
+  );
+}
+
+function DispatchLog({
+  transcript,
+  defaultOpen,
+}: {
+  readonly transcript: DispatchTranscript;
+  readonly defaultOpen: boolean;
+}) {
+  return (
+    <details open={defaultOpen} className="mt-3 border-t border-border pt-3">
+      <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
+        dispatch log
+        <span className="normal-case tracking-normal ml-2">{transcript.dispatchId}</span>
+      </summary>
+      <div className="font-mono text-xs space-y-2 mt-3 max-h-[420px] overflow-y-auto">
+        {transcript.events.length === 0 ? (
+          <div className="text-zinc-600">-- no events --</div>
+        ) : (
+          transcript.events.map((entry) => (
+            <div key={eventKey(entry)}>
+              <div className="text-muted-foreground">{entry.event._tag}</div>
+              <div className="text-zinc-300 whitespace-pre-wrap break-words">
+                {eventLine(entry.event)}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </details>
   );
 }

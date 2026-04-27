@@ -10,9 +10,11 @@
  */
 
 export {
+  ControlWorkNode,
   CreateMission,
   GetCapsuleEvents,
   GetDispatchCapsuleEvents,
+  GetDispatchEvents,
   GetMission,
   GetMissionWorkTree,
   GetResult,
@@ -29,6 +31,7 @@ export {
 
 export {
   CapsuleEventSchema,
+  DispatchEventEntrySchema,
   DispatchEventSchema,
   DispatchOutputSchema,
   DispatchSessionSchema,
@@ -39,5 +42,6 @@ export {
   SerializedToolCallErrorSchema,
   SerializedToolRefSchema,
   UsageSchema,
+  WorkControlCommandSchema,
   WorkNodeSessionSchema,
 } from "./schemas.ts";

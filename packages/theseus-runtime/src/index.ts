@@ -9,7 +9,13 @@ import { Context } from "effect";
 import { RuntimeCommands, RuntimeControls, RuntimeQueries } from "./runtime/client.ts";
 import { RuntimeEvents } from "./runtime/events.ts";
 import type { TheseusRuntimeService } from "./runtime/types.ts";
-import { RuntimeDispatchFailed, RuntimeNotFound, RuntimeToolNotFound } from "./runtime/types.ts";
+import {
+  RuntimeDispatchFailed,
+  RuntimeNotFound,
+  RuntimeToolNotFound,
+  RuntimeWorkControlFailed,
+  RuntimeWorkControlUnsupported,
+} from "./runtime/types.ts";
 
 export type {
   DispatchSession,
@@ -29,6 +35,9 @@ export type {
   RuntimeSubmission,
   StatusEntry,
   TheseusRuntimeService,
+  WorkControlCapability,
+  WorkControlCommand,
+  WorkNodeControlDescriptor,
   WorkNodeKind,
   WorkNodeRelation,
   WorkNodeSession,
@@ -43,6 +52,8 @@ export {
   RuntimeNotFound,
   RuntimeQueries,
   RuntimeToolNotFound,
+  RuntimeWorkControlFailed,
+  RuntimeWorkControlUnsupported,
 };
 
 export class TheseusRuntime extends Context.Service<TheseusRuntime, TheseusRuntimeService>()(

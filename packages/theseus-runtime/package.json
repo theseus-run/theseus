@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./live": "./src/live.ts",
     "./registry": "./src/registry.ts",
+    "./work-node-control": "./src/runtime/controllers/work-node.ts",
     "./tool-catalog": "./src/tool-catalog.ts",
     "./store": "./src/store/index.ts"
   },

@@ -5,6 +5,7 @@ import { Effect, Match } from "effect";
 import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
 import type { ToolCatalog } from "../tool-catalog.ts";
+import type { WorkNodeControllers } from "./controllers/work-node.ts";
 import { runRuntimeControl, runRuntimeQuery, snapshot } from "./operations.ts";
 import { startDispatch } from "./systems/dispatch/system.ts";
 import { createMission } from "./systems/mission/system.ts";
@@ -26,6 +27,7 @@ export interface RuntimeHostDeps {
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
   readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];
+  readonly workNodeControllers: (typeof WorkNodeControllers)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
 }
 

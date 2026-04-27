@@ -4,9 +4,11 @@ import { Effect, Match } from "effect";
 import { decodeJson } from "../json.ts";
 import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
+import type { WorkNodeControllers } from "./controllers/work-node.ts";
 import { listMissionSessions, readMissionSession } from "./projections/session/store.ts";
 import {
   getDispatchWorkNode,
+  getWorkNode,
   listDispatchSessions,
   listWorkNodes,
 } from "./projections/work-tree/store.ts";
@@ -17,28 +19,17 @@ import {
   RuntimeNotFound,
   type RuntimeQuery,
   type RuntimeQueryResult,
+  type RuntimeWorkControlFailed,
+  type RuntimeWorkControlUnsupported,
   type StatusEntry,
 } from "./types.ts";
 
 export interface RuntimeOperationsDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
+  readonly workNodeControllers: (typeof WorkNodeControllers)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
 }
-
-const getHandle = (
-  registry: (typeof DispatchRegistry)["Service"],
-  dispatchId: string,
-): Effect.Effect<Dispatch.DispatchHandle, RuntimeNotFound> =>
-  registry
-    .get(dispatchId)
-    .pipe(
-      Effect.flatMap((handle) =>
-        handle
-          ? Effect.succeed(handle)
-          : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
-      ),
-    );
 
 const dispatchFailureReason = (cause: Dispatch.DispatchError): string =>
   typeof cause === "object" && cause !== null && "_tag" in cause ? String(cause._tag) : "unknown";
@@ -110,6 +101,20 @@ const dispatchCapsuleEvents = (
     ),
   );
 
+const dispatchEvents = (
+  deps: RuntimeOperationsDeps,
+  dispatchId: string,
+): Effect.Effect<ReadonlyArray<Dispatch.DispatchEventEntry>, RuntimeNotFound> =>
+  deps.dispatchStore
+    .events(dispatchId)
+    .pipe(
+      Effect.flatMap((events) =>
+        events.length > 0
+          ? Effect.succeed(events)
+          : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
+      ),
+    );
+
 const dispatchList = (
   deps: RuntimeOperationsDeps,
   options?: { readonly limit?: number },
@@ -118,20 +123,37 @@ const dispatchList = (
 export const runRuntimeControl = (
   deps: RuntimeOperationsDeps,
   command: RuntimeControl,
-): Effect.Effect<void, RuntimeNotFound> =>
+): Effect.Effect<
+  void,
+  RuntimeNotFound | RuntimeWorkControlUnsupported | RuntimeWorkControlFailed
+> =>
   Match.value(command).pipe(
+    Match.tag("WorkNodeControl", ({ workNodeId, command: workCommand }) =>
+      getWorkNode(deps.db, workNodeId).pipe(
+        Effect.flatMap((node) =>
+          node
+            ? deps.workNodeControllers.control(node, workCommand)
+            : Effect.fail(new RuntimeNotFound({ kind: "workNode", id: workNodeId })),
+        ),
+      ),
+    ),
     Match.tag("DispatchInject", ({ dispatchId, text }) =>
-      getHandle(deps.registry, dispatchId).pipe(
-        Effect.flatMap((handle) =>
-          handle.inject({
-            _tag: "AppendMessages",
-            messages: [{ role: "user", content: text }],
-          }),
+      getDispatchWorkNode(deps.db, dispatchId).pipe(
+        Effect.flatMap((node) =>
+          node
+            ? deps.workNodeControllers.control(node, { _tag: "InjectGuidance", text })
+            : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
         ),
       ),
     ),
     Match.tag("DispatchInterrupt", ({ dispatchId }) =>
-      getHandle(deps.registry, dispatchId).pipe(Effect.flatMap((handle) => handle.interrupt)),
+      getDispatchWorkNode(deps.db, dispatchId).pipe(
+        Effect.flatMap((node) =>
+          node
+            ? deps.workNodeControllers.control(node, { _tag: "Interrupt" })
+            : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
+        ),
+      ),
     ),
     Match.exhaustive,
   );
@@ -178,6 +200,11 @@ export const runRuntimeQuery = (
     Match.tag("DispatchCapsuleEvents", ({ dispatchId }) =>
       dispatchCapsuleEvents(deps, dispatchId).pipe(
         Effect.map((events): RuntimeQueryResult => ({ _tag: "DispatchCapsuleEvents", events })),
+      ),
+    ),
+    Match.tag("DispatchEvents", ({ dispatchId }) =>
+      dispatchEvents(deps, dispatchId).pipe(
+        Effect.map((events): RuntimeQueryResult => ({ _tag: "DispatchEvents", events })),
       ),
     ),
     Match.tag("ActiveStatus", () =>

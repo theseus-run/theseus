@@ -64,15 +64,18 @@ const mapAiErrors = <A, R>(
   effect.pipe(
     Effect.catchTag("AiError", (e) =>
       Effect.fail(
-        new DispatchModelFailed({
-          dispatchId,
-          name,
-          message: `${e.module}.${e.method}: ${e.reason._tag}`,
-          cause: e,
-        }),
+        new DispatchModelFailed({ dispatchId, name, message: aiErrorMessage(e), cause: e }),
       ),
     ),
   );
+
+const aiErrorMessage = (error: AiError.AiError): string => {
+  const reasonMessage =
+    "message" in error.reason && typeof error.reason.message === "string"
+      ? error.reason.message
+      : error.reason._tag;
+  return `${error.module}.${error.method}: ${error.reason._tag}: ${reasonMessage}`;
+};
 
 // ---------------------------------------------------------------------------
 // tryParseArgs — best-effort JSON parse for event emission

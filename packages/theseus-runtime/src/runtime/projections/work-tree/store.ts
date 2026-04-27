@@ -9,6 +9,7 @@ import type {
   WorkNodeSession,
   WorkNodeState,
 } from "../../types.ts";
+import { WorkControlDescriptors } from "../../work-control.ts";
 
 const emptyUsage: Dispatch.Usage = { inputTokens: 0, outputTokens: 0 };
 
@@ -56,6 +57,10 @@ const toWorkNodeSession = (row: WorkNodeRow): WorkNodeSession => ({
   relation: row.relation,
   label: row.label,
   state: row.state,
+  control:
+    row.kind === "dispatch"
+      ? WorkControlDescriptors.dispatch(row.state)
+      : WorkControlDescriptors.unsupported(row.kind),
   ...(row.started_at !== null ? { startedAt: row.started_at } : {}),
   ...(row.completed_at !== null ? { completedAt: row.completed_at } : {}),
 });
@@ -170,6 +175,18 @@ export const getDispatchWorkNode = (
       .prepare("SELECT * FROM runtime_work_nodes WHERE dispatch_id = ?")
       .get(dispatchId) as WorkNodeRow | null;
     return row === null ? undefined : toDispatchSession(row);
+  });
+
+export const getWorkNode = (
+  db: (typeof TheseusDb)["Service"],
+  workNodeId: string,
+): Effect.Effect<WorkNodeSession | undefined> =>
+  Effect.sync(() => {
+    const row = db.db
+      .prepare("SELECT * FROM runtime_work_nodes WHERE work_node_id = ?")
+      .get(workNodeId) as WorkNodeRow | null;
+    if (row === null) return undefined;
+    return toDispatchSession(row) ?? toWorkNodeSession(row);
   });
 
 export const listWorkNodes = (

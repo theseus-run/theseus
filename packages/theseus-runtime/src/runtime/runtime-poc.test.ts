@@ -19,7 +19,8 @@ import { TheseusRuntimeLive } from "../live.ts";
 import { DispatchRegistry, DispatchRegistryLive } from "../registry.ts";
 import { SqliteDispatchStore, TheseusDbLive } from "../store/index.ts";
 import { makeToolCatalog, ToolCatalog } from "../tool-catalog.ts";
-import { RuntimeCommands, RuntimeQueries } from "./client.ts";
+import { RuntimeCommands, RuntimeControls, RuntimeQueries } from "./client.ts";
+import { WorkNodeControllers, WorkNodeControllersLive } from "./controllers/work-node.ts";
 import type { RuntimeDispatchEvent } from "./types.ts";
 
 const probe = Tool.defineTool({
@@ -81,6 +82,10 @@ const runtimeLayer = (responses = pocResponses) => {
   const DbLive = TheseusDbLive(dbPath);
   const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
   const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+  const WorkNodeControlLive = Layer.provide(
+    Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
+    RegistryLive,
+  );
   const CatalogLive = Layer.succeed(ToolCatalog)(
     makeToolCatalog([AgentComm.dispatchGruntTool, probe]),
   );
@@ -107,6 +112,7 @@ const runtimeLayer = (responses = pocResponses) => {
     DbLive,
     StoreLive,
     RegistryLive,
+    WorkNodeControlLive,
     CatalogLive,
     BlueprintsLive,
     LanguageModelGatewayLive,
@@ -181,6 +187,8 @@ describe("TheseusRuntime POC", () => {
     expect(observed.events.some((event) => event._tag === "DispatchEvent")).toBe(true);
     expect(observed.dispatches[0]?.missionId).toBe(observed.mission.missionId);
     expect(observed.dispatches[0]?.capsuleId).toBe(observed.mission.capsuleId);
+    expect(observed.session.control.interrupt._tag).toBe("Supported");
+    expect(observed.session.control.pause._tag).toBe("Unsupported");
     expect(observed.dispatches.map((session) => session.parentWorkNodeId)).toContain(
       observed.session.workNodeId,
     );
@@ -226,11 +234,16 @@ describe("TheseusRuntime POC", () => {
     const DbLive = TheseusDbLive(first.dbPath);
     const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
     const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+    const WorkNodeControlLive = Layer.provide(
+      Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
+      RegistryLive,
+    );
     const CatalogLive = Layer.succeed(ToolCatalog)(makeToolCatalog([]));
     const Services = Layer.mergeAll(
       DbLive,
       StoreLive,
       RegistryLive,
+      WorkNodeControlLive,
       CatalogLive,
       Agent.BlueprintRegistryLive([]),
       Layer.provide(Dispatch.LanguageModelGatewayFromLanguageModel, makeMockLanguageModel([])),
@@ -246,6 +259,38 @@ describe("TheseusRuntime POC", () => {
     );
 
     expect(restored.content).toBe(completed.content);
+  });
+
+  test("controls active dispatches through work node identity", async () => {
+    const { layer } = runtimeLayer([textParts("controlled final")]);
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "work-node-control",
+          goal: "Control active work",
+          criteria: ["guidance accepted"],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "RequestStatus",
+        });
+        const result = yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
+        return { session: started.session, result };
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(observed.session.control.requestStatus._tag).toBe("Supported");
+    expect(observed.result.content).toBe("controlled final");
   });
 
   test("root runtime import does not export live assembly", async () => {

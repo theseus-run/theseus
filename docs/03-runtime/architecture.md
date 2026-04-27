@@ -137,9 +137,12 @@ packages/theseus-runtime/src/
     client.ts                      typed command/query helpers
     events.ts                      runtime event constructors
     operations.ts                  query/control execution
+    work-control.ts                work-node control descriptors
     systems/
       mission/system.ts            mission creation system
       dispatch/system.ts           dispatch launch/completion system
+    controllers/
+      work-node.ts                 node-kind-specific live control
     sinks/
       capsule/sink.ts              capsule event side effects
     projections/
@@ -184,6 +187,7 @@ Runtime uses three planes.
 
 **Control** affects active work:
 
+- control a work node by id
 - inject guidance
 - interrupt dispatch
 - later: pause, resume, stop, scoped propagation
@@ -192,7 +196,6 @@ Runtime uses three planes.
 
 - list/get missions
 - list dispatches
-- read messages
 - read result
 - read capsule events
 - read active status
@@ -374,7 +377,8 @@ Current projection:
 - session projection links mission ids and capsule ids, then derives
   `MissionSession` views from durable capsule events
 - work-tree projection records mission-scoped `WorkNode` rows and derives
-  `DispatchSession` views from dispatch work nodes
+  `DispatchSession` views from dispatch work nodes. Read models include control
+  descriptors so clients know which operations are supported for each node.
 
 Projection code may read store tables directly when building a runtime read
 model. It must not start work, execute tools, or mutate orchestration state.
@@ -458,6 +462,23 @@ operator-visible unit of runtime work, not a generic Effect fiber and not a new
 primitive. Dispatch is one current work-node kind. Delegation, continuation, and
 future branches belong to the runtime work tree; core dispatch parent links are
 trace metadata, not the source of runtime topology.
+
+All work nodes are addressable and observable. Only node kinds with an explicit
+controller are controllable. The current controller is dispatch-backed and uses
+the active dispatch registry for live operations. Future human, external, or
+task nodes should add their own controllers instead of inheriting dispatch
+behavior by default.
+
+`parentWorkNodeId` describes runtime topology. `continueFrom` describes dispatch
+context inheritance. They may point at related work, but they are separate
+questions and should only diverge intentionally.
+
+Current work-node relations are intentionally small:
+
+- `root` — top-level mission work
+- `delegated` — child work requested by another work node
+- `continued` — work continuing prior context
+- `branched` — alternate path from prior work
 
 Continuation creates a child dispatch with inherited context and a parent link.
 It must not mutate the old dispatch identity into a second run.

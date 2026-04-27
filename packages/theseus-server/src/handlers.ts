@@ -5,22 +5,32 @@
  * runtime errors into RPC errors.
  */
 
-import { RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
+import { type DispatchEventEntrySchema, RpcError, TheseusRpc } from "@theseus.run/core/Rpc";
 import type {
   RuntimeDispatchFailed,
   RuntimeNotFound,
   RuntimeToolNotFound,
+  RuntimeWorkControlFailed,
+  RuntimeWorkControlUnsupported,
 } from "@theseus.run/runtime";
+import type { Schema } from "effect";
 import { Effect, Match, Stream } from "effect";
 import type { ResearchPocEvent } from "./runtime-rpc-adapter.ts";
 import { RuntimeRpcAdapter } from "./runtime-rpc-adapter.ts";
-import { serializeRuntimeEvent } from "./serialize.ts";
+import { serializeEvent, serializeRuntimeEvent } from "./serialize.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const toRpcError = (error: RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed) =>
+const toRpcError = (
+  error:
+    | RuntimeToolNotFound
+    | RuntimeNotFound
+    | RuntimeDispatchFailed
+    | RuntimeWorkControlUnsupported
+    | RuntimeWorkControlFailed,
+) =>
   Match.value(error).pipe(
     Match.tag(
       "RuntimeToolNotFound",
@@ -34,6 +44,14 @@ const toRpcError = (error: RuntimeToolNotFound | RuntimeNotFound | RuntimeDispat
     Match.tag(
       "RuntimeDispatchFailed",
       ({ reason }) => new RpcError({ code: "INTERNAL", message: `Dispatch error: ${reason}` }),
+    ),
+    Match.tag(
+      "RuntimeWorkControlUnsupported",
+      ({ reason }) => new RpcError({ code: "CONTROL_UNSUPPORTED", message: reason }),
+    ),
+    Match.tag(
+      "RuntimeWorkControlFailed",
+      ({ reason }) => new RpcError({ code: "CONTROL_FAILED", message: reason }),
     ),
     Match.exhaustive,
   );
@@ -55,6 +73,8 @@ const streamRpcHandler = <A, E, R>(effect: Effect.Effect<Stream.Stream<A>, E, R>
 const serializeResearchPocEvent = (event: ResearchPocEvent): unknown =>
   event._tag === "MissionCreated" ? event : serializeRuntimeEvent(event);
 
+type DispatchEventEntryWire = Schema.Schema.Type<typeof DispatchEventEntrySchema>;
+
 // ---------------------------------------------------------------------------
 // Handlers Layer
 // ---------------------------------------------------------------------------
@@ -70,6 +90,12 @@ export const HandlersLive = TheseusRpc.toLayer({
     Effect.gen(function* () {
       const adapter = yield* RuntimeRpcAdapter;
       yield* adapter.interrupt(dispatchId).pipe(Effect.mapError(toRpcError));
+    }),
+
+  controlWorkNode: ({ workNodeId, command }) =>
+    Effect.gen(function* () {
+      const adapter = yield* RuntimeRpcAdapter;
+      yield* adapter.controlWorkNode(workNodeId, command).pipe(Effect.mapError(toRpcError));
     }),
 
   getResult: ({ dispatchId }) =>
@@ -138,6 +164,18 @@ export const HandlersLive = TheseusRpc.toLayer({
     Effect.gen(function* () {
       const adapter = yield* RuntimeRpcAdapter;
       return yield* adapter.getDispatchCapsuleEvents(dispatchId).pipe(Effect.mapError(toRpcError));
+    }),
+
+  getDispatchEvents: ({ dispatchId }) =>
+    Effect.gen(function* () {
+      const adapter = yield* RuntimeRpcAdapter;
+      const events = yield* adapter.getDispatchEvents(dispatchId).pipe(Effect.mapError(toRpcError));
+      return events.map(
+        (entry): DispatchEventEntryWire => ({
+          ...entry,
+          event: serializeEvent(entry.event) as DispatchEventEntryWire["event"],
+        }),
+      );
     }),
 
   startResearchPoc: ({ goal }) =>

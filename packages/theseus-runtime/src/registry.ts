@@ -7,7 +7,8 @@
 
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Clock, Context, Effect, Ref } from "effect";
-import type { StatusEntry } from "./runtime/types.ts";
+import type { StatusEntry, WorkNodeState } from "./runtime/types.ts";
+import { WorkControlDescriptors } from "./runtime/work-control.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,7 +26,7 @@ interface RegistryEntry {
   readonly startedAt: number;
   iteration: number;
   usage: Dispatch.Usage;
-  state: "running" | "done" | "failed";
+  state: WorkNodeState;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,7 @@ export const DispatchRegistryLive = Effect.gen(function* () {
               kind: "dispatch",
               relation: e.relation,
               label: e.name,
+              control: WorkControlDescriptors.dispatch(e.state),
               name: e.name,
               ...(e.modelRequest !== undefined ? { modelRequest: e.modelRequest } : {}),
               iteration: e.iteration,

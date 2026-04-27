@@ -15,12 +15,14 @@ import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
   CapsuleEventSchema,
+  DispatchEventEntrySchema,
   DispatchOutputSchema,
   DispatchSessionSchema,
   DispatchSpecSchema,
   MissionSessionSchema,
   ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
+  WorkControlCommandSchema,
   WorkNodeSessionSchema,
 } from "./schemas.ts";
 
@@ -51,6 +53,16 @@ export const Inject = Rpc.make("inject", {
 export const Interrupt = Rpc.make("interrupt", {
   payload: Schema.Struct({
     dispatchId: Schema.String,
+  }),
+  success: Schema.Void,
+  error: RpcError,
+});
+
+/** Control an active work node through its node-kind controller. */
+export const ControlWorkNode = Rpc.make("controlWorkNode", {
+  payload: Schema.Struct({
+    workNodeId: Schema.String,
+    command: WorkControlCommandSchema,
   }),
   success: Schema.Void,
   error: RpcError,
@@ -148,6 +160,15 @@ export const GetDispatchCapsuleEvents = Rpc.make("getDispatchCapsuleEvents", {
   error: RpcError,
 });
 
+/** Get persisted dispatch events by dispatch identity. */
+export const GetDispatchEvents = Rpc.make("getDispatchEvents", {
+  payload: Schema.Struct({
+    dispatchId: Schema.String,
+  }),
+  success: Schema.Array(DispatchEventEntrySchema),
+  error: RpcError,
+});
+
 /** Server-owned nested research POC: mission -> coordinator -> research grunt. */
 export const StartResearchPoc = Rpc.make("startResearchPoc", {
   stream: true,
@@ -165,6 +186,7 @@ export const StartResearchPoc = Rpc.make("startResearchPoc", {
 export const TheseusRpc = RpcGroup.make(
   Inject,
   Interrupt,
+  ControlWorkNode,
   GetResult,
   GetCapsuleEvents,
   Status,
@@ -175,5 +197,6 @@ export const TheseusRpc = RpcGroup.make(
   ListRuntimeDispatches,
   GetMissionWorkTree,
   GetDispatchCapsuleEvents,
+  GetDispatchEvents,
   StartResearchPoc,
 );

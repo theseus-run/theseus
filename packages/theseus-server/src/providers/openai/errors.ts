@@ -20,13 +20,16 @@ export class OpenAIEncodeError extends Data.TaggedError("OpenAIEncodeError")<{
 
 export type OpenAIError = OpenAIAuthError | OpenAIHttpError | OpenAIParseError | OpenAIEncodeError;
 
+const authKind = (cause: unknown): AiError.AuthenticationError["kind"] =>
+  cause === "OPENAI_API_KEY is not set" ? "MissingKey" : "Unknown";
+
 export const mapOpenAIError = (e: OpenAIError): AiError.AiError =>
   Match.value(e).pipe(
-    Match.tag("OpenAIAuthError", () =>
+    Match.tag("OpenAIAuthError", (error) =>
       AiError.make({
         module: "OpenAIProvider",
         method: "auth",
-        reason: new AiError.AuthenticationError({ kind: "Unknown" }),
+        reason: new AiError.AuthenticationError({ kind: authKind(error.cause) }),
       }),
     ),
     Match.tag("OpenAIParseError", () =>

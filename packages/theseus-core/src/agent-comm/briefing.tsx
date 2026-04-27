@@ -17,7 +17,7 @@ const ListSection = ({
   items,
 }: {
   readonly title: string;
-  readonly items?: ReadonlyArray<string> | undefined;
+  readonly items?: ReadonlyArray<string> | null | undefined;
 }): VNode =>
   items && items.length > 0 ? (
     <>

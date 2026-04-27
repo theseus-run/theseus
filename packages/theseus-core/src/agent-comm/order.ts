@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+const OptionalStringArraySchema = Schema.optional(Schema.NullOr(Schema.Array(Schema.String)));
+
 export const ContextBlockSchema = Schema.Struct({
   kind: Schema.Literals(["fact", "constraint", "reference", "finding", "instruction"]),
   text: Schema.String,
@@ -9,30 +11,24 @@ export const ContextBlockSchema = Schema.Struct({
 export type ContextBlock = Schema.Schema.Type<typeof ContextBlockSchema>;
 
 export const AuthoritySchema = Schema.Struct({
-  grantRefs: Schema.optional(
-    Schema.Array(Schema.String).annotate({
-      description: "Runtime-enforced capability or policy grant references.",
-    }),
-  ),
-  actions: Schema.optional(Schema.Array(Schema.String)),
-  tools: Schema.optional(Schema.Array(Schema.String)),
-  limits: Schema.optional(Schema.Array(Schema.String)),
-  escalation: Schema.optional(Schema.Array(Schema.String)),
+  grantRefs: OptionalStringArraySchema.annotate({
+    description: "Runtime-enforced capability or policy grant references.",
+  }),
+  actions: OptionalStringArraySchema,
+  tools: OptionalStringArraySchema,
+  limits: OptionalStringArraySchema,
+  escalation: OptionalStringArraySchema,
 });
 
 export type Authority = Schema.Schema.Type<typeof AuthoritySchema>;
 
 export const BoundsSchema = Schema.Struct({
-  scope: Schema.optional(
-    Schema.Array(Schema.String).annotate({
-      description: "Explicit in-scope or out-of-scope boundaries.",
-    }),
-  ),
-  constraints: Schema.optional(
-    Schema.Array(Schema.String).annotate({
-      description: "Rules, exclusions, or hard limits.",
-    }),
-  ),
+  scope: OptionalStringArraySchema.annotate({
+    description: "Explicit in-scope or out-of-scope boundaries.",
+  }),
+  constraints: OptionalStringArraySchema.annotate({
+    description: "Rules, exclusions, or hard limits.",
+  }),
 });
 
 export type Bounds = Schema.Schema.Type<typeof BoundsSchema>;

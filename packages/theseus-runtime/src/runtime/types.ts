@@ -9,7 +9,7 @@ export class RuntimeToolNotFound extends Data.TaggedError("RuntimeToolNotFound")
 
 export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
   readonly id: string;
-  readonly kind: "dispatch" | "mission";
+  readonly kind: "dispatch" | "mission" | "workNode";
 }> {}
 
 export class RuntimeDispatchFailed extends Data.TaggedError("RuntimeDispatchFailed")<{
@@ -18,19 +18,72 @@ export class RuntimeDispatchFailed extends Data.TaggedError("RuntimeDispatchFail
   readonly cause?: unknown;
 }> {}
 
-export type RuntimeError = RuntimeToolNotFound | RuntimeNotFound | RuntimeDispatchFailed;
+export class RuntimeWorkControlUnsupported extends Data.TaggedError(
+  "RuntimeWorkControlUnsupported",
+)<{
+  readonly workNodeId: string;
+  readonly command: WorkControlCommand["_tag"];
+  readonly reason: string;
+}> {}
+
+export class RuntimeWorkControlFailed extends Data.TaggedError("RuntimeWorkControlFailed")<{
+  readonly workNodeId: string;
+  readonly command: WorkControlCommand["_tag"];
+  readonly reason: string;
+  readonly cause?: unknown;
+}> {}
+
+export type RuntimeError =
+  | RuntimeToolNotFound
+  | RuntimeNotFound
+  | RuntimeDispatchFailed
+  | RuntimeWorkControlUnsupported
+  | RuntimeWorkControlFailed;
 
 export type MissionSessionState = "pending" | "running" | "done" | "failed";
-export type DispatchSessionState = "running" | "done" | "failed";
+export type DispatchSessionState = WorkNodeState;
 export type WorkNodeKind = "dispatch" | "task" | "external";
-export type WorkNodeRelation =
-  | "root"
-  | "delegated"
-  | "continued"
-  | "branched"
-  | "prepared"
-  | "spawned";
-export type WorkNodeState = "pending" | "running" | "done" | "failed";
+export type WorkNodeRelation = "root" | "delegated" | "continued" | "branched";
+export type WorkNodeState =
+  | "pending"
+  | "running"
+  | "paused"
+  | "blocked"
+  | "done"
+  | "failed"
+  | "aborted";
+
+export type WorkControlCapability =
+  | { readonly _tag: "Supported" }
+  | { readonly _tag: "Unsupported"; readonly reason: string };
+
+export interface WorkNodeControlDescriptor {
+  readonly interrupt: WorkControlCapability;
+  readonly injectGuidance: WorkControlCapability;
+  readonly pause: WorkControlCapability;
+  readonly resume: WorkControlCapability;
+  readonly requestStatus: WorkControlCapability;
+}
+
+export type WorkControlCommand =
+  | {
+      readonly _tag: "Interrupt";
+      readonly reason?: string | undefined;
+    }
+  | {
+      readonly _tag: "InjectGuidance";
+      readonly text: string;
+    }
+  | {
+      readonly _tag: "Pause";
+      readonly reason?: string | undefined;
+    }
+  | {
+      readonly _tag: "Resume";
+    }
+  | {
+      readonly _tag: "RequestStatus";
+    };
 
 export interface MissionSession {
   readonly missionId: string;
@@ -49,6 +102,7 @@ export interface WorkNodeSession {
   readonly relation: WorkNodeRelation;
   readonly label: string;
   readonly state: WorkNodeState;
+  readonly control: WorkNodeControlDescriptor;
   readonly startedAt?: number;
   readonly completedAt?: number;
 }
@@ -124,6 +178,11 @@ export type RuntimeSubmission =
 
 export type RuntimeControl =
   | {
+      readonly _tag: "WorkNodeControl";
+      readonly workNodeId: string;
+      readonly command: WorkControlCommand;
+    }
+  | {
       readonly _tag: "DispatchInject";
       readonly dispatchId: string;
       readonly text: string;
@@ -162,6 +221,10 @@ export type RuntimeQuery =
       readonly dispatchId: string;
     }
   | {
+      readonly _tag: "DispatchEvents";
+      readonly dispatchId: string;
+    }
+  | {
       readonly _tag: "ActiveStatus";
     };
 
@@ -193,6 +256,10 @@ export type RuntimeQueryResult =
   | {
       readonly _tag: "DispatchCapsuleEvents";
       readonly events: ReadonlyArray<CapsuleNs.CapsuleEvent>;
+    }
+  | {
+      readonly _tag: "DispatchEvents";
+      readonly events: ReadonlyArray<Dispatch.DispatchEventEntry>;
     }
   | {
       readonly _tag: "ActiveStatus";

@@ -10,6 +10,7 @@ import type {
   RuntimeError,
   StatusEntry,
   TheseusRuntimeService,
+  WorkControlCommand,
   WorkNodeSession,
 } from "./types.ts";
 
@@ -49,6 +50,13 @@ export const RuntimeCommands = {
 };
 
 export const RuntimeControls = {
+  controlWorkNode: (
+    runtime: TheseusRuntimeService,
+    workNodeId: string,
+    command: WorkControlCommand,
+  ): Effect.Effect<void, RuntimeError> =>
+    runtime.control({ _tag: "WorkNodeControl", workNodeId, command }),
+
   inject: (
     runtime: TheseusRuntimeService,
     dispatchId: string,
@@ -151,6 +159,19 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("DispatchCapsuleEvents", ({ events }) => Effect.succeed(events)),
+          Match.orElse(() => unexpectedQueryResult),
+        ),
+      ),
+    ),
+
+  getDispatchEvents: (
+    runtime: TheseusRuntimeService,
+    dispatchId: string,
+  ): Effect.Effect<ReadonlyArray<Dispatch.DispatchEventEntry>, RuntimeError> =>
+    runtime.query({ _tag: "DispatchEvents", dispatchId }).pipe(
+      Effect.flatMap((result) =>
+        Match.value(result).pipe(
+          Match.tag("DispatchEvents", ({ events }) => Effect.succeed(events)),
           Match.orElse(() => unexpectedQueryResult),
         ),
       ),

@@ -1,6 +1,9 @@
 import { Effect, Match, Schema } from "effect";
 import { defineTool, textPresentation } from "../tool/index.ts";
 
+const optionalNullable = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(Schema.NullOr(schema));
+
 export const ReportChannelSchema = Schema.Literals(["complete", "blocked", "defect"]);
 
 export type ReportChannel = Schema.Schema.Type<typeof ReportChannelSchema>;
@@ -30,7 +33,7 @@ export const ArtifactRefSchema = Schema.Struct({
   uri: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
   final: Schema.optional(Schema.Boolean),
-  criteriaRefs: Schema.optional(Schema.Array(Schema.String)),
+  criteriaRefs: optionalNullable(Schema.Array(Schema.String)),
 });
 
 export type ArtifactRef = Schema.Schema.Type<typeof ArtifactRefSchema>;
@@ -38,14 +41,14 @@ export type ArtifactRef = Schema.Schema.Type<typeof ArtifactRefSchema>;
 export const CriterionSatisfactionSchema = Schema.Struct({
   criterion: Schema.String,
   status: Schema.Literals(["satisfied", "unsatisfied", "unknown"]),
-  evidenceRefs: Schema.optional(Schema.Array(Schema.String)),
+  evidenceRefs: optionalNullable(Schema.Array(Schema.String)),
   notes: Schema.optional(Schema.String),
 });
 
 export type CriterionSatisfaction = Schema.Schema.Type<typeof CriterionSatisfactionSchema>;
 
 export const FollowupSchema = Schema.Struct({
-  risks: Schema.optional(Schema.Array(Schema.String)),
+  risks: optionalNullable(Schema.Array(Schema.String)),
   next: Schema.optional(Schema.String),
 });
 
@@ -61,9 +64,9 @@ export const ReportSchema = Schema.Struct({
   channel: ReportChannelSchema,
   summary: Schema.String,
   content: Schema.String,
-  evidence: Schema.optional(Schema.Array(EvidenceSchema)),
-  artifacts: Schema.optional(Schema.Array(ArtifactRefSchema)),
-  satisfaction: Schema.optional(Schema.Array(CriterionSatisfactionSchema)),
+  evidence: optionalNullable(Schema.Array(EvidenceSchema)),
+  artifacts: optionalNullable(Schema.Array(ArtifactRefSchema)),
+  satisfaction: optionalNullable(Schema.Array(CriterionSatisfactionSchema)),
   followup: Schema.optional(FollowupSchema),
 });
 

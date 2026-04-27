@@ -19,6 +19,10 @@ import { TheseusRuntimeLive } from "@theseus.run/runtime/live";
 import { DispatchRegistry, DispatchRegistryLive } from "@theseus.run/runtime/registry";
 import { SqliteDispatchStore, TheseusDbLive } from "@theseus.run/runtime/store";
 import { makeToolCatalog, ToolCatalog } from "@theseus.run/runtime/tool-catalog";
+import {
+  WorkNodeControllers,
+  WorkNodeControllersLive,
+} from "@theseus.run/runtime/work-node-control";
 import { allTools } from "@theseus.run/tools";
 import { type Cause, Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -50,6 +54,10 @@ const ToolCatalogLive = Layer.succeed(ToolCatalog)(
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+const WorkNodeControlLive = Layer.provide(
+  Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
+  RegistryLive,
+);
 const BlueprintRegistryLive = Agent.BlueprintRegistryLive([researchGruntBlueprint]);
 
 // SQLite persistence
@@ -94,6 +102,7 @@ const ServicesLayer = Layer.mergeAll(
   RingLive,
   ToolCatalogLive,
   RegistryLive,
+  WorkNodeControlLive,
   BlueprintRegistryLive,
   DbLive,
 );

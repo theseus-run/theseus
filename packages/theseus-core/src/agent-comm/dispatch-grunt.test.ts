@@ -143,6 +143,74 @@ describe("dispatchGruntTool", () => {
     expect(observed.summaries[0]?.parentDispatchId).toBe("parent-dispatch");
   });
 
+  test("treats null optional order arrays as absent", async () => {
+    const output = await Effect.runPromise(
+      Tool.callTool(dispatchGruntTool, {
+        target: "scout",
+        order: {
+          objective: "summarize",
+          successCriteria: ["returns summary"],
+          authority: {
+            grantRefs: null,
+            actions: null,
+            tools: ["read_file"],
+            limits: null,
+            escalation: null,
+          },
+        },
+      }).pipe(
+        Effect.provide(
+          testLayer([
+            toolCallParts([
+              {
+                id: "report-null-authority",
+                name: report.name,
+                arguments: JSON.stringify({
+                  channel: "complete",
+                  summary: "done",
+                  content: "summary text",
+                }),
+              },
+            ]),
+            textParts("ignored final text"),
+          ]),
+        ),
+      ),
+    );
+
+    const result = successOutput(output);
+    expect(result._tag).toBe("Reported");
+  });
+
+  test("captures reports with null optional report arrays", async () => {
+    const output = await Effect.runPromise(
+      Tool.callTool(dispatchGruntTool, baseInput).pipe(
+        Effect.provide(
+          testLayer([
+            toolCallParts([
+              {
+                id: "report-null-fields",
+                name: report.name,
+                arguments: JSON.stringify({
+                  channel: "complete",
+                  summary: "done",
+                  content: "summary text",
+                  evidence: null,
+                  artifacts: null,
+                  satisfaction: null,
+                }),
+              },
+            ]),
+            textParts("ignored final text"),
+          ]),
+        ),
+      ),
+    );
+
+    const result = successOutput(output);
+    expect(result._tag).toBe("Reported");
+  });
+
   test("returns unstructured salvage when no valid report is captured", async () => {
     const output = await Effect.runPromise(
       Tool.callTool(dispatchGruntTool, baseInput).pipe(

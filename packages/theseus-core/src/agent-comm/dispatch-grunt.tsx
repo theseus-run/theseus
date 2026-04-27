@@ -50,11 +50,14 @@ export const DispatchGruntLauncherLive = Effect.gen(function* () {
     launch: <R,>({ blueprint, systemPrompt, task }: DispatchGruntLaunchInput<R>) =>
       Effect.gen(function* () {
         const parentDispatch = yield* CurrentDispatch;
+        const tools = blueprint.tools.some((tool) => tool.name === report.name)
+          ? blueprint.tools
+          : [...blueprint.tools, report];
         return yield* dispatchLoop(
           {
             ...blueprint,
             systemPrompt,
-            tools: [...blueprint.tools, report] as ReadonlyArray<ToolAnyWith<unknown>>,
+            tools: tools as ReadonlyArray<ToolAnyWith<unknown>>,
           } as DispatchSpec<unknown>,
           task,
           { parentDispatchId: parentDispatch.id },

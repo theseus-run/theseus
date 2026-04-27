@@ -36,12 +36,19 @@ export interface DispatchEvent {
   readonly action?: string;
   readonly injection?: string;
   readonly detail?: string;
+  readonly reason?: string;
   readonly result?: {
     readonly dispatchId: string;
     readonly name: string;
     readonly content: string;
     readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   };
+}
+
+export interface DispatchEventEntry {
+  readonly dispatchId: string;
+  readonly timestamp: number;
+  readonly event: DispatchEvent;
 }
 
 export interface MissionSession {
@@ -56,15 +63,16 @@ export interface DispatchSession {
   readonly workNodeId: string;
   readonly parentWorkNodeId?: string;
   readonly kind: "dispatch";
-  readonly relation: "root" | "delegated" | "continued" | "branched" | "prepared" | "spawned";
+  readonly relation: WorkNodeRelation;
   readonly label: string;
+  readonly control: WorkNodeControlDescriptor;
   readonly dispatchId: string;
   readonly missionId: string;
   readonly capsuleId: string;
   readonly name: string;
   readonly modelRequest?: ModelRequest;
   readonly iteration: number;
-  readonly state: "running" | "done" | "failed";
+  readonly state: WorkNodeState;
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 }
 
@@ -74,12 +82,39 @@ export interface WorkNodeSession {
   readonly capsuleId: string;
   readonly parentWorkNodeId?: string;
   readonly kind: "dispatch" | "task" | "external";
-  readonly relation: "root" | "delegated" | "continued" | "branched" | "prepared" | "spawned";
+  readonly relation: WorkNodeRelation;
   readonly label: string;
-  readonly state: "pending" | "running" | "done" | "failed";
+  readonly state: WorkNodeState;
+  readonly control: WorkNodeControlDescriptor;
   readonly startedAt?: number;
   readonly completedAt?: number;
 }
+
+export type WorkNodeRelation = "root" | "delegated" | "continued" | "branched";
+export type WorkNodeState =
+  | "pending"
+  | "running"
+  | "paused"
+  | "blocked"
+  | "done"
+  | "failed"
+  | "aborted";
+export type WorkControlCapability =
+  | { readonly _tag: "Supported" }
+  | { readonly _tag: "Unsupported"; readonly reason: string };
+export interface WorkNodeControlDescriptor {
+  readonly interrupt: WorkControlCapability;
+  readonly injectGuidance: WorkControlCapability;
+  readonly pause: WorkControlCapability;
+  readonly resume: WorkControlCapability;
+  readonly requestStatus: WorkControlCapability;
+}
+export type WorkControlCommand =
+  | { readonly _tag: "Interrupt"; readonly reason?: string | undefined }
+  | { readonly _tag: "InjectGuidance"; readonly text: string }
+  | { readonly _tag: "Pause"; readonly reason?: string | undefined }
+  | { readonly _tag: "Resume" }
+  | { readonly _tag: "RequestStatus" };
 
 export type ModelRequest =
   | {
@@ -142,19 +177,34 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const rpcErrorMessage = (value: unknown, fallback: string): string => {
   if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return first === undefined ? fallback : rpcErrorMessage(first, fallback);
+  }
   if (isRecord(value)) {
     const message = value["message"];
     if (typeof message === "string") return message;
+    const pretty = value["pretty"];
+    if (typeof pretty === "string") return pretty;
     const error = value["error"];
     if (error !== undefined) return rpcErrorMessage(error, fallback);
+    const cause = value["cause"];
+    if (cause !== undefined) return rpcErrorMessage(cause, fallback);
+    const failure = value["failure"];
+    if (failure !== undefined) return rpcErrorMessage(failure, fallback);
     const defect = value["defect"];
     if (defect !== undefined) return rpcErrorMessage(defect, fallback);
+    const tag = value["_tag"];
+    if (typeof tag === "string") {
+      const reason = value["reason"];
+      if (typeof reason === "string") return `${tag}: ${reason}`;
+      const code = value["code"];
+      if (typeof code === "string") return `${tag}: ${code}`;
+      return tag;
+    }
   }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return fallback;
-  }
+  const encoded = JSON.stringify(value);
+  return encoded === undefined ? fallback : encoded;
 };
 
 // ---------------------------------------------------------------------------
@@ -260,16 +310,7 @@ export class TheseusClient {
         if (exit["_tag"] === "Success") {
           req.resolve(exit["value"]);
         } else {
-          // Failure — extract error
-          const cause = Array.isArray(exit["cause"]) ? exit["cause"][0] : undefined;
-          const error = isRecord(cause) && isRecord(cause["error"]) ? cause["error"] : undefined;
-          req.reject(
-            new Error(
-              isRecord(error) && typeof error["message"] === "string"
-                ? error["message"]
-                : "RPC failed",
-            ),
-          );
+          req.reject(new Error(rpcErrorMessage(exit, "RPC failed")));
         }
       }
     } else if (msg["_tag"] === "Defect") {
@@ -419,6 +460,10 @@ export class TheseusClient {
     await this.request("interrupt", { dispatchId });
   }
 
+  async controlWorkNode(workNodeId: string, command: WorkControlCommand): Promise<void> {
+    await this.request("controlWorkNode", { workNodeId, command });
+  }
+
   async getDispatchResult(dispatchId: string): Promise<DispatchEvent["result"] | null> {
     return await this.request<DispatchEvent["result"]>("getResult", { dispatchId });
   }
@@ -429,6 +474,10 @@ export class TheseusClient {
 
   async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
     return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
+  }
+
+  async getDispatchEvents(dispatchId: string): Promise<ReadonlyArray<DispatchEventEntry>> {
+    return await this.request<DispatchEventEntry[]>("getDispatchEvents", { dispatchId });
   }
 
   startResearchPoc(

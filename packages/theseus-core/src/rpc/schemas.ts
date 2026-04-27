@@ -142,9 +142,31 @@ export const WorkNodeSessionSchema = Schema.Struct({
   capsuleId: Schema.String,
   parentWorkNodeId: Schema.optional(Schema.String),
   kind: Schema.Literals(["dispatch", "task", "external"]),
-  relation: Schema.Literals(["root", "delegated", "continued", "branched", "prepared", "spawned"]),
+  relation: Schema.Literals(["root", "delegated", "continued", "branched"]),
   label: Schema.String,
-  state: Schema.Literals(["pending", "running", "done", "failed"]),
+  state: Schema.Literals(["pending", "running", "paused", "blocked", "done", "failed", "aborted"]),
+  control: Schema.Struct({
+    interrupt: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
+    injectGuidance: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
+    pause: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
+    resume: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
+    requestStatus: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
+  }),
   startedAt: Schema.optional(Schema.Number),
   completedAt: Schema.optional(Schema.Number),
 });
@@ -171,9 +193,23 @@ export const DispatchSessionSchema = Schema.Struct({
     ]),
   ),
   iteration: Schema.Number,
-  state: Schema.Literals(["running", "done", "failed"]),
+  state: Schema.Literals(["pending", "running", "paused", "blocked", "done", "failed", "aborted"]),
   usage: UsageSchema,
 });
+
+export const WorkControlCommandSchema = Schema.Union([
+  Schema.TaggedStruct("Interrupt", {
+    reason: Schema.optional(Schema.String),
+  }),
+  Schema.TaggedStruct("InjectGuidance", {
+    text: Schema.String,
+  }),
+  Schema.TaggedStruct("Pause", {
+    reason: Schema.optional(Schema.String),
+  }),
+  Schema.TaggedStruct("Resume", {}),
+  Schema.TaggedStruct("RequestStatus", {}),
+]);
 
 export const RuntimeDispatchEventSchema = Schema.Union([
   Schema.TaggedStruct("WorkNodeStarted", {
@@ -190,6 +226,12 @@ export const RuntimeDispatchEventSchema = Schema.Union([
     event: DispatchEventSchema,
   }),
 ]);
+
+export const DispatchEventEntrySchema = Schema.Struct({
+  dispatchId: Schema.String,
+  timestamp: Schema.Number,
+  event: DispatchEventSchema,
+});
 
 export const ResearchPocEventSchema = Schema.Union([
   Schema.TaggedStruct("MissionCreated", {

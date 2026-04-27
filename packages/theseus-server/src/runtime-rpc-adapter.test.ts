@@ -11,6 +11,13 @@ const session = {
   kind: "dispatch",
   relation: "root",
   label: "coordinator",
+  control: {
+    interrupt: { _tag: "Supported" },
+    injectGuidance: { _tag: "Supported" },
+    pause: { _tag: "Unsupported", reason: "dispatch pause is not implemented" },
+    resume: { _tag: "Unsupported", reason: "dispatch resume is not implemented" },
+    requestStatus: { _tag: "Supported" },
+  },
   name: "coordinator",
   iteration: 0,
   state: "running",
@@ -111,6 +118,36 @@ describe("RuntimeRpcAdapter", () => {
     expect(nodes).toEqual([session]);
   });
 
+  test("controls work nodes through the runtime contract", async () => {
+    const commands: unknown[] = [];
+    const runtime: TheseusRuntimeService = {
+      ...fakeRuntime,
+      control: (command) => {
+        commands.push(command);
+        return Effect.void;
+      },
+    };
+    const layer = Layer.provide(
+      RuntimeRpcAdapterLive,
+      Layer.succeed(TheseusRuntime)(TheseusRuntime.of(runtime)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* RuntimeRpcAdapter;
+        yield* adapter.controlWorkNode("work-1", { _tag: "RequestStatus" });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(commands).toEqual([
+      {
+        _tag: "WorkNodeControl",
+        workNodeId: "work-1",
+        command: { _tag: "RequestStatus" },
+      },
+    ]);
+  });
+
   test("starts the server-owned research POC without caller-supplied tools", async () => {
     const commands: string[] = [];
     const runtime: TheseusRuntimeService = {
@@ -124,8 +161,8 @@ describe("RuntimeRpcAdapter", () => {
         expect(command.input.spec.name).toBe("poc-research-coordinator");
         expect(command.input.spec.tools).toEqual([{ name: "theseus_dispatch_grunt" }]);
         expect(command.input.spec.modelRequest).toEqual({
-          provider: "openai",
-          model: "gpt-5.5",
+          provider: "copilot",
+          model: "gpt-5.4",
         });
         return Effect.succeed({
           _tag: "DispatchStarted",

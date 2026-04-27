@@ -21,6 +21,7 @@ import {
   type WorkNodeRelation,
 } from "../../types.ts";
 import { CurrentWorkNode, type CurrentWorkNodeValue } from "../../work-context.ts";
+import { WorkControlDescriptors } from "../../work-control.ts";
 
 const SKIP_EVENT_TAGS = new Set(["Thinking"]);
 
@@ -228,6 +229,7 @@ const startConcreteDispatch = (
       kind: "dispatch",
       relation: input.relation,
       label: input.spec.name,
+      control: WorkControlDescriptors.dispatch("running"),
       dispatchId: handle.dispatchId,
       name: input.spec.name,
       ...(input.spec.modelRequest !== undefined ? { modelRequest: input.spec.modelRequest } : {}),
@@ -280,10 +282,13 @@ const makeDispatchGruntLauncher = (
     launch: <R>(input: AgentComm.DispatchGruntLaunchInput<R>) =>
       Effect.gen(function* () {
         const parentDispatch = yield* Dispatch.CurrentDispatch;
+        const tools = input.blueprint.tools.some((tool) => tool.name === AgentComm.report.name)
+          ? input.blueprint.tools
+          : [...input.blueprint.tools, AgentComm.report];
         const spec = {
           ...input.blueprint,
           systemPrompt: input.systemPrompt,
-          tools: [...input.blueprint.tools, AgentComm.report],
+          tools,
         } as Dispatch.DispatchSpec<RuntimeToolRequirements>;
         const started = yield* startConcreteDispatch(deps, {
           missionId: parentWorkNode.missionId,

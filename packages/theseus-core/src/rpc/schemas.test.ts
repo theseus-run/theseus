@@ -6,6 +6,14 @@ import {
   RuntimeDispatchEventSchema,
 } from "./schemas.ts";
 
+const dispatchControl = {
+  interrupt: { _tag: "Supported" },
+  injectGuidance: { _tag: "Supported" },
+  pause: { _tag: "Unsupported", reason: "dispatch pause is not implemented" },
+  resume: { _tag: "Unsupported", reason: "dispatch resume is not implemented" },
+  requestStatus: { _tag: "Supported" },
+} as const;
+
 describe("DispatchEventSchema", () => {
   test("preserves ToolResult isError on the wire", async () => {
     const decoded = await Effect.runPromise(
@@ -41,6 +49,7 @@ describe("runtime RPC schemas", () => {
         kind: "dispatch",
         relation: "root",
         label: "coordinator",
+        control: dispatchControl,
         name: "coordinator",
         iteration: 2,
         state: "running",
@@ -66,6 +75,7 @@ describe("runtime RPC schemas", () => {
         kind: "dispatch",
         relation: "root",
         label: "coordinator",
+        control: dispatchControl,
         name: "coordinator",
         iteration: 0,
         state: "running",
