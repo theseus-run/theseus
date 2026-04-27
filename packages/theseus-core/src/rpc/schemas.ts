@@ -102,6 +102,7 @@ export const DispatchEventSchema = Schema.Union([
     tool: Schema.String,
     content: Schema.String,
     isError: Schema.Boolean,
+    structured: Schema.optional(Schema.Unknown),
   }),
   Schema.TaggedStruct("ToolError", {
     name: Schema.String,
@@ -138,6 +139,23 @@ export const DispatchEventSchema = Schema.Union([
 
 export const DispatchSummarySchema = Schema.Struct({
   dispatchId: Schema.String,
+  parentDispatchId: Schema.optional(Schema.String),
+  modelRequest: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        provider: Schema.Literal("openai"),
+        model: Schema.String,
+        maxOutputTokens: Schema.optional(Schema.Number),
+        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
+        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
+      }),
+      Schema.Struct({
+        provider: Schema.Literal("copilot"),
+        model: Schema.String,
+        maxTokens: Schema.optional(Schema.Number),
+      }),
+    ]),
+  ),
   name: Schema.String,
   task: Schema.String,
   startedAt: Schema.Number,
@@ -160,9 +178,26 @@ export const MissionSessionSchema = Schema.Struct({
 
 export const DispatchSessionSchema = Schema.Struct({
   dispatchId: Schema.String,
+  parentDispatchId: Schema.optional(Schema.String),
   missionId: Schema.String,
   capsuleId: Schema.String,
   name: Schema.String,
+  modelRequest: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        provider: Schema.Literal("openai"),
+        model: Schema.String,
+        maxOutputTokens: Schema.optional(Schema.Number),
+        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
+        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
+      }),
+      Schema.Struct({
+        provider: Schema.Literal("copilot"),
+        model: Schema.String,
+        maxTokens: Schema.optional(Schema.Number),
+      }),
+    ]),
+  ),
   iteration: Schema.Number,
   state: Schema.Literals(["running", "done", "failed"]),
   usage: UsageSchema,
@@ -178,6 +213,13 @@ export const RuntimeDispatchEventSchema = Schema.Union([
     capsuleId: Schema.String,
     event: DispatchEventSchema,
   }),
+]);
+
+export const ResearchPocEventSchema = Schema.Union([
+  Schema.TaggedStruct("MissionCreated", {
+    mission: MissionSessionSchema,
+  }),
+  RuntimeDispatchEventSchema,
 ]);
 
 // ---------------------------------------------------------------------------

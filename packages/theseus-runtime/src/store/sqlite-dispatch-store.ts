@@ -16,7 +16,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
       const { db } = yield* TheseusDb;
 
       const upsertRecord = db.prepare(
-        "INSERT INTO dispatch_records (dispatch_id, name, task, parent_dispatch_id) VALUES (?, ?, ?, ?) ON CONFLICT(dispatch_id) DO UPDATE SET name = excluded.name, task = excluded.task, parent_dispatch_id = excluded.parent_dispatch_id",
+        "INSERT INTO dispatch_records (dispatch_id, name, task, parent_dispatch_id, model_request_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(dispatch_id) DO UPDATE SET name = excluded.name, task = excluded.task, parent_dispatch_id = excluded.parent_dispatch_id, model_request_json = excluded.model_request_json",
       );
 
       const insertEvent = db.prepare(
@@ -46,6 +46,8 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
       const selectDispatchList = db.prepare(`
         SELECT
           r.dispatch_id,
+          r.parent_dispatch_id,
+          r.model_request_json,
           r.name,
           r.task,
           MIN(e.timestamp) as started_at,
@@ -54,7 +56,7 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
           MAX(CASE WHEN e.event_tag = 'Done' THEN e.event_json END) as done_json
         FROM dispatch_records r
         LEFT JOIN dispatch_events e ON e.dispatch_id = r.dispatch_id
-        GROUP BY r.dispatch_id, r.name, r.task
+        GROUP BY r.dispatch_id, r.parent_dispatch_id, r.model_request_json, r.name, r.task
         ORDER BY COALESCE(MIN(e.timestamp), 0) DESC
         LIMIT ?
       `);
@@ -73,8 +75,15 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
               ...(input.parentDispatchId !== undefined
                 ? { parentDispatchId: input.parentDispatchId }
                 : {}),
+              ...(input.modelRequest !== undefined ? { modelRequest: input.modelRequest } : {}),
             };
-            upsertRecord.run(id, input.name, input.task, input.parentDispatchId ?? null);
+            upsertRecord.run(
+              id,
+              input.name,
+              input.task,
+              input.parentDispatchId ?? null,
+              input.modelRequest === undefined ? null : encodeJson(input.modelRequest),
+            );
             return record;
           }),
 
@@ -158,6 +167,8 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
             const limit = options?.limit ?? 100;
             const rows = selectDispatchList.all(limit) as Array<{
               dispatch_id: string;
+              parent_dispatch_id: string | null;
+              model_request_json: string | null;
               name: string;
               task: string;
               started_at: number | null;
@@ -172,6 +183,14 @@ export const SqliteDispatchStore: Layer.Layer<Dispatch.DispatchStore, never, The
               const result = doneEvent?.result;
               return {
                 dispatchId: row.dispatch_id,
+                ...(row.parent_dispatch_id !== null
+                  ? { parentDispatchId: row.parent_dispatch_id }
+                  : {}),
+                ...(row.model_request_json !== null
+                  ? {
+                      modelRequest: decodeJson(row.model_request_json) as Dispatch.ModelRequest,
+                    }
+                  : {}),
                 name: row.name,
                 task: row.task,
                 startedAt: row.started_at ?? 0,

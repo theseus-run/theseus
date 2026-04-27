@@ -33,9 +33,11 @@ export interface MissionSession {
 
 export interface DispatchSession {
   readonly dispatchId: string;
+  readonly parentDispatchId?: string;
   readonly missionId: string;
   readonly capsuleId: string;
   readonly name: string;
+  readonly modelRequest?: Dispatch.ModelRequest;
   readonly iteration: number;
   readonly state: DispatchSessionState;
   readonly usage: Dispatch.Usage;

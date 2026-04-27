@@ -114,26 +114,70 @@ const capsuleEvents = (
   });
 
 const dispatchCapsuleEvents = (
-  db: (typeof TheseusDb)["Service"],
+  deps: RuntimeOperationsDeps,
   dispatchId: string,
 ): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeNotFound> =>
-  getDispatchSessionLink(db, dispatchId).pipe(
+  resolveDispatchSessionLink(deps, dispatchId).pipe(
     Effect.flatMap((link) =>
       link
-        ? capsuleEvents(db, link.capsuleId)
+        ? capsuleEvents(deps.db, link.capsuleId)
         : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
     ),
   );
+
+const resolveDispatchSessionLink = (
+  deps: RuntimeOperationsDeps,
+  dispatchId: string,
+): Effect.Effect<{ readonly missionId: string; readonly capsuleId: string } | undefined> =>
+  Effect.gen(function* () {
+    const direct = yield* getDispatchSessionLink(deps.db, dispatchId);
+    if (direct !== undefined) return direct;
+
+    const summaries = yield* deps.dispatchStore.list();
+    const byId = new Map(summaries.map((summary) => [summary.dispatchId, summary]));
+    const links = yield* getDispatchSessionLinks(deps.db);
+    let current = byId.get(dispatchId);
+
+    while (current?.parentDispatchId !== undefined) {
+      const parentLink = links.get(current.parentDispatchId);
+      if (parentLink !== undefined) return parentLink;
+      current = byId.get(current.parentDispatchId);
+    }
+
+    return undefined;
+  });
 
 const dispatchList = (
   deps: RuntimeOperationsDeps,
   options?: { readonly limit?: number },
 ): Effect.Effect<ReadonlyArray<StatusEntry>> =>
   Effect.gen(function* () {
-    const summaries = yield* deps.dispatchStore.list(options);
+    const allSummaries = yield* deps.dispatchStore.list();
+    const summaries =
+      options?.limit === undefined ? allSummaries : allSummaries.slice(0, options.limit);
     const links = yield* getDispatchSessionLinks(deps.db);
+    const byId = new Map(allSummaries.map((summary) => [summary.dispatchId, summary]));
+
+    const inheritedLink = (
+      summary: Dispatch.DispatchSummary,
+    ): { readonly missionId: string; readonly capsuleId: string } | undefined => {
+      const direct = links.get(summary.dispatchId);
+      if (direct !== undefined) return direct;
+
+      let current = summary;
+      while (current.parentDispatchId !== undefined) {
+        const parentLink = links.get(current.parentDispatchId);
+        if (parentLink !== undefined) return parentLink;
+        const parent = byId.get(current.parentDispatchId);
+        if (parent === undefined) return undefined;
+        current = parent;
+      }
+
+      return undefined;
+    };
+
     return summaries.flatMap((summary) => {
-      const link = links.get(summary.dispatchId);
+      const link = inheritedLink(summary);
       return link ? [toDispatchSession(summary, link)] : [];
     });
   });
@@ -199,7 +243,7 @@ export const runRuntimeQuery = (
       ),
     ),
     Match.tag("DispatchCapsuleEvents", ({ dispatchId }) =>
-      dispatchCapsuleEvents(deps.db, dispatchId).pipe(
+      dispatchCapsuleEvents(deps, dispatchId).pipe(
         Effect.map((events): RuntimeQueryResult => ({ _tag: "DispatchCapsuleEvents", events })),
       ),
     ),

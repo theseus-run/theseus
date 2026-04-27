@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import { BlueprintRegistryLive } from "../agent/index.ts";
 import { DispatchDefaults } from "../dispatch/defaults.ts";
 import { LanguageModelGatewayFromLanguageModel } from "../dispatch/model-gateway.ts";
+import { CurrentDispatch, DispatchStore } from "../dispatch/store.ts";
 import * as Tool from "../Tool.ts";
 import {
   makeMockLanguageModel,
@@ -41,6 +42,11 @@ const testLayer = (responses: Parameters<typeof makeMockLanguageModel>[0]) =>
     ]),
     Layer.provide(LanguageModelGatewayFromLanguageModel, makeMockLanguageModel(responses)),
     DispatchDefaults,
+    Layer.succeed(CurrentDispatch)({
+      id: "parent-dispatch" as never,
+      name: "parent",
+      task: "parent task",
+    }),
   );
 
 const successOutput = (outcome: Tool.ToolOutcome<unknown, DispatchGruntResult, unknown>) => {
@@ -98,6 +104,38 @@ describe("dispatchGruntTool", () => {
     expect(result.report.content).toBe("summary text");
     expect(result.report.artifacts?.[0]?.name).toBe("summary.md");
     expect(result.report.satisfaction?.[0]?.status).toBe("satisfied");
+  });
+
+  test("starts the grunt as a child dispatch", async () => {
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const outcome = yield* Tool.callTool(dispatchGruntTool, baseInput);
+        const store = yield* DispatchStore;
+        const summaries = yield* store.list();
+        return { outcome, summaries };
+      }).pipe(
+        Effect.provide(
+          testLayer([
+            toolCallParts([
+              {
+                id: "report-parent-link",
+                name: report.name,
+                arguments: JSON.stringify({
+                  channel: "complete",
+                  summary: "done",
+                  content: "summary text",
+                }),
+              },
+            ]),
+            textParts("ignored final text"),
+          ]),
+        ),
+      ),
+    );
+
+    const result = successOutput(observed.outcome);
+    expect(result._tag).toBe("Reported");
+    expect(observed.summaries[0]?.parentDispatchId).toBe("parent-dispatch");
   });
 
   test("returns unstructured salvage when no valid report is captured", async () => {

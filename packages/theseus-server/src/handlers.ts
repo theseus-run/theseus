@@ -13,6 +13,7 @@ import type {
   RuntimeToolNotFound,
 } from "@theseus.run/runtime";
 import { Effect, Match, Stream } from "effect";
+import type { ResearchPocEvent } from "./runtime-rpc-adapter.ts";
 import { RuntimeRpcAdapter } from "./runtime-rpc-adapter.ts";
 import { serializeEvent, serializeRuntimeEvent } from "./serialize.ts";
 
@@ -57,6 +58,9 @@ const streamRpcHandler = <A, E, R>(effect: Effect.Effect<Stream.Stream<A>, E, R>
   // transport boundary.
   Stream.unwrap(effect) as never;
 
+const serializeResearchPocEvent = (event: ResearchPocEvent): unknown =>
+  event._tag === "MissionCreated" ? event : serializeRuntimeEvent(event);
+
 // ---------------------------------------------------------------------------
 // Handlers Layer
 // ---------------------------------------------------------------------------
@@ -98,6 +102,10 @@ export const HandlersLive = TheseusRpc.toLayer({
         .pipe(Effect.mapError(toRpcError));
       return sessions.map((session) => ({
         dispatchId: session.dispatchId,
+        ...(session.parentDispatchId !== undefined
+          ? { parentDispatchId: session.parentDispatchId }
+          : {}),
+        ...(session.modelRequest !== undefined ? { modelRequest: session.modelRequest } : {}),
         name: session.name,
         task: "",
         startedAt: 0,
@@ -186,4 +194,13 @@ export const HandlersLive = TheseusRpc.toLayer({
       const adapter = yield* RuntimeRpcAdapter;
       return yield* adapter.getDispatchCapsuleEvents(dispatchId).pipe(Effect.mapError(toRpcError));
     }),
+
+  startResearchPoc: ({ goal }) =>
+    streamRpcHandler(
+      Effect.gen(function* () {
+        const adapter = yield* RuntimeRpcAdapter;
+        const events = yield* adapter.startResearchPoc(goal).pipe(Effect.mapError(toRpcError));
+        return events.pipe(Stream.map(serializeResearchPocEvent));
+      }),
+    ),
 });

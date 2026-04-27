@@ -62,14 +62,20 @@ export const toolResult = (
   name: string,
   iteration: number,
   result: ToolCallResult,
-): DispatchEvent => ({
-  _tag: "ToolResult",
-  name,
-  iteration,
-  tool: result.name,
-  content: result.textContent,
-  isError: result.presentation.isError ?? false,
-});
+): DispatchEvent => {
+  const event = {
+    _tag: "ToolResult",
+    name,
+    iteration,
+    tool: result.name,
+    content: result.textContent,
+    isError: result.presentation.isError ?? false,
+  } satisfies DispatchEvent;
+
+  return result.presentation.structured === undefined
+    ? event
+    : { ...event, structured: result.presentation.structured };
+};
 
 export const toolError = (
   name: string,

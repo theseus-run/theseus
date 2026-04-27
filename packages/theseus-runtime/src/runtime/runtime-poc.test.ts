@@ -8,6 +8,7 @@ import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
 import * as Tool from "@theseus.run/core/Tool";
 import { Effect, Fiber, Layer, Schema, Stream } from "effect";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import {
   makeMockLanguageModel,
   textParts,
@@ -86,12 +87,20 @@ const runtimeLayer = (responses = pocResponses) => {
   const BlueprintsLive = Agent.BlueprintRegistryLive([
     {
       name: "scout",
+      modelRequest: { provider: "openai", model: "gpt-5.3-codex-spark" },
       systemPrompt: "You are a scout. Use tools, then call theseus_report.",
       tools: [probe],
     },
   ]);
   const LanguageModelGatewayLive = Layer.provide(
-    Dispatch.LanguageModelGatewayFromLanguageModel,
+    Layer.effect(Dispatch.LanguageModelGateway)(
+      Effect.gen(function* () {
+        const languageModel = yield* LanguageModel.LanguageModel;
+        return Dispatch.LanguageModelGateway.of({
+          resolve: () => Effect.succeed(languageModel),
+        });
+      }),
+    ),
     makeMockLanguageModel(responses),
   );
   const Services = Layer.mergeAll(
@@ -133,6 +142,7 @@ describe("TheseusRuntime POC", () => {
           missionId: mission.missionId,
           spec: {
             name: "coordinator",
+            modelRequest: { provider: "openai", model: "gpt-5.5" },
             systemPrompt: "Coordinate the mission by dispatching scout.",
             tools: [{ name: AgentComm.dispatchGruntTool.name }],
           },
@@ -168,6 +178,13 @@ describe("TheseusRuntime POC", () => {
     expect(observed.events.some((event) => event._tag === "DispatchEvent")).toBe(true);
     expect(observed.dispatches[0]?.missionId).toBe(observed.mission.missionId);
     expect(observed.dispatches[0]?.capsuleId).toBe(observed.mission.capsuleId);
+    expect(observed.dispatches.map((session) => session.parentDispatchId)).toContain(
+      observed.session.dispatchId,
+    );
+    expect(observed.dispatches.map((session) => session.modelRequest?.model)).toContain("gpt-5.5");
+    expect(observed.dispatches.map((session) => session.modelRequest?.model)).toContain(
+      "gpt-5.3-codex-spark",
+    );
     expect(observed.missions[0]?.missionId).toBe(observed.mission.missionId);
     expect(observed.capsuleEvents.map((event) => event.type)).toContain("mission.create");
     expect(observed.capsuleEvents.map((event) => event.type)).toContain("dispatch.start");

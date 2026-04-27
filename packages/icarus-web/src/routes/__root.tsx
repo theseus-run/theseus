@@ -39,6 +39,12 @@ export function RootLayout() {
           <Link to="/poc" className="text-muted-foreground hover:text-foreground transition-colors">
             poc
           </Link>
+          <Link
+            to="/poc-tree"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            tree poc
+          </Link>
         </div>
       </header>
 

@@ -9,6 +9,7 @@ import {
 import { StatusMark } from "@/components/ui/status-mark";
 import { StatusStrip, StatusStripItem } from "@/components/ui/status-strip";
 import { RuntimePocPage } from "@/routes/poc";
+import { RuntimeTreePocPage } from "@/routes/poc-tree";
 import { DashboardPage } from "./routes/dashboard-page";
 import { ShowcaseFieldsPage } from "./routes/showcase-fields-page";
 import { ShowcaseIndexPage } from "./routes/showcase-index-page";
@@ -49,6 +50,9 @@ function RedesignLayout() {
           </StatusStripItem>
           <StatusStripItem>
             <Link to="/poc">poc</Link>
+          </StatusStripItem>
+          <StatusStripItem>
+            <Link to="/poc-tree">tree poc</Link>
           </StatusStripItem>
         </StatusStrip>
         <Outlet />
@@ -101,6 +105,12 @@ const runtimePocRoute = createRoute({
   component: RuntimePocPage,
 });
 
+const runtimeTreePocRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/poc-tree",
+  component: RuntimeTreePocPage,
+});
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   showcaseIndexRoute,
@@ -109,6 +119,7 @@ const routeTree = rootRoute.addChildren([
   showcaseFieldsRoute,
   showcasePatternsRoute,
   runtimePocRoute,
+  runtimeTreePocRoute,
 ]);
 
 const redesignRouter = createRouter({ routeTree });

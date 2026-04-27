@@ -49,6 +49,7 @@ type RuntimeToolRequirements =
   | Dispatch.LanguageModelGateway
   | Satellite.SatelliteRing
   | Dispatch.DispatchStore
+  | Dispatch.CurrentDispatch
   | CapsuleNs.CurrentCapsule
   | Agent.AgentIdentity;
 
@@ -182,9 +183,13 @@ export const startDispatch = (
     );
     const session: DispatchSession = {
       dispatchId: handle.dispatchId,
+      ...(options?.parentDispatchId !== undefined
+        ? { parentDispatchId: options.parentDispatchId }
+        : {}),
       missionId,
       capsuleId,
       name: spec.name,
+      ...(spec.modelRequest !== undefined ? { modelRequest: spec.modelRequest } : {}),
       iteration: 0,
       state: "running",
       usage: { inputTokens: 0, outputTokens: 0 },

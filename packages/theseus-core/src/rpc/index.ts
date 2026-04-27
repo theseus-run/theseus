@@ -24,6 +24,7 @@ export {
   ListRuntimeDispatches,
   RpcError,
   StartMissionDispatch,
+  StartResearchPoc,
   Status,
   TheseusRpc,
 } from "./procedures.ts";
@@ -37,6 +38,7 @@ export {
   DispatchSummarySchema,
   MessageSchema,
   MissionSessionSchema,
+  ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
   SerializedToolCallErrorSchema,
   SerializedToolRefSchema,

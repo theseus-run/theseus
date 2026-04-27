@@ -55,6 +55,7 @@ export const dispatch = <R = never>(
       ...(options?.parentDispatchId !== undefined
         ? { parentDispatchId: options.parentDispatchId }
         : {}),
+      ...(spec.modelRequest !== undefined ? { modelRequest: spec.modelRequest } : {}),
       ...(options?.dispatchId !== undefined ? { requestedId: options.dispatchId } : {}),
     });
     const dispatchId = record.id;

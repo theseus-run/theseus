@@ -9,7 +9,7 @@ import { Cause, Effect, Exit, Fiber, Match, Ref, Schema, Stream } from "effect";
 import { BlueprintRegistry } from "../agent/index.ts";
 import { dispatch as dispatchLoop } from "../dispatch/index.ts";
 import type { LanguageModelGateway } from "../dispatch/model-gateway.ts";
-import type { DispatchStore } from "../dispatch/store.ts";
+import { CurrentDispatch, type DispatchStore } from "../dispatch/store.ts";
 import type { DispatchEvent } from "../dispatch/types.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
 import { defineTool, type Tool, textPresentation } from "../tool/index.ts";
@@ -82,7 +82,7 @@ export const dispatchGruntTool: Tool<
   DispatchGruntInput,
   DispatchGruntResultType,
   DispatchGruntFailed,
-  BlueprintRegistry | LanguageModelGateway | SatelliteRing | DispatchStore
+  BlueprintRegistry | LanguageModelGateway | SatelliteRing | DispatchStore | CurrentDispatch
 > = defineTool({
   name: "theseus_dispatch_grunt",
   description:
@@ -94,6 +94,7 @@ export const dispatchGruntTool: Tool<
   execute: ({ target, order }) =>
     Effect.gen(function* () {
       const registry = yield* BlueprintRegistry;
+      const parentDispatch = yield* CurrentDispatch;
       const gruntBlueprint = yield* registry
         .get(target)
         .pipe(
@@ -109,7 +110,9 @@ export const dispatchGruntTool: Tool<
         tools: [...gruntBlueprint.tools, report],
       };
 
-      const handle = yield* dispatchLoop(briefedBlueprint, order.objective);
+      const handle = yield* dispatchLoop(briefedBlueprint, order.objective, {
+        parentDispatchId: parentDispatch.id,
+      });
       const reportRef = yield* Ref.make<Report | undefined>(undefined);
       const drainFiber = yield* handle.events.pipe(
         Stream.runForEach((event) => captureReport(event, reportRef)),

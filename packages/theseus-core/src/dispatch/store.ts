@@ -8,6 +8,7 @@
 
 import { Clock, Context, Effect, Layer, Random, Ref } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
+import type { ModelRequest } from "./model-gateway.ts";
 import type { DispatchEvent, DispatchOptions, Usage } from "./types.ts";
 
 export type DispatchId = string & { readonly _brand: unique symbol };
@@ -16,6 +17,7 @@ export interface DispatchCreate {
   readonly name: string;
   readonly task: string;
   readonly parentDispatchId?: string;
+  readonly modelRequest?: ModelRequest;
   readonly requestedId?: string;
 }
 
@@ -24,6 +26,7 @@ export interface DispatchRecord {
   readonly name: string;
   readonly task: string;
   readonly parentDispatchId?: string;
+  readonly modelRequest?: ModelRequest;
 }
 
 export interface DispatchEventEntry {
@@ -42,6 +45,8 @@ export interface DispatchSnapshot {
 
 export interface DispatchSummary {
   readonly dispatchId: string;
+  readonly parentDispatchId?: string;
+  readonly modelRequest?: ModelRequest;
   readonly name: string;
   readonly task: string;
   readonly startedAt: number;
@@ -100,6 +105,7 @@ export const InMemoryDispatchStore: Layer.Layer<DispatchStore> = Layer.effect(Di
             ...(input.parentDispatchId !== undefined
               ? { parentDispatchId: input.parentDispatchId }
               : {}),
+            ...(input.modelRequest !== undefined ? { modelRequest: input.modelRequest } : {}),
           };
           yield* Ref.update(recordsRef, (records) => new Map([...records, [id, record]]));
           return record;
@@ -161,6 +167,10 @@ export const InMemoryDispatchStore: Layer.Layer<DispatchStore> = Layer.effect(Di
             const failed = dispatchEvents.find((entry) => entry.event._tag === "Failed");
             summaries.push({
               dispatchId: record.id,
+              ...(record.parentDispatchId !== undefined
+                ? { parentDispatchId: record.parentDispatchId }
+                : {}),
+              ...(record.modelRequest !== undefined ? { modelRequest: record.modelRequest } : {}),
               name: record.name,
               task: record.task,
               startedAt: first.timestamp,

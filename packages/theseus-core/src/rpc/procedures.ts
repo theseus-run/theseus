@@ -25,6 +25,7 @@ import {
   DispatchSummarySchema,
   MessageSchema,
   MissionSessionSchema,
+  ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
   UsageSchema,
 } from "./schemas.ts";
@@ -182,6 +183,16 @@ export const GetDispatchCapsuleEvents = Rpc.make("getDispatchCapsuleEvents", {
   error: RpcError,
 });
 
+/** Server-owned nested research POC: mission -> coordinator -> research grunt. */
+export const StartResearchPoc = Rpc.make("startResearchPoc", {
+  stream: true,
+  payload: Schema.Struct({
+    goal: Schema.String,
+  }),
+  success: ResearchPocEventSchema,
+  error: RpcError,
+});
+
 // ---------------------------------------------------------------------------
 // Group — the full Theseus API surface
 // ---------------------------------------------------------------------------
@@ -201,4 +212,5 @@ export const TheseusRpc = RpcGroup.make(
   GetMission,
   ListRuntimeDispatches,
   GetDispatchCapsuleEvents,
+  StartResearchPoc,
 );

@@ -37,7 +37,8 @@ const SCHEMA = `
     dispatch_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     task TEXT NOT NULL,
-    parent_dispatch_id TEXT
+    parent_dispatch_id TEXT,
+    model_request_json TEXT
   );
 
   -- Dispatch events
@@ -94,6 +95,12 @@ const SCHEMA = `
   );
 `;
 
+const ensureColumn = (db: Database, table: string, column: string, definition: string): void => {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+};
+
 // ---------------------------------------------------------------------------
 // TheseusDbLive — open/create DB at a given path
 // ---------------------------------------------------------------------------
@@ -106,6 +113,7 @@ export const TheseusDbLive = (dbPath: string): Layer.Layer<TheseusDb> =>
       db.exec("PRAGMA journal_mode = WAL");
       db.exec("PRAGMA foreign_keys = ON");
       db.exec(SCHEMA);
+      ensureColumn(db, "dispatch_records", "model_request_json", "TEXT");
       return { db };
     }),
   );

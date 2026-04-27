@@ -199,9 +199,11 @@ export const toDispatchSession = (
   link: { readonly missionId: string; readonly capsuleId: string },
 ): DispatchSession => ({
   dispatchId: summary.dispatchId,
+  ...(summary.parentDispatchId !== undefined ? { parentDispatchId: summary.parentDispatchId } : {}),
   missionId: link.missionId,
   capsuleId: link.capsuleId,
   name: summary.name,
+  ...(summary.modelRequest !== undefined ? { modelRequest: summary.modelRequest } : {}),
   iteration: 0,
   state: summary.status,
   usage: summary.usage ?? emptyUsage,

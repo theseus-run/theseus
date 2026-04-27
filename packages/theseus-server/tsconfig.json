@@ -2,9 +2,14 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "ignoreDeprecations": "5.0",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@theseus.run/jsx-md",
     "paths": {
       "@theseus.run/core": ["../theseus-core/src/index.ts"],
       "@theseus.run/core/*": ["../theseus-core/src/*"],
+      "@theseus.run/jsx-md": ["../jsx-md/src/index.ts"],
+      "@theseus.run/jsx-md/jsx-runtime": ["../jsx-md/src/jsx-runtime.ts"],
+      "@theseus.run/jsx-md/jsx-dev-runtime": ["../jsx-md/src/jsx-dev-runtime.ts"],
       "@theseus.run/runtime": ["../theseus-runtime/src/index.ts"],
       "@theseus.run/runtime/*": ["../theseus-runtime/src/*"],
       "@theseus.run/tools": ["../theseus-tools/src/index.ts"],

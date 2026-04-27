@@ -28,6 +28,7 @@ export interface DispatchEvent {
   readonly iteration?: number;
   readonly tool?: string;
   readonly content?: string;
+  readonly structured?: unknown;
   readonly args?: unknown;
   readonly error?: unknown;
   readonly isError?: boolean;
@@ -54,13 +55,29 @@ export interface MissionSession {
 
 export interface DispatchSession {
   readonly dispatchId: string;
+  readonly parentDispatchId?: string;
   readonly missionId: string;
   readonly capsuleId: string;
   readonly name: string;
+  readonly modelRequest?: ModelRequest;
   readonly iteration: number;
   readonly state: "running" | "done" | "failed";
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 }
+
+export type ModelRequest =
+  | {
+      readonly provider: "openai";
+      readonly model: string;
+      readonly maxOutputTokens?: number;
+      readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+      readonly textVerbosity?: "low" | "medium" | "high";
+    }
+  | {
+      readonly provider: "copilot";
+      readonly model: string;
+      readonly maxTokens?: number;
+    };
 
 export type RuntimeDispatchEvent =
   | {
@@ -74,6 +91,13 @@ export type RuntimeDispatchEvent =
       readonly capsuleId: string;
       readonly event: DispatchEvent;
     };
+
+export type ResearchPocEvent =
+  | {
+      readonly _tag: "MissionCreated";
+      readonly mission: MissionSession;
+    }
+  | RuntimeDispatchEvent;
 
 export interface Message {
   readonly role: string;
@@ -334,6 +358,7 @@ export class TheseusClient {
       systemPrompt: string;
       tools: Array<{ name: string }>;
       maxIterations?: number;
+      modelRequest?: ModelRequest;
     },
     task: string,
     onEvent: (event: DispatchEvent) => void,
@@ -363,6 +388,7 @@ export class TheseusClient {
         readonly systemPrompt: string;
         readonly tools: ReadonlyArray<{ readonly name: string }>;
         readonly maxIterations?: number;
+        readonly modelRequest?: ModelRequest;
       };
       readonly task: string;
       readonly continueFrom?: string;
@@ -423,6 +449,18 @@ export class TheseusClient {
 
   async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
     return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
+  }
+
+  startResearchPoc(
+    input: { readonly goal: string },
+    onEvent: (event: ResearchPocEvent) => void,
+  ): Promise<void> {
+    return this.streamRequest(
+      "startResearchPoc",
+      input,
+      onEvent,
+      "Research POC stream timed out before completing",
+    );
   }
 
   async status(): Promise<ReadonlyArray<unknown>> {

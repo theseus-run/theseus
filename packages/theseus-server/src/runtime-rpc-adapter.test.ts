@@ -92,4 +92,45 @@ describe("RuntimeRpcAdapter", () => {
 
     expect(listed).toEqual({ missions: [mission], dispatches: [session] });
   });
+
+  test("starts the server-owned research POC without caller-supplied tools", async () => {
+    const commands: string[] = [];
+    const runtime: TheseusRuntimeService = {
+      ...fakeRuntime,
+      submit: (command) => {
+        commands.push(command._tag);
+        if (command._tag === "MissionCreate") {
+          expect(command.input.goal).toBe("inspect repo");
+          return Effect.succeed({ _tag: "MissionCreated", mission });
+        }
+        expect(command.input.spec.name).toBe("poc-research-coordinator");
+        expect(command.input.spec.tools).toEqual([{ name: "theseus_dispatch_grunt" }]);
+        expect(command.input.spec.modelRequest).toEqual({
+          provider: "openai",
+          model: "gpt-5.5",
+        });
+        return Effect.succeed({
+          _tag: "DispatchStarted",
+          session,
+          events: Stream.make({ _tag: "DispatchSessionStarted", session }),
+        });
+      },
+    };
+    const layer = Layer.provide(
+      RuntimeRpcAdapterLive,
+      Layer.succeed(TheseusRuntime)(TheseusRuntime.of(runtime)),
+    );
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* RuntimeRpcAdapter;
+        const events = yield* adapter.startResearchPoc("inspect repo");
+        return yield* Stream.runCollect(events);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(commands).toEqual(["MissionCreate", "MissionStartDispatch"]);
+    expect(observed[0]).toEqual({ _tag: "MissionCreated", mission });
+    expect(observed[1]).toEqual({ _tag: "DispatchSessionStarted", session });
+  });
 });

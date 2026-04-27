@@ -200,6 +200,7 @@ export type DispatchEvent =
       readonly tool: string;
       readonly content: string;
       readonly isError: boolean;
+      readonly structured?: unknown;
     }
   | {
       readonly _tag: "ToolError";

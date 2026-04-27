@@ -11,7 +11,12 @@ import {
   RuntimeQueries,
   TheseusRuntime,
 } from "@theseus.run/runtime";
-import { Context, Effect, Layer, type Stream } from "effect";
+import { Context, Effect, Stream as EffectStream, Layer, type Stream } from "effect";
+import { researchPocCoordinatorSpec } from "./poc/research.ts";
+
+export type ResearchPocEvent =
+  | { readonly _tag: "MissionCreated"; readonly mission: MissionSession }
+  | RuntimeDispatchEvent;
 
 export interface RuntimeRpcAdapterService {
   readonly createMission: (
@@ -44,6 +49,9 @@ export interface RuntimeRpcAdapterService {
   readonly status: () => Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeError>;
   readonly inject: (dispatchId: string, text: string) => Effect.Effect<void, RuntimeError>;
   readonly interrupt: (dispatchId: string) => Effect.Effect<void, RuntimeError>;
+  readonly startResearchPoc: (
+    goal: string,
+  ) => Effect.Effect<Stream.Stream<ResearchPocEvent>, RuntimeError>;
 }
 
 export class RuntimeRpcAdapter extends Context.Service<
@@ -68,6 +76,22 @@ export const RuntimeRpcAdapterLive = Layer.effect(RuntimeRpcAdapter)(
       status: () => RuntimeQueries.status(runtime),
       inject: (dispatchId, text) => runtime.control({ _tag: "DispatchInject", dispatchId, text }),
       interrupt: (dispatchId) => runtime.control({ _tag: "DispatchInterrupt", dispatchId }),
+      startResearchPoc: (goal) =>
+        Effect.gen(function* () {
+          const mission = yield* RuntimeCommands.createMission(runtime, {
+            slug: "research-poc",
+            goal,
+            criteria: ["research grunt returns a structured report", "coordinator summarizes it"],
+          });
+          const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+            missionId: mission.missionId,
+            spec: researchPocCoordinatorSpec,
+            task: goal,
+          });
+          return EffectStream.make({ _tag: "MissionCreated", mission } as const).pipe(
+            EffectStream.concat(started.events),
+          );
+        }),
     });
   }),
 );

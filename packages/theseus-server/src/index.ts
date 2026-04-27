@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { BunHttpClient } from "@effect/platform-bun";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Agent from "@theseus.run/core/Agent";
+import * as AgentComm from "@theseus.run/core/AgentComm";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { TheseusRuntime } from "@theseus.run/runtime";
@@ -26,6 +27,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { ServerConfig, ServerConfigLive } from "./config.ts";
 import { ServerEnvLive } from "./env.ts";
 import { HandlersLive } from "./handlers.ts";
+import { researchGruntBlueprint } from "./poc/research.ts";
 import { CopilotConfigLive } from "./providers/copilot/config.ts";
 import { ServerLanguageModelGatewayLive } from "./providers/language-model.ts";
 import { OpenAIConfigLive } from "./providers/openai/config.ts";
@@ -42,11 +44,13 @@ const workspace = process.argv[2] ?? process.cwd();
 // ---------------------------------------------------------------------------
 
 // Tools
-const ToolCatalogLive = Layer.succeed(ToolCatalog)(makeToolCatalog(allTools));
+const ToolCatalogLive = Layer.succeed(ToolCatalog)(
+  makeToolCatalog([...allTools, AgentComm.dispatchGruntTool]),
+);
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
-const BlueprintRegistryLive = Agent.BlueprintRegistryLive([]);
+const BlueprintRegistryLive = Agent.BlueprintRegistryLive([researchGruntBlueprint]);
 
 // SQLite persistence
 const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
