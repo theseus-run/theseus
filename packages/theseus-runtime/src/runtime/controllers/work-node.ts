@@ -122,8 +122,24 @@ const dispatchController = (
             ),
         ),
         Match.tag("RequestStatus", () => Effect.void),
-        Match.tag("Pause", () => Effect.void),
-        Match.tag("Resume", () => Effect.void),
+        Match.tag("Pause", () =>
+          Effect.fail(
+            new RuntimeWorkControlUnsupported({
+              workNodeId: node.workNodeId,
+              command: command._tag,
+              reason: "dispatch pause is not implemented",
+            }),
+          ),
+        ),
+        Match.tag("Resume", () =>
+          Effect.fail(
+            new RuntimeWorkControlUnsupported({
+              workNodeId: node.workNodeId,
+              command: command._tag,
+              reason: "dispatch resume is not implemented",
+            }),
+          ),
+        ),
         Match.exhaustive,
       );
     }),

@@ -113,6 +113,7 @@ const watchDispatchCompletion = (input: {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly store: (typeof Dispatch.DispatchStore)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
+  readonly completesMission: boolean;
 }): Effect.Effect<void> =>
   input.handle.result.pipe(
     Effect.exit,
@@ -125,7 +126,9 @@ const watchDispatchCompletion = (input: {
               dispatchId: input.handle.dispatchId,
               result,
             });
-            yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
+            if (input.completesMission) {
+              yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
+            }
             yield* updateWorkNodeDispatchStatus(input.db, {
               dispatchId: input.handle.dispatchId,
               state: "done",
@@ -144,7 +147,9 @@ const watchDispatchCompletion = (input: {
               dispatchId: input.handle.dispatchId,
               reason,
             });
-            yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
+            if (input.completesMission) {
+              yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
+            }
             yield* updateWorkNodeDispatchStatus(input.db, {
               dispatchId: input.handle.dispatchId,
               state: "failed",
@@ -208,7 +213,10 @@ const startConcreteDispatch = (
   never
 > =>
   Effect.gen(function* () {
-    yield* CapsuleSink.missionTransition(input.currentCapsule, "pending", "running");
+    const completesMission = input.relation === "root";
+    if (completesMission) {
+      yield* CapsuleSink.missionTransition(input.currentCapsule, "pending", "running");
+    }
 
     const workNodeId = yield* Dispatch.makeDispatchId(`work-${input.spec.name}`);
     const currentWorkNode: CurrentWorkNodeValue = {
@@ -267,6 +275,7 @@ const startConcreteDispatch = (
         registry: deps.registry,
         store: deps.dispatchStore,
         db: deps.db,
+        completesMission,
       }),
     );
 

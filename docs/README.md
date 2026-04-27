@@ -8,6 +8,7 @@ This `docs/` directory is the Theseus Obsidian vault.
 - `02-primitives/` — public primitive design and tool-system notes
 - `03-runtime/` — active runtime architecture, mission model, and crew scaffolding
 - `04-clients/` — interface and client plans
+- `brainstorm/` — speculative product and architecture ideas
 - `90-archive/` — superseded designs kept for archaeology
 - `99-design-notes/` — dated design notes and ADR-like decisions
 
@@ -17,6 +18,7 @@ This `docs/` directory is the Theseus Obsidian vault.
 - [Primitives](02-primitives/README.md)
 - [Runtime](03-runtime/README.md)
 - [Clients](04-clients/README.md)
+- [Brainstorm](brainstorm/README.md)
 - [Archive](90-archive/README.md)
 - [Design Notes](99-design-notes/README.md)
 

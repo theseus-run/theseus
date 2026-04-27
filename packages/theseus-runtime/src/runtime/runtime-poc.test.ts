@@ -202,6 +202,9 @@ describe("TheseusRuntime POC", () => {
     expect(observed.capsuleEvents.map((event) => event.type)).toContain("mission.create");
     expect(observed.capsuleEvents.map((event) => event.type)).toContain("dispatch.start");
     expect(observed.dispatchCapsuleEvents.map((event) => event.type)).toContain("mission.create");
+    expect(
+      observed.capsuleEvents.filter((event) => event.type === "mission.transition"),
+    ).toHaveLength(2);
   });
 
   test("falls back to persisted terminal dispatch result without an active handle", async () => {
@@ -291,6 +294,36 @@ describe("TheseusRuntime POC", () => {
 
     expect(observed.session.control.requestStatus._tag).toBe("Supported");
     expect(observed.result.content).toBe("controlled final");
+  });
+
+  test("rejects unsupported dispatch work-node controls", async () => {
+    const { layer } = runtimeLayer([textParts("pause test final")]);
+
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "work-node-pause",
+          goal: "Reject unsupported pause",
+          criteria: ["pause rejected"],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        return yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "Pause",
+          reason: "operator requested pause",
+        }).pipe(Effect.flip);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(error._tag).toBe("RuntimeWorkControlUnsupported");
   });
 
   test("root runtime import does not export live assembly", async () => {
