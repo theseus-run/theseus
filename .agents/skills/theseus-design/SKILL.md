@@ -23,6 +23,10 @@ Theseus is also a self-editable harness: agents should be able to evolve the
 source by adding typed systems, satellites, projections, sinks, and capability
 modules. It is not a plugin host.
 
+Theseus should be isolation-native. Autonomy should be backed by explicit
+execution envelopes and promotion boundaries, not only by repeated permission
+prompts or command allowlists.
+
 ## Primitive Floor
 
 Everything else is built on these or is scaffolding:
@@ -36,6 +40,11 @@ Everything else is built on these or is scaffolding:
 | Satellite | Dispatches need scoped observation and policy middleware |
 
 `RuntimeBus` is not a synonym for Satellite. RuntimeBus is the operator/client transport concept for runtime UIs and should adapt to the runtime command/control/query surface if implemented.
+
+`Sandbox` and `Workspace` are runtime/harness concepts, not aliases for each
+other. Sandbox is execution isolation. Workspace is source-state isolation
+inside a Sandbox. A git worktree is a Workspace provider, not a security
+Sandbox.
 
 ## Design Tests
 
@@ -84,6 +93,11 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Keep Mission primitive, but allow mission schemas and mission types to evolve.
   Implementation, research, brainstorm, review, planning, incident, and quick
   task missions may need different ceremony.
+- Keep isolation provider-shaped. Docker Sandboxes, Sandcastle, Vercel Sandbox,
+  E2B, Daytona, Modal, local Docker/Podman, host mode, and test fakes are
+  candidate providers, not primitive doctrine.
+- Treat capability execution as Sandbox/Workspace-relative where world effects
+  are involved. Promotion back to host/project truth should be explicit.
 - Prefer clean-break evolution for WIP runtime contracts. When a contract
   changes, migrate first-party adapters, tests, docs, and skills in the same
   pass instead of preserving compatibility shims.
@@ -104,3 +118,5 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
   file/config discovery?
 - Could an alternate mission or audit model replace this part without rewriting unrelated packages?
 - Does this treat chat as the domain object instead of an interface mode?
+- Does this assume host execution or host checkout when it should carry
+  Sandbox/Workspace identity?

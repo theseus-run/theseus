@@ -33,6 +33,7 @@ Then read only the relevant slice:
 - active handles: `src/registry.ts`
 - capability hydration: `src/tool-catalog.ts`
 - durable state: `src/store/`
+- isolation doctrine: `docs/03-runtime/isolation.md`
 
 ## Current Model
 
@@ -42,6 +43,10 @@ and snapshot ports through `TheseusRuntimeService`.
 The runtime is not a plugin host. It is statically wired source that agents can
 edit. Modularity exists to make source evolution safe, not to support opaque
 third-party extensions.
+
+The runtime should be isolation-native. Do not assume tool execution happens
+against the host checkout. Sandbox is execution isolation; Workspace is
+source-state isolation inside a Sandbox.
 
 The runtime owns:
 
@@ -159,6 +164,17 @@ module and static wiring instead.
 - Empty tool selections mean no tools. Broad authority must be explicit.
 - Active registry state is not durable history.
 - Runtime events and capsule events should be append-only facts.
+- Sandbox and Workspace are distinct axes:
+  - Sandbox controls execution isolation: process space, filesystem root,
+    network, secrets, mounts, resources, and host access.
+  - Workspace controls source-state isolation: checkout, branch, patch, diff,
+    dirty state, and merge base.
+- A git worktree is a Workspace provider, not a security Sandbox.
+- Capabilities should execute against a Sandbox and usually target a Workspace.
+  Promotion across workspace/sandbox boundaries should be explicit.
+- Do not lock runtime contracts to Docker Sandboxes, Sandcastle, Vercel
+  Sandbox, E2B, Daytona, Modal, Podman, or git worktrees. Treat them as
+  provider candidates wired explicitly through source.
 - Runtime fact identity is `_tag`. Do not create a parallel dot-case runtime
   event namespace. Persist `_tag` for indexing and serialize the tagged fact as
   JSON.

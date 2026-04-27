@@ -24,6 +24,8 @@ sinks               -> side-effect consumers
 projections         -> query/read models
 stores              -> durable state backends
 catalogs            -> capability resolution
+sandbox             -> execution isolation boundary
+workspace           -> source-state boundary inside a sandbox
 snapshot            -> inspectable current state
 ```
 
@@ -51,6 +53,31 @@ which tests prove it.
 Do not introduce plugin manifests, dynamic loading, extension registries,
 marketplace semantics, generic lifecycle hooks, ECS entities/components, or a
 tick scheduler without an explicit design decision.
+
+## Isolation Native Runtime
+
+Theseus should treat isolation as runtime structure, not as permission-prompt
+decoration.
+
+Separate two axes:
+
+- Sandbox: execution isolation for process space, filesystem root, network,
+  secrets, mounts, resources, and host access
+- Workspace: source-state isolation for checkout, branch, patch, diff, dirty
+  state, and merge base inside a Sandbox
+
+A git worktree is a Workspace provider, not a security Sandbox. A container,
+microVM, cloud sandbox, host process, or test fake is a Sandbox provider.
+
+Capabilities should execute against a Sandbox and usually target a Workspace.
+Promotion moves results across workspace/sandbox boundaries and must be
+explicit.
+
+Do not lock runtime contracts to Docker Sandboxes, Sandcastle, Vercel Sandbox,
+E2B, Daytona, Modal, Podman, or git worktrees. Those are candidate providers.
+The doctrine is provider-shaped isolation with explicit static wiring.
+
+See [[isolation]].
 
 ## Explicit Assembly
 

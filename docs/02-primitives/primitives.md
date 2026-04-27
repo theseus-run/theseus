@@ -174,6 +174,12 @@ catalogs, and active handles.
 
 See [[architecture]] for current runtime doctrine.
 
+Sandbox and Workspace are runtime/harness concepts that may become stable
+contracts, but they do not currently replace the primitive floor. Sandbox is
+execution isolation. Workspace is source-state isolation inside a Sandbox. They
+exist so Tool and Dispatch effects can become isolation-aware without assuming
+the host checkout is the only world.
+
 Runtime modules should depend on the narrow primitive surfaces they need. Avoid
 spreading Mission/Capsule/session assumptions through unrelated systems. If a
 future work model replaces Mission or a future audit model replaces Capsule
