@@ -25,7 +25,7 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 - Systems should test command/control/event/lifecycle behavior.
 - Projections should test derivation from stored events.
 - Sinks should test curation and side effects.
-- Capability/catalog modules should test selection and hydration.
+- Tool/model catalog modules should test selection and hydration.
 - Codecs should test `_tag` round trips and unknown boundary handling.
 - Constructors for exported protocol variants need tests when they apply defaults, normalize input, or enforce invariants.
 - Boundary adapters that translate external/provider data into internal data need focused tests for the translation shape.

@@ -20,8 +20,8 @@ be an interface mode, but work needs a structured envelope: objective,
 completion definition, scope, authority, evidence, and lifecycle.
 
 Theseus is also a self-editable harness: agents should be able to evolve the
-source by adding typed systems, satellites, projections, sinks, and capability
-modules. It is not a plugin host.
+source by adding typed systems, satellites, projections, sinks, tool/model
+catalog modules, and static assembly. It is not a plugin host.
 
 Theseus should be isolation-native. Autonomy should be backed by explicit
 execution envelopes and promotion boundaries, not only by repeated permission
@@ -96,7 +96,7 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Keep isolation provider-shaped. Docker Sandboxes, Sandcastle, Vercel Sandbox,
   E2B, Daytona, Modal, local Docker/Podman, host mode, and test fakes are
   candidate providers, not primitive doctrine.
-- Treat capability execution as Sandbox/Workspace-relative where world effects
+- Treat tool/model execution as Sandbox/Workspace-relative where world effects
   are involved. Promotion back to host/project truth should be explicit.
 - Prefer clean-break evolution for WIP runtime contracts. When a contract
   changes, migrate first-party adapters, tests, docs, and skills in the same

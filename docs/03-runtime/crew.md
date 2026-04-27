@@ -396,7 +396,7 @@ Default: `full` for first dispatch, `delta` for subsequent.
 
 - **Batch unknowns.** When inputs are missing, list all requirements in one request — not sequential questions.
 - **Tool discipline.** Use tools already in the workspace. When a tool call fails — surface it, don't silently switch to alternatives. Escalate persistent failures.
-- **Capability preflight.** Before starting work, verify required tools are available. Missing capability → refuse, state what is missing. Never degrade to text output as a substitute for tool actions.
+- **Tool preflight.** Before starting work, verify required tools are available. Missing tool access → refuse, state what is missing. Never degrade to text output as a substitute for tool actions.
 - **Existing code is evidence, not authority.** Follow patterns when they're correct. When they violate rules — follow the rules. Legacy code is not justification for propagating bad patterns.
 - **Minimal intervention.** Prefer the least change that achieves the goal.
 - **Coherent changes.** Every intervention must leave the codebase in a valid state. Partial edits that compile but break behavior are worse than no edit.

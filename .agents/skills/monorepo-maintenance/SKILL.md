@@ -21,7 +21,7 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 
 - `theseus-core` owns primitives, protocol contracts, service tags, and shared runtime types. It must not depend on tools, server, or web packages.
 - `theseus-tools` owns concrete tool implementations. It may depend on `theseus-core`.
-- `theseus-runtime` owns live work orchestration, active registries, runtime command/query services, persistence-backed runtime stores, and capability catalog hydration. It must not depend on server or web packages.
+- `theseus-runtime` owns live work orchestration, active registries, runtime command/query services, persistence-backed runtime stores, and tool/model catalog hydration. It must not depend on server or web packages.
 - `theseus-server` owns HTTP/RPC transport, provider configuration, process startup, and final layer assembly.
 - `jsx-md` packages own prompt/document rendering utilities and should stay independent from runtime orchestration.
 - Cross-package contracts belong in the lowest package that can own them without importing implementation concerns.

@@ -31,7 +31,7 @@ Then read only the relevant slice:
 - side effects: `src/runtime/sinks/`
 - read models: `src/runtime/projections/`
 - active handles: `src/registry.ts`
-- capability hydration: `src/tool-catalog.ts`
+- tool catalog hydration: `src/tool-catalog.ts`
 - durable state: `src/store/`
 - isolation doctrine: `docs/03-runtime/isolation.md`
 
@@ -98,7 +98,7 @@ Disallowed pattern:
 - import-order registration
 - auto-discovered tools/satellites/systems
 - layered user/org/project behavior merges that affect agent execution
-- broad capability grants by default
+- broad tool/model grants by default
 
 Autoloading is allowed when it is owned by an explicit assembled module, such
 as an `agentsMdInstructionLoader` satellite/source that can be removed from the
@@ -131,10 +131,10 @@ catalog/resource unless it owns selection or hydration behavior.
 
 ## Feature Addition Pattern
 
-When adding runtime capability, prefer this order:
+When adding runtime behavior, prefer this order:
 
 1. Identify whether the feature is a system, satellite, projection, sink, or
-   capability module.
+   tool/model catalog module.
 2. Add or extend the narrow typed module.
 3. Emit named RuntimeEvents if other modules or operators need to observe it.
 4. Wire it statically through `host.ts`, `live.ts`, or the nearest existing
@@ -170,7 +170,7 @@ module and static wiring instead.
   - Workspace controls source-state isolation: checkout, branch, patch, diff,
     dirty state, and merge base.
 - A git worktree is a Workspace provider, not a security Sandbox.
-- Capabilities should execute against a Sandbox and usually target a Workspace.
+- Tools and model calls should execute against a Sandbox and usually target a Workspace.
   Promotion across workspace/sandbox boundaries should be explicit.
 - Do not lock runtime contracts to Docker Sandboxes, Sandcastle, Vercel
   Sandbox, E2B, Daytona, Modal, Podman, or git worktrees. Treat them as
@@ -233,7 +233,7 @@ Expected tests:
 - systems: command/control/fact/lifecycle behavior
 - projections: derivation from stored events
 - sinks: curation and side effects
-- capability/catalog modules: selection and hydration
+- tool/model catalog modules: selection and hydration
 - codecs: `_tag` round trips and unknown boundary handling
 - registries/stores: direct behavior
 

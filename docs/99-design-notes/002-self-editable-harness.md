@@ -28,8 +28,8 @@ preserve compatibility for unknown third parties
 
 Theseus is a harness that builds itself. The source code is the extension
 surface. A future agent should be able to add a new runtime system, satellite,
-projection, sink, or capability module directly, then verify the behavior with
-deterministic tests.
+projection, sink, tool/model catalog module, or static assembly entry directly,
+then verify the behavior with deterministic tests.
 
 Plugin APIs would push the project toward the wrong early constraints:
 
@@ -57,8 +57,13 @@ is explicitly requested.
 - **Satellite**: dispatch-local policy/observation middleware.
 - **Projection**: queryable read/debug/UI state.
 - **Sink**: side-effect or event consumer.
-- **Capability**: tools, models, blueprints, and selection/hydration logic.
+- **Tool/model catalog**: selectable tools, models, providers, and hydration logic.
 - **Harness**: the statically assembled runtime shape.
+
+`Capability` is intentionally not used here as a broad active concept. It may
+return later as a control/request abstraction, but using it now to cover tools,
+models, blueprints, grants, resources, and policies makes the design less
+precise.
 
 ## Rule
 
@@ -98,7 +103,7 @@ source, default policy, or model selector can exist. It must be named, typed,
 ordered, and removable in source assembly.
 
 The bad design is ambient behavior: hidden file-existence checks, layered
-user/org/project behavior merges, import-order registration, broad capabilities
+user/org/project behavior merges, import-order registration, broad tool/model grants
 enabled by default, or hidden instruction loading that affects a run without a
 visible assembly entry.
 

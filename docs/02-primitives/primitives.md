@@ -184,7 +184,7 @@ the host checkout is the only world.
 Runtime modules should depend on the narrow primitive surfaces they need. Avoid
 spreading Mission/Capsule/session assumptions through unrelated systems. If a
 future work model replaces Mission or a future audit model replaces Capsule
-storage, unrelated dispatch, capability, projection, and transport code should
+storage, unrelated dispatch, tool/model catalog, projection, and transport code should
 not need a rewrite.
 
 Keep scoped event streams distinct. DispatchEvents come from the dispatch loop.
@@ -222,6 +222,6 @@ semantics.
 There is no plugin primitive.
 
 Extensibility comes from typed source modules that Theseus can edit directly:
-systems, satellites, projections, sinks, capabilities, and static harness
+systems, satellites, projections, sinks, tool/model catalogs, and static harness
 assembly. A feature that requires a stable public plugin API before it can be
 useful is too heavy for the current project.

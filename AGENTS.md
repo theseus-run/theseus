@@ -71,7 +71,7 @@ Core idea: a human dispatches a goal with done criteria; the system runs the wor
 
 - `packages/theseus-core` — typed primitives for agent systems.
 - `packages/theseus-tools` — Bun-native tool implementations.
-- `packages/theseus-runtime` — live mission/runtime host: command/control/query services, systems, sinks, projections, active dispatch tracking, persistence-backed runtime state, and capability hydration.
+- `packages/theseus-runtime` — live mission/runtime host: command/control/query services, systems, sinks, projections, active dispatch tracking, persistence-backed runtime state, and tool/model hydration.
 - `packages/theseus-server` — Effect RPC / HTTP process assembly, provider wiring, and transport boundary.
 - `packages/jsx-md` — JSX/TSX renderer for Markdown and LLM-facing instruction components.
 - `packages/jsx-md-beautiful-mermaid` — Mermaid-to-ASCII component for `jsx-md`.
@@ -81,7 +81,7 @@ Core idea: a human dispatches a goal with done criteria; the system runs the wor
 
 - `theseus-core` defines primitives and shared runtime contracts. It must not depend on tools, server, or web packages.
 - `theseus-tools` may depend on `theseus-core`; it provides concrete tool implementations.
-- `theseus-runtime` owns live work orchestration, active registries, runtime command/control/query services, runtime systems, sinks, projections, persistence-backed stores, and capability catalog hydration. It must not depend on server or web packages.
+- `theseus-runtime` owns live work orchestration, active registries, runtime command/control/query services, runtime systems, sinks, projections, persistence-backed stores, and tool/model catalog hydration. It must not depend on server or web packages.
 - `theseus-server` owns HTTP/RPC transport, provider configuration, process startup, and final layer assembly. Keep transport concerns here, not in runtime or core.
 - `jsx-md` packages are prompt/document rendering utilities. Keep them independent from runtime orchestration.
 - `icarus-web` is a client/operator surface. It may consume runtime contracts but must not become the runtime.
@@ -102,7 +102,7 @@ The current runtime architecture is a host/world model, not the old persistent n
 
 Theseus is a self-editable harness, not a plugin host. Modularity means typed
 source modules that agents can add, replace, wire, and test: systems,
-satellites, projections, sinks, capabilities, and static harness assembly. Do
+satellites, projections, sinks, tool/model catalogs, and static harness assembly. Do
 not introduce plugin APIs, manifests, dynamic loading, generic extension
 registries, or marketplace-style compatibility promises unless explicitly
 requested.

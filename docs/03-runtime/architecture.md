@@ -23,7 +23,7 @@ systems             -> runtime behavior modules
 sinks               -> side-effect consumers
 projections         -> query/read models
 stores              -> durable state backends
-catalogs            -> capability resolution
+catalogs            -> tool/model/resource resolution
 sandbox             -> execution isolation boundary
 workspace           -> source-state boundary inside a sandbox
 snapshot            -> inspectable current state
@@ -43,7 +43,7 @@ Modularity exists so agents can safely evolve the source:
 - add a satellite for dispatch-local policy or observation
 - add a projection for queryable UI/debug/read state
 - add a sink for event consumers and side effects
-- add a capability module for tools, models, blueprints, or selection logic
+- add a tool/model catalog or selection module
 - change static harness assembly when the runtime shape changes
 
 Prefer source modules and tests over public extension APIs. The runtime should
@@ -112,7 +112,7 @@ source module declares that convention. Opting out should mean removing or
 changing a visible assembly entry, not hunting layered user/org/project config.
 
 This rule applies to Theseus harness/runtime behavior: systems, satellites,
-projections, sinks, tools/capabilities, instruction packs, convention loaders,
+projections, sinks, tools, model providers, instruction packs, convention loaders,
 mission behavior, policy behavior, and model/instruction selection.
 
 This rule does not prohibit ordinary server, web, build, deployment, or
@@ -140,7 +140,6 @@ packages/theseus-runtime/src/
     systems/
       mission/system.ts            mission creation system
       dispatch/system.ts           dispatch launch/completion system
-      capability/                  future capability hydration owner
     sinks/
       capsule/sink.ts              capsule event side effects
     projections/
@@ -239,7 +238,7 @@ Not every module is a system:
 - serialization is a codec
 - formatting and small transformations are ordinary helpers
 
-Capability selection or hydration can become a system when it owns behavior,
+Tool/model selection or hydration can become a system when it owns behavior,
 not merely because a catalog exists.
 
 ## Scoped Event Streams
@@ -398,7 +397,7 @@ distinct.
 
 ## Catalogs
 
-Catalogs resolve runtime capabilities.
+Catalogs resolve runtime tools, models, and other selectable resources.
 
 Current catalog:
 
@@ -410,8 +409,17 @@ must be an explicit runtime/server-side decision, not a serialization accident.
 
 Catalogs answer what exists and what may be selected. They do not execute work.
 
-Capability selection may become its own system/module. Keep it statically wired
+Tool/model selection may become its own system/module. Keep it statically wired
 and typed before considering any dynamic extension mechanism.
+
+Avoid using `Capability` as a broad design bucket for now. The idea may return
+later as a control/request concept: an agent requests write access and runtime
+closes that request with specific tools, sandbox/workspace scope, and policy.
+That requires policy and filtering machinery Theseus is not locking yet.
+
+Until then, prefer concrete names: Tool, ToolCatalog, tool selection, model
+provider, model selection, Sandbox, Workspace, SatelliteRing, and explicit
+static assembly.
 
 ## Active Registry
 
@@ -544,7 +552,7 @@ Rules:
 - systems get focused tests for command/control/fact/lifecycle behavior
 - projections get focused tests for derivation from stored events
 - sinks get focused tests for curation and side effects
-- capability/catalog modules get focused tests for selection and hydration
+- tool/model catalog modules get focused tests for selection and hydration
 - codecs get focused tests for `_tag` round trips and unknown boundary handling
 - registries/stores get direct tests for their behavior
 - server adapter tests are required when public RPC behavior changes

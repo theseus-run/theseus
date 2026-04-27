@@ -183,7 +183,7 @@ The extension model is source evolution:
   projection
 - need a new audit channel: add a sink
 - need different mission behavior: replace or fork the mission system wiring
-- need different capability selection: change the capability/catalog module
+- need different tool/model selection: change the catalog or selection module
 
 These changes should be normal code changes that Theseus can make, test, and
 review. The harness should therefore optimize for small typed modules, explicit

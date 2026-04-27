@@ -8,7 +8,7 @@ Theseus should be isolation-native.
 Agent autonomy should not depend mainly on repeated permission prompts,
 command allowlists, or prompt-level policy. Those still have a place, but the
 stronger design is to put work inside an explicit execution envelope, grant
-broad enough capability inside that envelope, and make promotion back to
+broad enough tool/model access inside that envelope, and make promotion back to
 project truth explicit.
 
 ## Two Axes
@@ -110,9 +110,9 @@ Subagents normally need separate Workspaces. They only need separate Sandboxes
 when execution isolation, resource isolation, secret separation, or independent
 lifecycle is required.
 
-## Capabilities
+## Tool And Model Access
 
-Capabilities execute against a Sandbox and usually target a Workspace.
+Tools and model calls execute against a Sandbox and usually target a Workspace.
 
 Bad:
 
@@ -130,7 +130,7 @@ Shell.run({
 })
 ```
 
-The capability implementation decides how to run the command for that
+The tool implementation decides how to run the command for that
 Sandbox/Workspace pair:
 
 - host process
@@ -140,7 +140,7 @@ Sandbox/Workspace pair:
 - cloud sandbox command
 - fake test interpreter
 
-Broad destructive capability is acceptable only when the Sandbox and Workspace
+Broad destructive tool access is acceptable only when the Sandbox and Workspace
 limit blast radius appropriately. Network access, host mounts, secrets,
 publish, merge, push, and release remain separate explicit grants.
 
@@ -166,7 +166,7 @@ Capsule records mission-relevant isolation events and decisions:
 
 - Sandbox kind and provider
 - Workspace kind and branch/checkout identity
-- capability grants
+- tool/model grants
 - network posture
 - secrets and host mounts
 - important destructive operations
@@ -196,7 +196,7 @@ These are provider candidates, not doctrine. The doctrine is:
 
 - Sandbox is the execution isolation boundary.
 - Workspace is the source-state boundary inside a Sandbox.
-- Capabilities are Sandbox/Workspace-relative.
+- Tool/model access is Sandbox/Workspace-relative.
 - Promotion is explicit and reviewable.
 - Providers are explicit static wiring, not plugins or hidden discovery.
 
