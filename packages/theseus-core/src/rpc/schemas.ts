@@ -11,34 +11,37 @@ import { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
 
 export { DispatchOutputSchema, UsageSchema } from "../dispatch/types.ts";
 
+const OptionalNullable = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(Schema.NullOr(schema));
+
 // ---------------------------------------------------------------------------
 // DispatchSpec (serialized — tool references, not implementations)
 // ---------------------------------------------------------------------------
 
 export const SerializedToolRefSchema = Schema.Struct({
   name: Schema.String,
-  description: Schema.optional(Schema.String),
-  inputSchema: Schema.optional(Schema.Unknown),
+  description: OptionalNullable(Schema.String),
+  inputSchema: OptionalNullable(Schema.Unknown),
 });
 
 export const DispatchSpecSchema = Schema.Struct({
   name: Schema.String,
   systemPrompt: Schema.String,
   tools: Schema.Array(SerializedToolRefSchema),
-  maxIterations: Schema.optional(Schema.Number),
-  modelRequest: Schema.optional(
+  maxIterations: OptionalNullable(Schema.Number),
+  modelRequest: OptionalNullable(
     Schema.Union([
       Schema.Struct({
         provider: Schema.Literal("openai"),
         model: Schema.String,
-        maxOutputTokens: Schema.optional(Schema.Number),
-        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
-        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
+        maxOutputTokens: OptionalNullable(Schema.Number),
+        reasoningEffort: OptionalNullable(Schema.Literals(["low", "medium", "high", "xhigh"])),
+        textVerbosity: OptionalNullable(Schema.Literals(["low", "medium", "high"])),
       }),
       Schema.Struct({
         provider: Schema.Literal("copilot"),
         model: Schema.String,
-        maxTokens: Schema.optional(Schema.Number),
+        maxTokens: OptionalNullable(Schema.Number),
       }),
     ]),
   ),
@@ -52,11 +55,11 @@ export const SerializedToolCallErrorSchema = Schema.Struct({
   _tag: Schema.Literals(["ToolCallUnknown", "ToolCallBadArgs", "ToolCallFailed"]),
   callId: Schema.String,
   name: Schema.String,
-  raw: Schema.optional(Schema.String),
-  args: Schema.optional(Schema.Unknown),
-  cause: Schema.optional(
+  raw: OptionalNullable(Schema.String),
+  args: OptionalNullable(Schema.Unknown),
+  cause: OptionalNullable(
     Schema.Struct({
-      _tag: Schema.optional(Schema.String),
+      _tag: OptionalNullable(Schema.String),
       message: Schema.String,
     }),
   ),
@@ -93,7 +96,7 @@ export const DispatchEventSchema = Schema.Union([
     tool: Schema.String,
     content: Schema.String,
     isError: Schema.Boolean,
-    structured: Schema.optional(Schema.Unknown),
+    structured: OptionalNullable(Schema.Unknown),
   }),
   Schema.TaggedStruct("ToolError", {
     name: Schema.String,
@@ -112,7 +115,7 @@ export const DispatchEventSchema = Schema.Union([
     name: Schema.String,
     iteration: Schema.Number,
     injection: Schema.String,
-    detail: Schema.optional(Schema.String),
+    detail: OptionalNullable(Schema.String),
   }),
   Schema.TaggedStruct("Done", {
     name: Schema.String,
@@ -140,7 +143,7 @@ export const WorkNodeSessionSchema = Schema.Struct({
   workNodeId: Schema.String,
   missionId: Schema.String,
   capsuleId: Schema.String,
-  parentWorkNodeId: Schema.optional(Schema.String),
+  parentWorkNodeId: OptionalNullable(Schema.String),
   kind: Schema.Literals(["dispatch", "task", "external"]),
   relation: Schema.Literals(["root", "delegated", "continued", "branched"]),
   label: Schema.String,
@@ -167,8 +170,8 @@ export const WorkNodeSessionSchema = Schema.Struct({
       Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
     ]),
   }),
-  startedAt: Schema.optional(Schema.Number),
-  completedAt: Schema.optional(Schema.Number),
+  startedAt: OptionalNullable(Schema.Number),
+  completedAt: OptionalNullable(Schema.Number),
 });
 
 export const DispatchSessionSchema = Schema.Struct({
@@ -176,19 +179,19 @@ export const DispatchSessionSchema = Schema.Struct({
   kind: Schema.Literal("dispatch"),
   dispatchId: Schema.String,
   name: Schema.String,
-  modelRequest: Schema.optional(
+  modelRequest: OptionalNullable(
     Schema.Union([
       Schema.Struct({
         provider: Schema.Literal("openai"),
         model: Schema.String,
-        maxOutputTokens: Schema.optional(Schema.Number),
-        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
-        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
+        maxOutputTokens: OptionalNullable(Schema.Number),
+        reasoningEffort: OptionalNullable(Schema.Literals(["low", "medium", "high", "xhigh"])),
+        textVerbosity: OptionalNullable(Schema.Literals(["low", "medium", "high"])),
       }),
       Schema.Struct({
         provider: Schema.Literal("copilot"),
         model: Schema.String,
-        maxTokens: Schema.optional(Schema.Number),
+        maxTokens: OptionalNullable(Schema.Number),
       }),
     ]),
   ),
@@ -199,13 +202,13 @@ export const DispatchSessionSchema = Schema.Struct({
 
 export const WorkControlCommandSchema = Schema.Union([
   Schema.TaggedStruct("Interrupt", {
-    reason: Schema.optional(Schema.String),
+    reason: OptionalNullable(Schema.String),
   }),
   Schema.TaggedStruct("InjectGuidance", {
     text: Schema.String,
   }),
   Schema.TaggedStruct("Pause", {
-    reason: Schema.optional(Schema.String),
+    reason: OptionalNullable(Schema.String),
   }),
   Schema.TaggedStruct("Resume", {}),
   Schema.TaggedStruct("RequestStatus", {}),

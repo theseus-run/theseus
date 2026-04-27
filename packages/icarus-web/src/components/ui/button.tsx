@@ -12,7 +12,7 @@ const buttonVariants = cva("btn", {
     },
     size: {
       default: "",
-      sm: "h-[calc(var(--lh)*1.75)] px-[0.75ch] text-[0.9em]",
+      sm: "h-[calc(var(--lh)*1.75)] px-[0.75ch]",
     },
   },
   defaultVariants: {

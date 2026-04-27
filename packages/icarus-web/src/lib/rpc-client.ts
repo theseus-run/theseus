@@ -207,6 +207,9 @@ const rpcErrorMessage = (value: unknown, fallback: string): string => {
   return encoded === undefined ? fallback : encoded;
 };
 
+export const rpcRequestPayload = (payload: unknown): unknown =>
+  payload === undefined ? null : payload;
+
 // ---------------------------------------------------------------------------
 // TheseusClient
 // ---------------------------------------------------------------------------
@@ -217,6 +220,7 @@ export class TheseusClient {
   private _state: ConnectionState = "disconnected";
   private stateListeners = new Set<ConnectionListener>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private outboundQueue: string[] = [];
 
   constructor(private url: string) {}
 
@@ -239,15 +243,23 @@ export class TheseusClient {
 
   connect() {
     if (this.ws) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.setState("connecting");
 
     const ws = new WebSocket(this.url);
 
-    ws.onopen = () => this.setState("connected");
+    ws.onopen = () => {
+      this.setState("connected");
+      this.flushOutboundQueue();
+    };
 
     ws.onclose = () => {
       this.setState("disconnected");
       this.ws = null;
+      this.outboundQueue = [];
       // Reject all pending requests
       for (const [id, req] of this.pending) {
         req.reject(new Error("Connection closed"));
@@ -286,6 +298,7 @@ export class TheseusClient {
 
   disconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.outboundQueue = [];
     this.ws?.close();
     this.ws = null;
     this.setState("disconnected");
@@ -333,26 +346,45 @@ export class TheseusClient {
   }
 
   private ack(requestId: string) {
-    this.ws?.send(`${JSON.stringify({ _tag: "Ack", requestId })}\n`);
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(`${JSON.stringify({ _tag: "Ack", requestId })}\n`);
+    }
   }
 
-  private send(tag: string, payload: unknown): string {
-    const id = makeId();
+  private flushOutboundQueue() {
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    while (this.outboundQueue.length > 0) {
+      const frame = this.outboundQueue.shift();
+      if (frame !== undefined) ws.send(frame);
+      if (ws.readyState !== WebSocket.OPEN) return;
+    }
+  }
+
+  private write(frame: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(frame);
+      return;
+    }
+    this.outboundQueue.push(frame);
+    if (this.ws === null || this.ws.readyState === WebSocket.CLOSED) this.connect();
+  }
+
+  private send(id: string, tag: string, payload: unknown): void {
     const msg = {
       _tag: "Request" as const,
       id,
       tag,
-      payload,
+      payload: rpcRequestPayload(payload),
       headers: [],
     };
-    this.ws?.send(`${JSON.stringify(msg)}\n`);
-    return id;
+    this.write(`${JSON.stringify(msg)}\n`);
   }
 
   /** Send a non-streaming RPC request and await the result. */
-  private request<T>(tag: string, payload: unknown): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const id = this.send(tag, payload);
+  private async request<T>(tag: string, payload: unknown): Promise<T> {
+    const id = makeId();
+    return await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error("Request timed out"));
@@ -367,17 +399,24 @@ export class TheseusClient {
           reject(err);
         },
       });
+      try {
+        this.send(id, tag, payload);
+      } catch (error) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
-  private streamRequest<T>(
+  private async streamRequest<T>(
     tag: string,
     payload: unknown,
     onEvent: (event: T) => void,
     timeoutMessage: string,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const id = this.send(tag, payload);
+    const id = makeId();
+    return await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(timeoutMessage));
@@ -398,6 +437,13 @@ export class TheseusClient {
           }
         },
       });
+      try {
+        this.send(id, tag, payload);
+      } catch (error) {
+        this.pending.delete(id);
+        clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
@@ -437,7 +483,7 @@ export class TheseusClient {
   }
 
   async listMissions(): Promise<ReadonlyArray<MissionSession>> {
-    return await this.request<MissionSession[]>("listMissions", undefined);
+    return await this.request<MissionSession[]>("listMissions", null);
   }
 
   async getMission(missionId: string): Promise<MissionSession | null> {
@@ -494,7 +540,7 @@ export class TheseusClient {
 
   async status(): Promise<ReadonlyArray<unknown>> {
     try {
-      return await this.request("status", undefined);
+      return await this.request("status", null);
     } catch {
       return [];
     }

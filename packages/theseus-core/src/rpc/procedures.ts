@@ -96,7 +96,7 @@ export const Status = Rpc.make("status", {
 /** Create a runtime mission session. */
 export const CreateMission = Rpc.make("createMission", {
   payload: Schema.Struct({
-    slug: Schema.optional(Schema.String),
+    slug: Schema.optional(Schema.NullOr(Schema.String)),
     goal: Schema.String,
     criteria: Schema.Array(Schema.String),
   }),
@@ -111,7 +111,7 @@ export const StartMissionDispatch = Rpc.make("startMissionDispatch", {
     missionId: Schema.String,
     spec: DispatchSpecSchema,
     task: Schema.String,
-    continueFrom: Schema.optional(Schema.String),
+    continueFrom: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: RuntimeDispatchEventSchema,
   error: RpcError,
@@ -136,7 +136,7 @@ export const GetMission = Rpc.make("getMission", {
 /** List runtime dispatch sessions. */
 export const ListRuntimeDispatches = Rpc.make("listRuntimeDispatches", {
   payload: Schema.Struct({
-    limit: Schema.optional(Schema.Number),
+    limit: Schema.optional(Schema.NullOr(Schema.Number)),
   }),
   success: Schema.Array(DispatchSessionSchema),
   error: RpcError,

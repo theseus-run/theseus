@@ -64,6 +64,41 @@ describe("runtime RPC schemas", () => {
     });
   });
 
+  test("runtime session schemas accept null optional wire fields", async () => {
+    const decoded = await Effect.runPromise(
+      Schema.decodeUnknownEffect(DispatchSessionSchema)({
+        workNodeId: "work-1",
+        dispatchId: "dispatch-1",
+        missionId: "mission-1",
+        capsuleId: "capsule-1",
+        parentWorkNodeId: null,
+        kind: "dispatch",
+        relation: "root",
+        label: "coordinator",
+        control: dispatchControl,
+        startedAt: null,
+        completedAt: null,
+        name: "coordinator",
+        modelRequest: {
+          provider: "copilot",
+          model: "gpt-5.4",
+          maxTokens: null,
+        },
+        iteration: 0,
+        state: "running",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }),
+    );
+
+    expect(decoded.parentWorkNodeId).toBeNull();
+    expect(decoded.startedAt).toBeNull();
+    expect(decoded.modelRequest).toEqual({
+      provider: "copilot",
+      model: "gpt-5.4",
+      maxTokens: null,
+    });
+  });
+
   test("RuntimeDispatchEventSchema preserves session start and wrapped dispatch events", async () => {
     const started = {
       _tag: "DispatchSessionStarted",

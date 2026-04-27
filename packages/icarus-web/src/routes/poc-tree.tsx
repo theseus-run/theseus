@@ -5,7 +5,7 @@
  * blueprint authority for this path.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "@/lib/client";
 import type {
   DispatchEvent,
@@ -115,6 +115,37 @@ const eventKey = (entry: DispatchEventEntry): string =>
 const errorDetail = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const latestMissionId = (
+  missions: ReadonlyArray<MissionSession>,
+  dispatches: ReadonlyArray<DispatchSession>,
+): string | undefined => dispatches[0]?.missionId ?? missions[0]?.missionId;
+
+const missionIdFromLocation = (): string | undefined => {
+  const id = new URLSearchParams(window.location.search).get("missionId");
+  return id ?? undefined;
+};
+
+const replaceMissionId = (missionId: string) => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("missionId", missionId);
+  window.history.replaceState(null, "", url);
+};
+
+const dispatchDoneText = (events: ReadonlyArray<DispatchEventEntry>): string | undefined =>
+  [...events].reverse().find((entry) => entry.event._tag === "Done")?.event.result?.content;
+
+const dispatchFailureReason = (events: ReadonlyArray<DispatchEventEntry>): string | undefined =>
+  [...events].reverse().find((entry) => entry.event._tag === "Failed")?.event.reason;
+
+const dispatchReport = (events: ReadonlyArray<DispatchEventEntry>): ReportPacket | undefined => {
+  const reportEvent = [...events]
+    .reverse()
+    .find((entry) => entry.event._tag === "ToolResult" && isReportPacket(entry.event.structured));
+  return reportEvent?.event._tag === "ToolResult" && isReportPacket(reportEvent.event.structured)
+    ? reportEvent.event.structured
+    : undefined;
+};
+
 const useEntries = () => {
   const nextId = useRef(0);
   const [entries, setEntries] = useState<ReadonlyArray<LogEntry>>([]);
@@ -127,7 +158,11 @@ const useEntries = () => {
     nextId.current = 0;
     setEntries([]);
   }, []);
-  return { entries, append, clear };
+  const replace = useCallback((lines: ReadonlyArray<string>) => {
+    nextId.current = lines.length;
+    setEntries(lines.map((line, id) => ({ id, line })));
+  }, []);
+  return { entries, append, clear, replace };
 };
 
 export function RuntimeTreePocPage() {
@@ -143,8 +178,77 @@ export function RuntimeTreePocPage() {
   const [failureReason, setFailureReason] = useState<string>("");
   const [pocError, setPocError] = useState<PocError | null>(null);
   const [transcripts, setTranscripts] = useState<ReadonlyArray<DispatchTranscript>>([]);
-  const { entries, append, clear } = useEntries();
+  const { entries, append, clear, replace } = useEntries();
   const coordinatorId = useRef<string | null>(null);
+
+  const restoreMission = useCallback(
+    async (requestedMissionId?: string) => {
+      const [missions, listed] = await Promise.all([
+        client.listMissions(),
+        client.listRuntimeDispatches(50),
+      ]);
+      const missionId = requestedMissionId ?? latestMissionId(missions, listed);
+      if (missionId === undefined) return;
+
+      const restoredMission = await client.getMission(missionId);
+      if (restoredMission === null) return;
+
+      const missionDispatches = listed.filter((session) => session.missionId === missionId);
+      const rootDispatch =
+        missionDispatches.find((session) => session.relation === "root") ?? missionDispatches[0];
+      coordinatorId.current = rootDispatch?.dispatchId ?? null;
+
+      const loaded = await Promise.all(
+        missionDispatches.map(async (session): Promise<DispatchTranscript> => {
+          try {
+            return {
+              dispatchId: session.dispatchId,
+              name: session.name,
+              events: await client.getDispatchEvents(session.dispatchId),
+            };
+          } catch {
+            return { dispatchId: session.dispatchId, name: session.name, events: [] };
+          }
+        }),
+      );
+      const coordinatorTranscript =
+        rootDispatch === undefined
+          ? undefined
+          : loaded.find((transcript) => transcript.dispatchId === rootDispatch.dispatchId);
+      const report = loaded
+        .map((transcript) => dispatchReport(transcript.events))
+        .find((packet) => packet !== undefined);
+      const failure = coordinatorTranscript
+        ? dispatchFailureReason(coordinatorTranscript.events)
+        : undefined;
+
+      setMission(restoredMission);
+      setCoordinator(rootDispatch ?? null);
+      setDispatches(missionDispatches);
+      setTranscripts(loaded);
+      setGruntReport(report ?? null);
+      setCoordinatorFinal(
+        coordinatorTranscript === undefined
+          ? ""
+          : (dispatchDoneText(coordinatorTranscript.events) ?? ""),
+      );
+      setFailureReason(failure ?? "");
+      setPocError(
+        failure === undefined ? null : { title: "restored failed dispatch", detail: failure },
+      );
+      replace([
+        `mission ${restoredMission.missionId}`,
+        ...missionDispatches.map((session) => `${session.relation} dispatch ${session.name}`),
+        ...(report === undefined ? [] : [`grunt report ${report.dispatchId}`]),
+      ]);
+      replaceMissionId(restoredMission.missionId);
+    },
+    [replace],
+  );
+
+  useEffect(() => {
+    void restoreMission(missionIdFromLocation());
+  }, [restoreMission]);
 
   const refreshDispatches = useCallback(async () => {
     const listed = await client.listRuntimeDispatches(20);
@@ -176,6 +280,7 @@ export function RuntimeTreePocPage() {
     (event: ResearchPocEvent) => {
       if (event._tag === "MissionCreated") {
         setMission(event.mission);
+        replaceMissionId(event.mission.missionId);
         append(`mission ${event.mission.missionId}`);
         return;
       }

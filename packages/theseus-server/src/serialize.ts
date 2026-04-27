@@ -10,6 +10,17 @@ import type { RuntimeDispatchEvent } from "@theseus.run/runtime";
 export type SerializedDispatchEvent = DispatchEvent | Record<string, unknown>;
 export type SerializedRuntimeDispatchEvent = RuntimeDispatchEvent | Record<string, unknown>;
 
+export const jsonSafe = (value: unknown): unknown => {
+  if (value === undefined) return null;
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(jsonSafe);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .map(([key, entry]) => [key, jsonSafe(entry)]),
+  );
+};
+
 const serializeCause = (cause: unknown): Record<string, unknown> => {
   const tag =
     typeof cause === "object" && cause !== null && "_tag" in cause
@@ -27,22 +38,22 @@ export const serializeEvent = (event: DispatchEvent): SerializedDispatchEvent =>
         _tag: error._tag,
         callId: error.callId,
         name: error.name,
-        ...("raw" in error ? { raw: error.raw } : {}),
-        ...("args" in error ? { args: error.args } : {}),
+        ...("raw" in error ? { raw: jsonSafe(error.raw) } : {}),
+        ...("args" in error ? { args: jsonSafe(error.args) } : {}),
         ...("cause" in error ? { cause: serializeCause(error.cause) } : {}),
       },
     };
-    return serialized;
+    return jsonSafe(serialized) as Record<string, unknown>;
   }
-  return event;
+  return jsonSafe(event) as SerializedDispatchEvent;
 };
 
 export const serializeRuntimeEvent = (
   event: RuntimeDispatchEvent,
 ): SerializedRuntimeDispatchEvent => {
-  if (event._tag !== "DispatchEvent") return event;
-  return {
+  if (event._tag !== "DispatchEvent") return jsonSafe(event) as SerializedRuntimeDispatchEvent;
+  return jsonSafe({
     ...event,
     event: serializeEvent(event.event),
-  };
+  }) as SerializedRuntimeDispatchEvent;
 };

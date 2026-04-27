@@ -7,6 +7,7 @@
 /* Dark-first, merged with shadcn tokens.                        */
 
 :root {
+  --font-size: 14px;
   --lh: 1.35rem; /* vertical rhythm unit             */
   --border: 1px; /* default border token             */
   --page-max: 110ch;
@@ -98,7 +99,7 @@
 body {
   font-family:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 15px;
+  font-size: var(--font-size);
   line-height: var(--lh);
   font-variant-numeric: tabular-nums lining-nums;
   background: var(--color-background);
@@ -191,6 +192,59 @@ body {
   gap: var(--panel-gap);
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
+}
+
+.workbench-grid {
+  display: grid;
+  gap: var(--panel-gap);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+@media (min-width: 1120px) {
+  .workbench-grid {
+    grid-template-columns: minmax(22rem, 0.85fr) minmax(0, 1.45fr) minmax(25rem, 1fr);
+  }
+}
+
+.workbench-tree-branch {
+  position: relative;
+  margin-top: calc(var(--lh) / 2);
+}
+
+.workbench-tree-branch::before {
+  content: "";
+  position: absolute;
+  left: -1ch;
+  top: 0;
+  bottom: 0;
+  border-left: var(--border) dotted var(--color-border);
+}
+
+.workbench-tree-node {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1ch;
+  border: var(--border) solid var(--color-border);
+  background: #0c0c0e;
+  color: var(--color-foreground);
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
+  text-align: left;
+}
+
+.workbench-tree-node:hover,
+.workbench-tree-node:focus-visible {
+  background: #18181b;
+  border-color: var(--color-muted-foreground);
+  outline: none;
+}
+
+.workbench-tree-node-active {
+  background: #18181b;
+  border-color: var(--color-muted-foreground);
 }
 
 .showcase-grid {
@@ -618,9 +672,12 @@ body {
 
 .queue-item {
   display: block;
+  width: 100%;
   border: var(--border) solid var(--color-border);
   padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
   background: transparent;
+  color: inherit;
+  text-align: left;
   text-transform: none;
   font-weight: 400;
   transition:
@@ -961,21 +1018,21 @@ body {
   color: var(--color-foreground);
   letter-spacing: normal;
   line-height: var(--lh);
+  font-size: inherit;
 }
 
 .heading-1 {
   min-height: calc(var(--lh) * 2);
-  font-size: 1.35em;
+  color: #ffffff;
 }
 
 .heading-2 {
-  min-height: calc(var(--lh) * 2);
-  font-size: 1em;
+  min-height: var(--lh);
 }
 
 .heading-3 {
-  min-height: calc(var(--lh) * 2);
-  font-size: 1em;
+  min-height: var(--lh);
+  color: var(--color-muted-foreground);
 }
 
 /* ── Vertical rhythm ─────────────────────────────────────────── */
@@ -1239,14 +1296,6 @@ ul {
   margin-bottom: var(--lh);
   letter-spacing: normal;
   line-height: var(--lh);
-}
-.markdown-body h1 {
-  font-size: 1.25em;
-}
-.markdown-body h2 {
-  font-size: 1em;
-}
-.markdown-body h3 {
   font-size: 1em;
 }
 
