@@ -52,6 +52,47 @@ Do not introduce plugin manifests, dynamic loading, extension registries,
 marketplace semantics, generic lifecycle hooks, ECS entities/components, or a
 tick scheduler without an explicit design decision.
 
+## Explicit Assembly
+
+Theseus may support conventions and autoloading, but only through explicit
+assembled harness modules.
+
+If behavior affects what agents see, can do, observe, decide, or auto-load, the
+module introducing that behavior must be visible in source wiring, named, typed,
+ordered, and removable.
+
+Good:
+
+```typescript
+const ring = Satellite.SatelliteRingLive([
+  toolRecovery,
+  agentsMdInstructionLoader({ paths: ["AGENTS.md"] }),
+  policyGuard,
+])
+```
+
+Bad:
+
+```typescript
+readAgentsMdIfExists()
+mergeGlobalOrgProjectRules()
+loadToolsFromPlugins()
+enableAllToolsByDefault()
+```
+
+File existence alone must not change harness behavior unless an assembled
+source module declares that convention. Opting out should mean removing or
+changing a visible assembly entry, not hunting layered user/org/project config.
+
+This rule applies to Theseus harness/runtime behavior: systems, satellites,
+projections, sinks, tools/capabilities, instruction packs, convention loaders,
+mission behavior, policy behavior, and model/instruction selection.
+
+This rule does not prohibit ordinary server, web, build, deployment, or
+environment configuration such as ports, database paths, provider credentials,
+Vite config, deployment settings, HTTP/CORS settings, logging level, UI
+preferences, or build tooling.
+
 ## Current Code Shape
 
 The current runtime package is `packages/theseus-runtime`.
@@ -136,6 +177,16 @@ tests should all adapt to the same runtime semantics.
 
 Systems own runtime behavior.
 
+The game-engine analogy is useful here but should stay lightweight. Theseus is
+not adopting ECS entities, components, tick loops, or generic schedulers.
+
+A system is a named runtime behavior module that advances or reacts to live
+harness state. It consumes commands, controls, runtime facts, or services, and
+produces facts, state transitions, fibers, or calls into primitives.
+
+Systems can be small and stateless. They do not need to be long-lived. The key
+is named ownership of behavior.
+
 Current systems:
 
 - mission system: creates a mission, creates/binds a capsule, records the
@@ -152,6 +203,97 @@ When adding behavior, prefer a named system plus explicit wiring over a generic
 registry. Static assembly is acceptable and desirable while the harness is
 evolving because agents can inspect and edit it directly.
 
+Not every module is a system:
+
+- pure read/query state is a projection
+- side-effect consumers are sinks
+- dispatch-local middleware is Satellite
+- static inventories are catalogs/resources
+- serialization is a codec
+- formatting and small transformations are ordinary helpers
+
+Capability selection or hydration can become a system when it owns behavior,
+not merely because a catalog exists.
+
+## Runtime Facts And Capsules
+
+Theseus has two durable truth buckets.
+
+**Runtime facts** are the mechanical execution ledger. They answer:
+
+```txt
+What exactly happened in this run?
+```
+
+Examples:
+
+- dispatch started
+- model call requested
+- tool called
+- tool result returned
+- satellite action emitted
+- interrupt requested
+- dispatch finished or failed
+- projection updated
+
+Runtime facts are run/session scoped, high-volume, replay/debug oriented, and
+mostly not PR-facing. They are the right substrate for reconstruction,
+projections, minimaps, telemetry, and failure analysis.
+
+Runtime fact identity is the Effect/TypeScript `_tag`. Do not maintain a
+parallel dot-case runtime event namespace. Internal code should emit tagged
+facts through named constructors, for example `RuntimeFacts.dispatchStarted(...)`
+returning `{ _tag: "DispatchStarted", ... }`.
+
+Persistence may index `fact._tag` in a column, but the serialized tagged fact is
+the source. First-party wire formats should preserve `_tag` unless an external
+protocol requires adaptation. External protocols such as OpenTelemetry can be
+served by dedicated sinks/adapters.
+
+**Capsule events** are the durable mission record. They answer:
+
+```txt
+What matters about this mission?
+```
+
+Examples:
+
+- mission created, locked, changed, or closed
+- important decision made
+- scope changed
+- blocker found
+- evidence produced
+- artifact attached
+- dispatch summarized
+- result evaluated against criteria
+
+Capsules are curated, mission scoped, durable across sessions, and review/PR
+facing. For now, one Mission owns exactly one primary Capsule. A mission Capsule
+may continue tomorrow from a different runtime session with a different set of
+runtime facts.
+
+Both buckets are sources of truth at different layers:
+
+```txt
+runtime facts = execution ledger
+capsule       = mission record
+```
+
+Runtime facts may feed Capsule sinks, but Capsule is not a dump of raw runtime
+facts. Do not store verbatim model calls, complete tool result streams, or every
+low-level execution event in Capsule unless that detail is itself mission
+evidence.
+
+Capsule event types are mission-facing and do not need to match runtime fact
+tags one-to-one. Converting a runtime fact into a Capsule entry is curation, not
+a generic naming mapper.
+
+Do not introduce free-floating Capsules or arbitrary nested Capsules. If future
+side quests or sub-missions need separate black boxes, they should first become
+mission-like child work envelopes; each child may then own its own Capsule. The
+invariant remains: every Capsule belongs to exactly one structured work
+envelope.
+
 ## Sinks
 
 Sinks consume runtime facts and perform side effects.
@@ -163,6 +305,9 @@ Current sink:
 
 Sinks keep side effects out of core control logic. If another side effect is
 needed, prefer a named sink over scattering writes through systems or handlers.
+
+`CapsuleSink` should curate mission-relevant facts from runtime execution. It
+should not blindly mirror the execution ledger.
 
 Examples that may become sinks later:
 
@@ -199,8 +344,9 @@ Current stores:
 - SQLite capsule store: capsule events and artifacts
 - runtime link tables: cheap joins between missions, dispatches, and capsules
 
-Durable events should be append-only unless an explicit compaction or snapshot
-boundary says otherwise.
+Runtime facts and Capsule events should both be append-only unless an explicit
+compaction or snapshot boundary says otherwise. Keep their schemas and purposes
+distinct.
 
 ## Catalogs
 
@@ -233,16 +379,26 @@ still be queryable through durable storage after no active handle exists.
 
 ## Mission And Dispatch Semantics
 
-Mission is the user-facing unit of intent: goal, criteria, capsule, and eventual
-evidence.
+Mission is the structured work envelope: objective, completion definition,
+scope, authority, evidence, and lifecycle.
+
+Mission exists so the runtime does not treat chat as the primary work object.
+Freeform chat can be a client/interface mode, but runtime work should flow
+through mission-like structure when it is meaningful enough to track.
+
+The current mission system is replaceable and may gain mission types such as
+implementation, research, brainstorm, review, planning, incident, or quick task.
+Runtime modules should not hard-code one mission subtype unless they own that
+subtype's behavior.
 
 Dispatch is an active AI/model/tool run under a mission.
 
 Continuation creates a child dispatch with inherited context and a parent link.
 It must not mutate the old dispatch identity into a second run.
 
-Capsule is the durable mission/run log. Runtime writes capsule events as facts
-about what happened; workers should not be forced into logging ceremony for
+Capsule is the curated mission black box, not the raw runtime event log.
+Runtime writes capsule events for mission-relevant facts, decisions, evidence,
+artifacts, and outcomes. Workers should not be forced into logging ceremony for
 normal work.
 
 ## Satellite Boundary
@@ -297,6 +453,58 @@ Examples:
 
 Adapters map these into RPC, CLI, UI, or test errors. Runtime must not throw
 transport-specific errors.
+
+## Compatibility Posture
+
+Theseus runtime is still WIP. Prefer clean-break replacement over compatibility
+layers when the design improves.
+
+Runtime contracts may change, including commands, controls, queries, facts,
+sessions, projections, and errors. The same pass must migrate first-party
+adapters, stores, sinks, projections, tests, docs, and skills that depend on the
+changed contract.
+
+Rules:
+
+- if `RuntimeCommand`, `RuntimeControl`, or `RuntimeQuery` changes, update
+  server handlers and web/client callers in the same pass
+- if a runtime fact changes, update stores, projections, sinks, serializers,
+  tests, and docs in the same pass
+- if Mission/Capsule semantics change, update active docs and skills in the
+  same pass
+- do not keep old/new command or event paths in parallel
+- do not add legacy aliases, v1/v2 shims, compatibility re-exports, or migration
+  layers unless explicitly requested
+
+Clean-break does not mean partial. Every refactor should leave one coherent
+first-party path.
+
+## Testing Posture
+
+Runtime tests should follow ownership boundaries.
+
+Effect dependency injection gives Theseus clean graph cut points. Use them.
+Default to isolated owner tests with fake services, fake stores, fake runtime
+facts, deterministic clocks/ids/models, and package-local layers.
+
+Testing is not only regression protection. In this repo, tests are executable
+design context for future agents. They show concrete contracts, examples, and
+expected behavior, which reduces hallucinated APIs and hidden assumptions.
+
+Rules:
+
+- systems get focused tests for command/control/fact/lifecycle behavior
+- projections get focused tests for derivation from stored facts
+- sinks get focused tests for curation and side effects
+- capability/catalog modules get focused tests for selection and hydration
+- codecs get focused tests for `_tag` round trips and unknown boundary handling
+- registries/stores get direct tests for their behavior
+- server adapter tests are required when public RPC behavior changes
+
+Narrow package integration tests are allowed when they prove local assembly of a
+few services. Broad runtime/server/web E2E tests are not the default and should
+not be added without explicit user confirmation or an explicit wiring-proof
+request.
 
 ## What Not To Reintroduce
 

@@ -1,7 +1,10 @@
 /**
- * Thin RPC client for the Theseus server.
+ * POC RPC client for the Theseus server.
  *
- * Speaks the Effect RPC wire protocol over WebSocket without importing Effect.
+ * Speaks the current Effect RPC wire protocol over WebSocket without importing
+ * Effect. This is smoke-tested scaffolding for the runtime POC, not the durable
+ * browser client boundary.
+ *
  * Messages are JSON-encoded with the structure:
  *   Request:  { _tag: "Request", id, tag, payload, headers }
  *   Chunk:    { _tag: "Chunk", requestId, values: [...] }
@@ -286,6 +289,37 @@ export class TheseusClient {
     });
   }
 
+  private streamRequest<T>(
+    tag: string,
+    payload: unknown,
+    onEvent: (event: T) => void,
+    timeoutMessage: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const id = this.send(tag, payload);
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(timeoutMessage));
+      }, 120_000);
+      this.pending.set(id, {
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+        timeout,
+        onChunk: (values) => {
+          for (const value of values) {
+            onEvent(value as T);
+          }
+        },
+      });
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
@@ -305,29 +339,12 @@ export class TheseusClient {
     onEvent: (event: DispatchEvent) => void,
     continueFrom?: string,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const id = this.send("dispatch", { spec, task, continueFrom });
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Dispatch stream timed out before completing"));
-      }, 120_000);
-      this.pending.set(id, {
-        resolve: () => {
-          clearTimeout(timeout);
-          resolve();
-        },
-        reject: (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        },
-        timeout,
-        onChunk: (values) => {
-          for (const v of values) {
-            onEvent(v as DispatchEvent);
-          }
-        },
-      });
-    });
+    return this.streamRequest(
+      "dispatch",
+      { spec, task, continueFrom },
+      onEvent,
+      "Dispatch stream timed out before completing",
+    );
   }
 
   async createMission(input: {
@@ -352,53 +369,24 @@ export class TheseusClient {
     },
     onEvent: (event: RuntimeDispatchEvent) => void,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const id = this.send("startMissionDispatch", input);
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Runtime dispatch stream timed out before completing"));
-      }, 120_000);
-      this.pending.set(id, {
-        resolve: () => {
-          clearTimeout(timeout);
-          resolve();
-        },
-        reject: (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        },
-        timeout,
-        onChunk: (values) => {
-          for (const v of values) {
-            onEvent(v as RuntimeDispatchEvent);
-          }
-        },
-      });
-    });
+    return this.streamRequest(
+      "startMissionDispatch",
+      input,
+      onEvent,
+      "Runtime dispatch stream timed out before completing",
+    );
   }
 
   async listMissions(): Promise<ReadonlyArray<MissionSession>> {
-    try {
-      return await this.request<MissionSession[]>("listMissions", undefined);
-    } catch {
-      return [];
-    }
+    return await this.request<MissionSession[]>("listMissions", undefined);
   }
 
   async getMission(missionId: string): Promise<MissionSession | null> {
-    try {
-      return await this.request<MissionSession>("getMission", { missionId });
-    } catch {
-      return null;
-    }
+    return await this.request<MissionSession>("getMission", { missionId });
   }
 
   async listRuntimeDispatches(limit?: number): Promise<ReadonlyArray<DispatchSession>> {
-    try {
-      return await this.request<DispatchSession[]>("listRuntimeDispatches", { limit });
-    } catch {
-      return [];
-    }
+    return await this.request<DispatchSession[]>("listRuntimeDispatches", { limit });
   }
 
   async listDispatches(limit?: number): Promise<ReadonlyArray<DispatchSummary>> {
@@ -426,27 +414,15 @@ export class TheseusClient {
   }
 
   async getDispatchResult(dispatchId: string): Promise<DispatchEvent["result"] | null> {
-    try {
-      return await this.request<DispatchEvent["result"]>("getResult", { dispatchId });
-    } catch {
-      return null;
-    }
+    return await this.request<DispatchEvent["result"]>("getResult", { dispatchId });
   }
 
   async getCapsuleEvents(capsuleId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    try {
-      return await this.request<CapsuleEvent[]>("getCapsuleEvents", { capsuleId });
-    } catch {
-      return [];
-    }
+    return await this.request<CapsuleEvent[]>("getCapsuleEvents", { capsuleId });
   }
 
   async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    try {
-      return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
-    } catch {
-      return [];
-    }
+    return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
   }
 
   async status(): Promise<ReadonlyArray<unknown>> {

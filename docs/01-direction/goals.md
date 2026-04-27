@@ -24,8 +24,13 @@ Not a chatbot. Not a conversation. A job system with LLM-powered crew.
 
 The important object is not the chat, Jira ticket, PR, review, deploy, or
 release note. Those are coordination infrastructure. The valuable object is the
-outcome: the bug fixed, the feature shipped, the incident resolved, the work
-completed.
+mission: the structured attempt to produce an outcome.
+
+Theseus starts from the premise that "chat" is the wrong root object for serious
+agent work. Freeform chat can exist as an interface mode, but every meaningful
+work session needs a mission-like envelope: objective, completion definition,
+scope, authority, evidence, and lifecycle. The exact mission type may evolve.
+The system should not regress to unstructured chat as the primary work object.
 
 Theseus should use existing systems of record instead of replacing them. Jira,
 GitHub, Slack, docs, CI, and deployment systems remain where organizations keep
@@ -105,7 +110,7 @@ not as the mission itself.
 
 | Primitive | Why it stays |
 |---|---|
-| Mission | Humans always need a durable attempt to produce an outcome, with goal, criteria, artifacts, evidence, and audit |
+| Mission | Humans always need a structured work envelope for objective, completion definition, scope, authority, evidence, and lifecycle |
 | Tool | Models always need typed, controlled world access |
 | Capsule | Humans always need voyage logs — to debug, to improve |
 | Dispatch | You always need to invoke an AI with context and get a result |
@@ -127,6 +132,10 @@ the runtime command/control/query surface when implemented.
 
 Design these as optional layers on top of the primitives, not as assumptions the
 primitives are built around.
+
+Mission shape may also vary by work type. Implementation, research,
+brainstorming, review, planning, incident, and quick-task missions should not
+all require the same ceremony. Structure scales with risk and ambiguity.
 
 ---
 

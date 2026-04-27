@@ -104,7 +104,9 @@ const program = Effect.gen(function* () {
 const main = program.pipe(
   Effect.provide(HttpLive),
   Effect.scoped,
-  Effect.catchCause((cause: Cause.Cause<unknown>) => Effect.logError("[theseus-server] fatal", cause)),
+  Effect.catchCause((cause: Cause.Cause<unknown>) =>
+    Effect.logError("[theseus-server] fatal", cause),
+  ),
 ) as Effect.Effect<void, never, never>;
 
 Effect.runFork(main);

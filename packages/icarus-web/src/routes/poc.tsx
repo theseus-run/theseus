@@ -20,9 +20,6 @@ const BLUEPRINT = {
     { name: "glob" },
     { name: "grep" },
     { name: "outline" },
-    { name: "search_replace" },
-    { name: "write_file" },
-    { name: "shell" },
   ],
   maxIterations: 30,
 };
@@ -64,6 +61,9 @@ const eventLine = (event: DispatchEvent): string => {
   return `[${event.name ?? "agent"}] ${event._tag}`;
 };
 
+const usageOrZero = (event: DispatchEvent) =>
+  event.result?.usage ?? { inputTokens: 0, outputTokens: 0 };
+
 export function RuntimePocPage() {
   const [task, setTask] = useState("List the repository root and summarize what this project is.");
   const [running, setRunning] = useState(false);
@@ -101,11 +101,32 @@ export function RuntimePocPage() {
         (event) => {
           if (event._tag === "DispatchSessionStarted") {
             setDispatch(event.session);
+            setMission((current) =>
+              current ? { ...current, state: "running" as const } : current,
+            );
             append(
               "runtime",
               `dispatch ${event.session.dispatchId} mission ${event.session.missionId} capsule ${event.session.capsuleId}`,
             );
             return;
+          }
+          if (event.event._tag === "Done") {
+            setDispatch((current) =>
+              current
+                ? {
+                    ...current,
+                    state: "done" as const,
+                    usage: usageOrZero(event.event),
+                  }
+                : current,
+            );
+            setMission((current) => (current ? { ...current, state: "done" as const } : current));
+          }
+          if (event.event._tag === "Failed") {
+            setDispatch((current) =>
+              current ? { ...current, state: "failed" as const } : current,
+            );
+            setMission((current) => (current ? { ...current, state: "failed" as const } : current));
           }
           append(describeDispatchEvent(event.event), eventLine(event.event));
         },

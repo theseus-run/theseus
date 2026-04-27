@@ -50,13 +50,20 @@ const startInput = <Input extends { readonly continueFrom?: string | undefined }
   return continueFrom === undefined ? rest : input;
 };
 
+const streamRpcHandler = <A, E, R>(effect: Effect.Effect<Stream.Stream<A>, E, R>) =>
+  // Effect RPC streaming handlers must return a Stream directly. Returning an
+  // Effect that produces a Stream is treated as a unary result and defects at
+  // runtime, so the effectful setup is lifted with Stream.unwrap at the
+  // transport boundary.
+  Stream.unwrap(effect) as never;
+
 // ---------------------------------------------------------------------------
 // Handlers Layer
 // ---------------------------------------------------------------------------
 
 export const HandlersLive = TheseusRpc.toLayer({
   dispatch: ({ spec: bp, task, continueFrom }) =>
-    Stream.unwrap(
+    streamRpcHandler(
       Effect.gen(function* () {
         const adapter = yield* RuntimeRpcAdapter;
         const mission = yield* adapter
@@ -81,7 +88,7 @@ export const HandlersLive = TheseusRpc.toLayer({
           Stream.map((event) => serializeEvent(event.event)),
         );
       }),
-    ) as never,
+    ),
 
   listDispatches: ({ limit }) =>
     Effect.gen(function* () {
@@ -144,7 +151,7 @@ export const HandlersLive = TheseusRpc.toLayer({
     }),
 
   startMissionDispatch: ({ missionId, spec, task, continueFrom }) =>
-    Stream.unwrap(
+    streamRpcHandler(
       Effect.gen(function* () {
         const adapter = yield* RuntimeRpcAdapter;
         const started = yield* adapter
@@ -152,7 +159,7 @@ export const HandlersLive = TheseusRpc.toLayer({
           .pipe(Effect.mapError(toRpcError));
         return started.events.pipe(Stream.map(serializeRuntimeEvent));
       }),
-    ) as never,
+    ),
 
   listMissions: () =>
     Effect.gen(function* () {

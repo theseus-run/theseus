@@ -1,6 +1,12 @@
 # Mission System
 
-Design document for the Theseus mission system. Evolved from the original capsule implementation in `cockpit/.theseus/opencode/plugin/` — that implementation is v0 (OpenCode, compliance-based). This document describes the target model for the Effect runtime.
+Design document for the current Theseus mission system. Evolved from the
+original capsule implementation in `cockpit/.theseus/opencode/plugin/` — that
+implementation is v0 (OpenCode, compliance-based).
+
+Mission is primitive as a structured work envelope, not because this exact
+mission schema is final. The schema below is the current implementation-mission
+shape and may evolve into multiple mission types.
 
 ---
 
@@ -18,12 +24,23 @@ The lock ceremony remains. Everything else becomes automatic.
 
 These two concepts were conflated in v0. They are distinct.
 
-**Mission** = crystallized user intent. PR-scoped. Spans time.
+**Mission** = crystallized user intent. Spans time.
 - Created explicitly, with human confirmation
 - Locked once, with user sign-off on the precise definition
 - Immutable after lock — scope changes are deltas, never edits
 - Closed when all outputs are met (or explicitly abandoned)
-- Maps to a PR: `mission.md` ≈ PR description, `artifacts/` ≈ PR diff
+- For implementation missions, may map to a PR: `mission.md` ≈ PR description,
+  `artifacts/` ≈ PR diff
+
+**Capsule** = the mission black box. One Mission owns exactly one primary
+Capsule. The Capsule is the source of truth for mission-facing summaries,
+decisions, evidence, artifacts, handoffs, PR descriptions, release notes, and
+future continuation.
+
+Do not create free-floating Capsules or arbitrary sub-capsules. If future side
+quests or sub-missions need their own black boxes, they should become
+mission-like child work envelopes first; each child may then own its own
+Capsule.
 
 **Session** = a work window inside a mission. Time-scoped.
 - Auto-opened when an agent starts working under a `missionId`
@@ -88,6 +105,30 @@ State transitions:
 Sessions have no explicit tool calls. The runtime opens a session when an agent starts work under a `missionId`. The runtime closes it when the conversation ends. Summary and artifact list are derived after close.
 
 Sessions are sub-records of a mission, not independent entities. A session without a mission is just a session — it gets a lightweight auto-record but no mission structure.
+
+## Mission types
+
+The current document mostly describes implementation missions because the first
+Theseus wedge is a coding harness. Mission as a primitive is broader.
+
+Possible mission types:
+
+- implementation
+- research
+- brainstorm
+- review
+- planning
+- incident
+- quick task
+
+Mission structure should scale with risk and ambiguity. A quick task can have
+implicit scope and criteria. A brainstorm mission can use looser completion
+definition. A production incident needs authority, evidence, and escalation
+policy.
+
+Do not force every mission type into the implementation-mission lifecycle if
+that makes the work worse. Preserve the principle: structured intent over raw
+chat.
 
 ---
 
@@ -316,7 +357,7 @@ It is: **crystallized user intent + a structured record of what happened trying 
 
 | Concept | v0 (OpenCode) | Target |
 |---|---|---|
-| Unit of work | Capsule (session-scoped) | Mission (PR-scoped) + Session (time-scoped) |
+| Unit of work | Capsule (session-scoped) | Mission (structured intent; implementation missions may be PR-scoped) + Session (time-scoped) |
 | Session | Implicit (session file hack) | First-class, auto-lifecycle |
 | Mission start | `theseus_open` (any time) | Theseus proposes when session is mission-worthy |
 | Mission summary | Agent-authored | LLM-generated from transcript |

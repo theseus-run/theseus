@@ -73,12 +73,43 @@ server handlers. Do not turn crew scaffolding into required runtime structure.
 Do not introduce plugin APIs, dynamic loading, manifests, extension registries,
 or generic lifecycle hooks unless explicitly requested.
 
+## Explicit Assembly
+
+Behavior that changes what Theseus agents see, can do, observe, decide, or
+auto-load must be explicit in harness assembly.
+
+Allowed pattern:
+
+- named source module
+- typed inputs/outputs
+- explicit order
+- visible wiring in `live.ts`, `host.ts`, a ring, or another assembly module
+- opt out by removing/changing the assembly entry
+
+Disallowed pattern:
+
+- hidden file-existence behavior
+- implicit `AGENTS.md`/skill/instruction loading
+- import-order registration
+- auto-discovered tools/satellites/systems
+- layered user/org/project behavior merges that affect agent execution
+- broad capability grants by default
+
+Autoloading is allowed when it is owned by an explicit assembled module, such
+as an `agentsMdInstructionLoader` satellite/source that can be removed from the
+ring or harness assembly.
+
+This rule is scoped to Theseus harness/runtime behavior. It does not forbid
+ordinary server, web, build, deployment, or environment configuration.
+
 ## Module Shape
 
 - `host.ts` should route and compose; avoid growing behavior there.
 - `types.ts` owns runtime protocol contracts; keep variants explicit and
   exhaustively matched.
-- `systems/*/system.ts` owns live behavior for one runtime concept.
+- `systems/*/system.ts` owns runtime behavior for one concept: commands,
+  controls, facts, or services in; facts, state transitions, fibers, or
+  primitive calls out.
 - `sinks/*` owns side-effect consumers.
 - `projections/*` owns read models and query derivation.
 - `store/*` owns durable persistence backends.
@@ -86,6 +117,12 @@ or generic lifecycle hooks unless explicitly requested.
 
 Add a new module only when it names a real runtime responsibility. Avoid generic
 `utils`, mixed service bags, and old/new parallel paths.
+
+A system does not need to be long-lived or heavyweight, but it must own a
+behavior slice that advances or reacts to live harness state. Do not call every
+module a system. Pure read shape is a projection. Side-effect consumer is a
+sink. Dispatch-safe-point middleware is Satellite. Static inventory is a
+catalog/resource unless it owns selection or hydration behavior.
 
 ## Feature Addition Pattern
 
@@ -122,9 +159,30 @@ module and static wiring instead.
 - Empty tool selections mean no tools. Broad authority must be explicit.
 - Active registry state is not durable history.
 - Runtime events and capsule events should be append-only facts.
+- Runtime fact identity is `_tag`. Do not create a parallel dot-case runtime
+  event namespace. Persist `_tag` for indexing and serialize the tagged fact as
+  JSON.
+- Emit runtime facts through named constructors in `runtime/events.ts` or the
+  owning event module; do not duplicate `_tag` literals across systems.
+- Runtime facts and Capsule events are different truth buckets:
+  - runtime facts are the mechanical execution ledger for one run/session
+  - Capsule events are curated mission record entries for review, evidence,
+    decisions, artifacts, and continuation
+- For now, one Mission owns exactly one primary Capsule. Do not introduce
+  free-floating Capsules or arbitrary nested Capsules.
+- Future side quests/sub-missions that need separate black boxes should become
+  mission-like child work envelopes first; each child may then own its own
+  Capsule.
+- Do not mirror raw model calls or complete tool result streams into Capsule by
+  default. Capsule sinks should select mission-relevant facts.
+- Capsule event strings and OpenTelemetry span/metric names are adapter outputs,
+  not runtime fact identities.
 - Keep Mission/Capsule assumptions local to the systems, sinks, and projections
   that actually need them. Future work models should not require rewriting
   unrelated runtime modules.
+- Mission is primitive as structured work intent, but the current mission schema
+  and mission types are evolvable. Do not hard-code one implementation-mission
+  lifecycle into unrelated runtime systems.
 
 ## Satellite And RuntimeBus
 
@@ -144,3 +202,41 @@ Satellite or as a second runtime host.
   `bun test packages/theseus-runtime/src/runtime`
 - Run server/core tests when RPC serialization, dispatch events, or primitive
   contracts change.
+
+## Testing Doctrine
+
+Use Effect DI to cut the graph and test the behavior owner in isolation.
+
+Default to focused owner tests with fake layers, fake services, fake stores,
+fake runtime facts, deterministic clocks/ids/models, and package-local test
+helpers.
+
+Expected tests:
+
+- systems: command/control/fact/lifecycle behavior
+- projections: derivation from stored facts
+- sinks: curation and side effects
+- capability/catalog modules: selection and hydration
+- codecs: `_tag` round trips and unknown boundary handling
+- registries/stores: direct behavior
+
+Tests are executable design context for future agents. Prefer explicit,
+readable assertions over one broad scenario that hides the contract.
+
+Narrow package integration tests are allowed when they prove local assembly of a
+few services. Do not add broad runtime/server/web E2E tests without explicit
+user confirmation or an explicit wiring-proof request.
+
+## Compatibility
+
+Default to clean-break replacement. Do not preserve stale runtime contracts with
+aliases, shims, v1/v2 paths, compatibility re-exports, or parallel old/new
+flows unless the user explicitly requests back compatibility.
+
+When changing runtime contracts:
+
+- update first-party server/web/client callers in the same pass
+- update stores, projections, sinks, serializers, tests, docs, and skills that
+  consume changed runtime facts
+- update active design docs and skills when Mission/Capsule semantics change
+- leave one coherent path, not a migration maze

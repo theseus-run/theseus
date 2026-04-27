@@ -45,6 +45,12 @@ Those constraints make sense for third-party ecosystems. They are premature for
 an AI-maintained harness whose main advantage is that it can edit and improve
 itself.
 
+This implies a clean-break compatibility posture while the runtime is WIP.
+Runtime commands, facts, projections, and mission/capsule semantics may change,
+but the same change must update first-party adapters, stores, tests, docs, and
+skills. Do not keep old/new runtime paths in parallel unless back compatibility
+is explicitly requested.
+
 ## Vocabulary
 
 - **System**: owns runtime behavior.
@@ -69,6 +75,7 @@ Runtime code should remain modular but not generic for its own sake:
 - small files with obvious ownership
 - typed boundaries
 - named runtime facts
+- systems for runtime behavior over live harness state, not generic modules
 - projections over durable events
 - side effects isolated in sinks
 - static wiring in host/live assembly
@@ -76,3 +83,52 @@ Runtime code should remain modular but not generic for its own sake:
 
 Avoid god files, hidden cross-system mutation, and product-specific coupling
 that spreads Mission/Capsule assumptions through unrelated modules.
+
+Tests are part of the design surface. Because Theseus uses Effect dependency
+injection, runtime behavior should usually be tested by cutting the graph at the
+owning service/module and providing fake layers. Broad E2E tests are a deliberate
+wiring proof, not the default. Add them only after explicit confirmation.
+
+## Explicit Assembly
+
+Conventions and autoloading are allowed only as explicit assembled modules.
+
+An `AGENTS.md` loader, skill loader, MCP/tool discovery adapter, instruction
+source, default policy, or model selector can exist. It must be named, typed,
+ordered, and removable in source assembly.
+
+The bad design is ambient behavior: hidden file-existence checks, layered
+user/org/project behavior merges, import-order registration, broad capabilities
+enabled by default, or hidden instruction loading that affects a run without a
+visible assembly entry.
+
+This rule is scoped to Theseus harness behavior. It does not apply to ordinary
+server, web, build, deployment, or environment configuration.
+
+## Runtime Facts vs Capsule
+
+The self-editable harness needs two durable truth buckets:
+
+- runtime facts: exact mechanical execution ledger for a run/session
+- Capsule: mission-bound black box for decisions, evidence, artifacts,
+  outcomes, review, and continuation
+
+Both are truth. They answer different questions.
+
+Runtime facts answer what exactly happened. Capsule answers what matters about
+the mission. A Capsule can continue tomorrow from a new session with a different
+runtime fact set.
+
+Runtime fact identity is the Effect/TypeScript `_tag`. The harness should not
+maintain a second dot-case runtime event namespace. Storage can index `_tag` and
+serialize the full tagged fact. External sinks such as OpenTelemetry can adapt
+facts to their own naming conventions.
+
+Capsule sinks may derive mission-relevant entries from runtime facts, but they
+should not dump raw model calls, full tool result streams, or every low-level
+execution event into the mission record.
+
+For now, one Mission owns exactly one primary Capsule. Future side quests or
+sub-missions that need their own black boxes should first become mission-like
+child work envelopes; each child may then own its own Capsule. Avoid
+free-floating Capsules and arbitrary sub-capsule trees.

@@ -15,6 +15,10 @@ Human intent: "I need X done. Go do it."
 
 The system tracks the mission, dispatches work, records what happened, and returns a result.
 
+Mission exists because chat is the wrong root object for serious work. Chat may
+be an interface mode, but work needs a structured envelope: objective,
+completion definition, scope, authority, evidence, and lifecycle.
+
 Theseus is also a self-editable harness: agents should be able to evolve the
 source by adding typed systems, satellites, projections, sinks, and capability
 modules. It is not a plugin host.
@@ -25,9 +29,9 @@ Everything else is built on these or is scaffolding:
 
 | Primitive | Why it stays |
 |---|---|
-| Mission | Humans need a job tracker with a goal and done criteria |
+| Mission | Humans need a structured work envelope with objective, completion definition, scope, authority, evidence, and lifecycle |
 | Tool | Models need typed, controlled world access |
-| Capsule | Humans need durable run logs for debugging and improvement |
+| Capsule | Missions need a durable black box for review, continuation, evidence, artifacts, and accountability |
 | Dispatch | The system needs to invoke a model with context and get a result |
 | Satellite | Dispatches need scoped observation and policy middleware |
 
@@ -67,8 +71,22 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Treat fixed crews, named agents, and planning loops as harness scaffolding unless promoted by a current design note.
 - Prefer source-editable modules over plugin APIs, dynamic loading, manifests,
   or extension registries.
+- Require explicit assembly for behavior that affects what agents see, can do,
+  observe, decide, or auto-load. Conventions are allowed only when represented
+  as named, typed, ordered, removable source modules.
+- Treat systems as runtime behavior modules, not generic files and not full ECS
+  machinery. A system advances or reacts to live harness state.
 - Keep Mission/Capsule composition replaceable where possible; do not bake one
   current mission system into unrelated runtime concepts.
+- Treat Capsule as the mission black box. For now, one Mission owns exactly one
+  primary Capsule. Do not create free-floating Capsules or arbitrary nested
+  Capsules.
+- Keep Mission primitive, but allow mission schemas and mission types to evolve.
+  Implementation, research, brainstorm, review, planning, incident, and quick
+  task missions may need different ceremony.
+- Prefer clean-break evolution for WIP runtime contracts. When a contract
+  changes, migrate first-party adapters, tests, docs, and skills in the same
+  pass instead of preserving compatibility shims.
 - Keep design notes honest about status: current doctrine, draft idea, or superseded history.
 - Treat skills, crews, agents, retries, and planning loops as harness/scaffolding unless the primitive floor would break without them.
 
@@ -82,4 +100,7 @@ Likely primitives: Mission, Tool, Capsule, Dispatch, Satellite.
 - Does it accidentally turn scaffolding into a primitive?
 - Is it useful to an operator dispatching real work?
 - Does it need a plugin API, or can Theseus add a typed source module and static wiring?
+- Is behavior introduced through explicit assembly, or hidden behind ambient
+  file/config discovery?
 - Could an alternate mission or audit model replace this part without rewriting unrelated packages?
+- Does this treat chat as the domain object instead of an interface mode?

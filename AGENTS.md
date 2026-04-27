@@ -107,6 +107,13 @@ not introduce plugin APIs, manifests, dynamic loading, generic extension
 registries, or marketplace-style compatibility promises unless explicitly
 requested.
 
+Theseus harness behavior must use explicit assembly. If behavior changes what
+agents see, can do, observe, decide, or auto-load, the source module introducing
+it must be visible in wiring, named, typed, ordered, and removable. Autoloading
+conventions are allowed only as explicit assembled modules. This rule is scoped
+to Theseus harness/runtime behavior; it does not prohibit ordinary server, web,
+build, deployment, or environment configuration.
+
 </architecture>
 
 <code-style>
@@ -152,6 +159,9 @@ requested.
 ## Tests
 
 - New runtime behavior needs focused tests near the package that owns it.
+- Runtime behavior owners should be tested in isolation by cutting the Effect
+  graph with fake layers/services. Do not add broad runtime/server/web E2E
+  tests without explicit user confirmation or an explicit wiring-proof request.
 - Primitive services with behavior, such as registries, stores, parsers, dispatch loops, satellite rings, and tool execution boundaries, should have direct tests.
 - Pure type surfaces and thin barrels do not need tests unless they contain runtime constructors or behavior.
 - Use characterization tests to pin intended behavior before risky moves. Do not freeze known-bad WIP behavior just to preserve it.
@@ -210,6 +220,8 @@ Use an Effect v4 skill for general Effect API mechanics and v3-to-v4 translation
 Use a monorepo-maintenance skill for package boundaries, file splits, public exports, naming/API surface, and god-file reduction.
 
 Use a refactoring-discipline skill for cleanup, risky moves, large-file reduction, and replacing WIP/POC code with a clean single path. Prefer hard replacement over compatibility unless the user explicitly asks for back compatibility.
+
+Use a cleanup-audit skill after substantial edits, refactors, moves, generated changes, or long agent sessions to remove confirmed non-behavioral leftovers and report possible stale compatibility/runtime paths before changing them.
 
 Use a testing-patterns skill for test placement, characterization tests, Effect test layers, fixtures, and verification scope.
 

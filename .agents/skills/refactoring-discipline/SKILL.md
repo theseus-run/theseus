@@ -7,7 +7,7 @@ description: Use when cleaning up, restructuring, splitting, renaming, replacing
 
 Use this skill for cleanup and replacement work in this POC/WIP repo. We are the only expected consumers unless the user says otherwise, so prefer clean one-way changes over compatibility-preserving migrations.
 
-For package boundaries and public export shape, also use `monorepo-maintenance`. For tests, also use `testing-patterns`.
+For package boundaries and public export shape, also use `monorepo-maintenance`. For tests, also use `testing-patterns`. After substantial edits, use `cleanup-audit` as a finishing pass to remove confirmed leftovers and report risky compatibility cleanup before changing it.
 
 ## Ground Rule
 

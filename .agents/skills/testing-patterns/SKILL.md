@@ -19,7 +19,14 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 ## What Needs Tests
 
 - New runtime behavior needs focused tests.
+- Runtime behavior owners need isolated tests by default. Effect DI should be
+  used to cut the graph and replace dependencies with fake layers/services.
 - Services with behavior need direct tests: registries, stores, parsers, dispatch loops, satellite rings, tool execution boundaries, persistence adapters, and protocol serializers.
+- Systems should test command/control/fact/lifecycle behavior.
+- Projections should test derivation from stored facts.
+- Sinks should test curation and side effects.
+- Capability/catalog modules should test selection and hydration.
+- Codecs should test `_tag` round trips and unknown boundary handling.
 - Constructors for exported protocol variants need tests when they apply defaults, normalize input, or enforce invariants.
 - Boundary adapters that translate external/provider data into internal data need focused tests for the translation shape.
 - Pure type surfaces and thin barrels do not need runtime tests unless they contain constructors or behavior.
@@ -53,6 +60,10 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 - Run the narrowest useful test during iteration.
 - Run `bun run typecheck` when changing public types, package exports, Effect environments, schemas, or cross-package signatures.
 - Run broader tests when behavior crosses package boundaries or when a refactor moves ownership.
+- Narrow package integration tests are allowed when they prove local assembly of
+  a few services.
+- Do not add broad runtime/server/web E2E tests without explicit user
+  confirmation or an explicit wiring-proof request.
 - In reviews, missing tests are findings. Either add the test, defer it explicitly, or explain why the changed surface is type-only.
 
 ## Anti-Patterns
@@ -61,4 +72,5 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 - Do not hide flaky timing with sleeps; inject clocks or await deterministic signals.
 - Do not test through the server when the owning primitive can be tested directly.
 - Do not create one giant integration test for several unrelated behaviors.
+- Do not use broad E2E as the first proof for behavior that has a clear owner.
 - Do not leave TODO comments for obvious missing tests; either write them or call out the gap.

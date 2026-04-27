@@ -21,7 +21,12 @@ sinks, and projections so alternate work models can replace pieces later.
 
 ## Mission
 
-Mission is the unit of user intent: goal plus done criteria.
+Mission is the structured work envelope.
+
+It exists because chat is not a sufficient domain object. A mission gives the
+system a native place for objective, completion definition, scope, authority,
+evidence, and lifecycle. Freeform chat may be an interface mode, but serious
+work should not depend on prompt-only structure bolted onto a chat transcript.
 
 Current core surface lives under `@theseus.run/core/Mission`:
 
@@ -33,8 +38,21 @@ Current core surface lives under `@theseus.run/core/Mission`:
 - `Mission.MissionStore`
 
 Runtime may create mission sessions and bind missions to capsules, but Mission
-itself remains the stable primitive for tracking what outcome the system is
-trying to produce.
+itself remains the stable primitive for structured work intent.
+
+The current mission schema is not sacred. Mission types may evolve:
+
+- implementation
+- research
+- brainstorm
+- review
+- planning
+- incident
+- quick task
+
+All mission types need some structure, but not the same ceremony. A brainstorm
+mission can have loose criteria. A production incident needs authority,
+evidence, and escalation policy. A typo fix can have an implicit tiny mission.
 
 ## Tool
 
@@ -69,7 +87,14 @@ See [[tool]] for canonical Tool doctrine, [[tools]] for example tool sets, and
 
 ## Capsule
 
-Capsule is durable mission/run memory: append-only event history plus artifacts.
+Capsule is the durable mission record: curated events, decisions, evidence, and
+artifacts that should survive across sessions and be useful for review, PRs,
+handoffs, and future continuation.
+
+Capsule is mission-bound. For now, one Mission owns exactly one primary
+Capsule. It is the mission black box and the source of truth for
+mission-facing outputs such as PR descriptions, release notes, implementation
+summaries, evidence reports, postmortems, handoffs, and resume briefs.
 
 Current core surface lives under `@theseus.run/core/Capsule`:
 
@@ -79,8 +104,18 @@ Current core surface lives under `@theseus.run/core/Capsule`:
 - `Capsule.makeCapsuleId`
 - `Capsule.CapsuleStore`
 
-Runtime writes capsule events as facts about work. Workers should not need to
-perform logging ceremony for normal execution.
+Capsule is not the raw runtime event log. Runtime facts record exactly what
+happened in a run; Capsule records what matters about the mission. Runtime
+facts may feed Capsule sinks, but Capsule should not blindly mirror model calls,
+tool result streams, or every low-level execution event.
+
+Do not create free-floating Capsules or arbitrary nested Capsules. If future
+side quests or sub-missions need separate black boxes, they should first become
+mission-like child work envelopes; each child may then own its own Capsule. The
+invariant remains: every Capsule belongs to exactly one structured work
+envelope.
+
+Workers should not need to perform logging ceremony for normal execution.
 
 ## Dispatch
 
@@ -144,6 +179,9 @@ spreading Mission/Capsule/session assumptions through unrelated systems. If a
 future work model replaces Mission or a future audit model replaces Capsule
 storage, unrelated dispatch, capability, projection, and transport code should
 not need a rewrite.
+
+Keep runtime facts and Capsule events distinct. Runtime facts are an execution
+ledger. Capsule events are the mission record.
 
 ## RuntimeBus Boundary
 
