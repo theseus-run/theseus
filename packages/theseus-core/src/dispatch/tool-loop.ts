@@ -22,6 +22,55 @@ import {
 
 type Emit = (event: DispatchEvent) => Effect.Effect<void>;
 
+export type ToolExecutionBatch =
+  | {
+      readonly mode: "sequential";
+      readonly toolCalls: readonly [ToolCall];
+    }
+  | {
+      readonly mode: "parallel-safe";
+      readonly toolCalls: ReadonlyArray<ToolCall>;
+    }
+  | {
+      readonly mode: "exclusive";
+      readonly toolCalls: readonly [ToolCall];
+    };
+
+const executionModeFor = <R>(
+  tools: ReadonlyArray<ToolAnyWith<R>>,
+  toolCall: ToolCall,
+): ToolExecutionBatch["mode"] =>
+  tools.find((tool) => tool.name === toolCall.name)?.execution.mode ?? "sequential";
+
+export const planToolExecution = <R>(
+  tools: ReadonlyArray<ToolAnyWith<R>>,
+  toolCalls: ReadonlyArray<ToolCall>,
+): ReadonlyArray<ToolExecutionBatch> => {
+  const batches: ToolExecutionBatch[] = [];
+  let parallelBatch: ToolCall[] = [];
+
+  const flushParallelBatch = () => {
+    if (parallelBatch.length > 0) {
+      batches.push({ mode: "parallel-safe", toolCalls: parallelBatch });
+      parallelBatch = [];
+    }
+  };
+
+  for (const toolCall of toolCalls) {
+    const mode = executionModeFor(tools, toolCall);
+    if (mode === "parallel-safe") {
+      parallelBatch.push(toolCall);
+      continue;
+    }
+
+    flushParallelBatch();
+    batches.push({ mode, toolCalls: [toolCall] });
+  }
+
+  flushParallelBatch();
+  return batches;
+};
+
 const runToolWithDecision = <R>(
   tools: ReadonlyArray<ToolAnyWith<R>>,
   toolCall: ToolCall,
@@ -110,55 +159,61 @@ export const runDispatchToolCalls = <R>(input: {
     yield* requireObservationCheckpoint("before-tools", beforeTools);
 
     const results: ToolCallResult[] = [];
-    for (const toolCall of input.toolCalls) {
-      const beforeAction = yield* input.satelliteScope.beforeTool(
-        { tool: toolCall },
-        input.satelliteContext,
-        input.onSatelliteAction,
-      );
+    const batches = planToolExecution(input.tools, input.toolCalls);
 
-      const callResult = yield* runToolWithDecision(input.tools, toolCall, beforeAction).pipe(
-        Effect.catch((error: ToolCallError) =>
-          input
-            .emit(DispatchEvents.toolError(input.name, input.iteration, toolCall, error))
-            .pipe(
-              Effect.flatMap(() =>
-                input.satelliteScope
-                  .toolError(
-                    { tool: toolCall, error },
-                    input.satelliteContext,
-                    input.onSatelliteAction,
-                  )
-                  .pipe(
-                    Effect.flatMap((decision) =>
-                      recoverToolError(
-                        { dispatchId: input.dispatchId, name: input.name },
-                        toolCall,
-                        error,
-                        decision,
+    // Planning is explicit now so a future scheduler can parallelize only
+    // parallel-safe batches after satellite hook ordering is hardened.
+    for (const batch of batches) {
+      for (const toolCall of batch.toolCalls) {
+        const beforeAction = yield* input.satelliteScope.beforeTool(
+          { tool: toolCall },
+          input.satelliteContext,
+          input.onSatelliteAction,
+        );
+
+        const callResult = yield* runToolWithDecision(input.tools, toolCall, beforeAction).pipe(
+          Effect.catch((error: ToolCallError) =>
+            input
+              .emit(DispatchEvents.toolError(input.name, input.iteration, toolCall, error))
+              .pipe(
+                Effect.flatMap(() =>
+                  input.satelliteScope
+                    .toolError(
+                      { tool: toolCall, error },
+                      input.satelliteContext,
+                      input.onSatelliteAction,
+                    )
+                    .pipe(
+                      Effect.flatMap((decision) =>
+                        recoverToolError(
+                          { dispatchId: input.dispatchId, name: input.name },
+                          toolCall,
+                          error,
+                          decision,
+                        ),
                       ),
                     ),
-                  ),
+                ),
               ),
-            ),
-        ),
-      );
+          ),
+        );
 
-      const afterAction = yield* input.satelliteScope.afterTool(
-        { tool: toolCall, result: callResult },
-        input.satelliteContext,
-        input.onSatelliteAction,
-      );
+        const afterAction = yield* input.satelliteScope.afterTool(
+          { tool: toolCall, result: callResult },
+          input.satelliteContext,
+          input.onSatelliteAction,
+        );
 
-      const finalResult = Match.value(afterAction).pipe(
-        Match.tag("Pass", () => callResult),
-        Match.tag("ReplaceToolResult", (decision) =>
-          DispatchEvents.resultFromPresentation(toolCall, callResult.args, decision.presentation),
-        ),
-        Match.exhaustive,
-      );
+        const finalResult = Match.value(afterAction).pipe(
+          Match.tag("Pass", () => callResult),
+          Match.tag("ReplaceToolResult", (decision) =>
+            DispatchEvents.resultFromPresentation(toolCall, callResult.args, decision.presentation),
+          ),
+          Match.exhaustive,
+        );
 
-      results.push(finalResult);
+        results.push(finalResult);
+      }
     }
 
     const afterTools = yield* input.satelliteScope.checkpoint(

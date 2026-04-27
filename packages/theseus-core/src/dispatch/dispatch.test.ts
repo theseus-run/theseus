@@ -14,6 +14,7 @@ import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
 import { LanguageModelGatewayFromLanguageModel } from "./model-gateway.ts";
 import { CurrentDispatch, DispatchStore, InMemoryDispatchStore } from "./store.ts";
+import { planToolExecution } from "./tool-loop.ts";
 import type { DispatchSpec } from "./types.ts";
 
 const CompleteInput = Schema.Struct({
@@ -251,6 +252,76 @@ describe("dispatch loop", () => {
       "ToolCalling:second_tool",
       "ToolResult:first_tool",
       "ToolResult:second_tool",
+    ]);
+  });
+
+  test("plans adjacent parallel-safe tool calls without crossing exclusive boundaries", () => {
+    const firstTool = defineTool({
+      name: "first_tool",
+      description: "First parallel-safe tool.",
+      input: OrderInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execution: { mode: "parallel-safe" },
+      execute: ({ label }) => Effect.succeed(`ok ${label}`),
+    });
+    const secondTool = defineTool({
+      name: "second_tool",
+      description: "Second parallel-safe tool.",
+      input: OrderInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execution: { mode: "parallel-safe" },
+      execute: ({ label }) => Effect.succeed(`ok ${label}`),
+    });
+    const exclusiveTool = defineTool({
+      name: "exclusive_tool",
+      description: "Exclusive tool.",
+      input: OrderInput,
+      output: Defaults.TextOutput,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "write" },
+      execution: { mode: "exclusive" },
+      execute: ({ label }) => Effect.succeed(`ok ${label}`),
+    });
+
+    const batches = planToolExecution(
+      [firstTool, secondTool, exclusiveTool],
+      [
+        {
+          id: "first-1",
+          name: firstTool.name,
+          arguments: JSON.stringify({ label: "first" }),
+        },
+        {
+          id: "second-1",
+          name: secondTool.name,
+          arguments: JSON.stringify({ label: "second" }),
+        },
+        {
+          id: "exclusive-1",
+          name: exclusiveTool.name,
+          arguments: JSON.stringify({ label: "exclusive" }),
+        },
+        {
+          id: "first-2",
+          name: firstTool.name,
+          arguments: JSON.stringify({ label: "again" }),
+        },
+      ],
+    );
+
+    expect(
+      batches.map((batch) => ({
+        mode: batch.mode,
+        names: batch.toolCalls.map((toolCall) => toolCall.name),
+      })),
+    ).toEqual([
+      { mode: "parallel-safe", names: ["first_tool", "second_tool"] },
+      { mode: "exclusive", names: ["exclusive_tool"] },
+      { mode: "parallel-safe", names: ["first_tool"] },
     ]);
   });
 

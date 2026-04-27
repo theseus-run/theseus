@@ -140,6 +140,7 @@ export const dispatchGruntTool: Tool<
   output: DispatchGruntResultSchema,
   failure: DispatchGruntFailed,
   policy: { interaction: "write" },
+  execution: { mode: "parallel-safe" },
   execute: ({ target, order }) =>
     Effect.gen(function* () {
       const registry = yield* BlueprintRegistry;

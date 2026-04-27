@@ -5,6 +5,20 @@ import { Defaults, defineTool } from "./index.ts";
 import { callTool } from "./run.ts";
 
 describe("tool boundary", () => {
+  test("defineTool defaults execution to sequential", () => {
+    const uppercase = defineTool({
+      name: "uppercase",
+      description: "Uppercase a string argument",
+      input: Schema.String,
+      output: Schema.String,
+      failure: Defaults.NoFailure,
+      policy: { interaction: "pure" },
+      execute: (input) => Effect.succeed(input.toUpperCase()),
+    });
+
+    expect(uppercase.execution).toEqual({ mode: "sequential" });
+  });
+
   test("callTool validates success output against the declared schema", async () => {
     const badOutput = defineTool({
       name: "bad_output",

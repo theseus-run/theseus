@@ -31,7 +31,7 @@
 
 import type { Effect, Schedule, Schema } from "effect";
 import type { Presentation } from "./content.ts";
-import type { ToolPolicy } from "./meta.ts";
+import type { ToolExecution, ToolPolicy } from "./meta.ts";
 import type { ToolValue } from "./run.ts";
 
 type ToolPresenter<O, F, R> = {
@@ -63,6 +63,8 @@ export interface Tool<I, O, F, R> {
   readonly failure: Schema.Schema<F>;
   /** Ordered world-interaction policy. */
   readonly policy: ToolPolicy;
+  /** Scheduling contract for this tool inside one model-emitted tool batch. */
+  readonly execution: ToolExecution;
   /** The typed effect. */
   readonly execute: (input: I) => Effect.Effect<O, F, R>;
   /** Project the typed success/failure value into LLM/UI content. Defaults to text via JSON. */
@@ -97,6 +99,7 @@ export interface ToolDef<
   readonly output: Output;
   readonly failure: Failure;
   readonly policy: ToolPolicy;
+  readonly execution?: ToolExecution;
   readonly execute: (
     input: Schema.Schema.Type<Input>,
   ) => Effect.Effect<Schema.Schema.Type<Output>, Schema.Schema.Type<Failure>, R>;
@@ -128,6 +131,7 @@ export const defineTool = <
   output: def.output as Schema.Schema<Schema.Schema.Type<Output>>,
   failure: def.failure as Schema.Schema<Schema.Schema.Type<Failure>>,
   policy: def.policy,
+  execution: def.execution ?? { mode: "sequential" },
   execute: def.execute,
   ...(def.present ? { present: def.present } : {}),
   ...(def.retry ? { retry: def.retry } : {}),
@@ -160,5 +164,5 @@ export {
   ToolOutputError,
   type ToolRuntimeError,
 } from "./errors.ts";
-export type { ToolInteraction, ToolPolicy } from "./meta.ts";
+export type { ToolExecution, ToolExecutionMode, ToolInteraction, ToolPolicy } from "./meta.ts";
 export { ToolOutcome, ToolValue } from "./run.ts";

@@ -23,6 +23,24 @@ export type ToolInteraction =
   | "write_destructive";
 
 // ---------------------------------------------------------------------------
+// ToolExecutionMode
+// ---------------------------------------------------------------------------
+
+/**
+ * Scheduling contract for a tool call within one model-emitted tool batch.
+ *
+ * - `sequential`     — default; preserve model order and run alone
+ * - `parallel-safe`  — may run concurrently with adjacent parallel-safe calls
+ * - `exclusive`      — must run alone; future schedulers may also serialize it
+ *                      against broader runtime work
+ */
+export type ToolExecutionMode = "sequential" | "parallel-safe" | "exclusive";
+
+export interface ToolExecution {
+  readonly mode: ToolExecutionMode;
+}
+
+// ---------------------------------------------------------------------------
 // ToolPolicy
 // ---------------------------------------------------------------------------
 

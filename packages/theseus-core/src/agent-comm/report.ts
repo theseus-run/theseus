@@ -9,7 +9,7 @@ export const ReportChannelSchema = Schema.Literals(["complete", "blocked", "defe
 export type ReportChannel = Schema.Schema.Type<typeof ReportChannelSchema>;
 
 export const EvidenceSchema = Schema.Struct({
-  id: Schema.optional(Schema.String),
+  id: optionalNullable(Schema.String),
   kind: Schema.Literals([
     "observation",
     "artifact",
@@ -21,18 +21,18 @@ export const EvidenceSchema = Schema.Struct({
     "note",
   ]),
   text: Schema.String,
-  ref: Schema.optional(Schema.String),
+  ref: optionalNullable(Schema.String),
 });
 
 export type Evidence = Schema.Schema.Type<typeof EvidenceSchema>;
 
 export const ArtifactRefSchema = Schema.Struct({
-  id: Schema.optional(Schema.String),
+  id: optionalNullable(Schema.String),
   name: Schema.String,
-  type: Schema.optional(Schema.String),
-  uri: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  final: Schema.optional(Schema.Boolean),
+  type: optionalNullable(Schema.String),
+  uri: optionalNullable(Schema.String),
+  description: optionalNullable(Schema.String),
+  final: optionalNullable(Schema.Boolean),
   criteriaRefs: optionalNullable(Schema.Array(Schema.String)),
 });
 
@@ -42,14 +42,14 @@ export const CriterionSatisfactionSchema = Schema.Struct({
   criterion: Schema.String,
   status: Schema.Literals(["satisfied", "unsatisfied", "unknown"]),
   evidenceRefs: optionalNullable(Schema.Array(Schema.String)),
-  notes: Schema.optional(Schema.String),
+  notes: optionalNullable(Schema.String),
 });
 
 export type CriterionSatisfaction = Schema.Schema.Type<typeof CriterionSatisfactionSchema>;
 
 export const FollowupSchema = Schema.Struct({
   risks: optionalNullable(Schema.Array(Schema.String)),
-  next: Schema.optional(Schema.String),
+  next: optionalNullable(Schema.String),
 });
 
 export type Followup = Schema.Schema.Type<typeof FollowupSchema>;

@@ -53,6 +53,8 @@ export {
 // ---------------------------------------------------------------------------
 
 export type {
+  ToolExecution,
+  ToolExecutionMode,
   ToolInteraction,
   ToolPolicy,
 } from "./tool/index.ts";

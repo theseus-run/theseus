@@ -211,6 +211,58 @@ describe("dispatchGruntTool", () => {
     expect(result._tag).toBe("Reported");
   });
 
+  test("captures reports with null optional metadata fields", async () => {
+    const output = await Effect.runPromise(
+      Tool.callTool(dispatchGruntTool, baseInput).pipe(
+        Effect.provide(
+          testLayer([
+            toolCallParts([
+              {
+                id: "report-null-metadata",
+                name: report.name,
+                arguments: JSON.stringify({
+                  channel: "complete",
+                  summary: "done",
+                  content: "summary text",
+                  evidence: [{ id: null, kind: "source", text: "README", ref: null }],
+                  artifacts: [
+                    {
+                      id: null,
+                      name: "summary.md",
+                      type: null,
+                      uri: null,
+                      description: null,
+                      final: null,
+                      criteriaRefs: null,
+                    },
+                  ],
+                  satisfaction: [
+                    {
+                      criterion: "returns summary",
+                      status: "satisfied",
+                      evidenceRefs: null,
+                      notes: null,
+                    },
+                  ],
+                  followup: {
+                    risks: null,
+                    next: null,
+                  },
+                }),
+              },
+            ]),
+            textParts("ignored final text"),
+          ]),
+        ),
+      ),
+    );
+
+    const result = successOutput(output);
+    expect(result._tag).toBe("Reported");
+    if (result._tag !== "Reported") return;
+    expect(result.report.artifacts?.[0]?.uri).toBeNull();
+  });
+
   test("returns unstructured salvage when no valid report is captured", async () => {
     const output = await Effect.runPromise(
       Tool.callTool(dispatchGruntTool, baseInput).pipe(
