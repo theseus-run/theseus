@@ -67,7 +67,7 @@ const isReportPacket = (value: unknown): value is ReportPacket =>
   typeof value["dispatchId"] === "string";
 
 const modelLabel = (session: DispatchSession | undefined): string | undefined =>
-  session?.modelRequest === undefined
+  session?.modelRequest == null
     ? undefined
     : `${session.modelRequest.provider}/${session.modelRequest.model}`;
 

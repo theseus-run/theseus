@@ -141,7 +141,7 @@ const finalTextFromEvents = (events: ReadonlyArray<DispatchEventEntry>): string 
   [...events].reverse().find((entry) => entry.event._tag === "Done")?.event.result?.content;
 
 const modelLabel = (session: DispatchSession | undefined): string =>
-  session?.modelRequest === undefined
+  session?.modelRequest == null
     ? "model --"
     : `${session.modelRequest.provider}/${session.modelRequest.model}`;
 
@@ -174,6 +174,7 @@ export function MissionListPage() {
   const [error, setError] = useState<string>("");
   const [selected, setSelected] = useState<InspectorSelection | null>(null);
   const [state, setState] = useState<WorkbenchState>(emptyState);
+  const [initializing, setInitializing] = useState(true);
   const loadRequestId = useRef(0);
 
   const loadMission = useCallback(async (missionId?: string) => {
@@ -226,6 +227,10 @@ export function MissionListPage() {
     } catch (cause) {
       if (isCurrentRequest()) {
         setError(errorMessage(cause));
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        setInitializing(false);
       }
     }
   }, []);
@@ -329,12 +334,14 @@ export function MissionListPage() {
           onGoalChange={setGoal}
           onRun={runResearchPoc}
           error={error}
+          initializing={initializing}
         />
 
         <div className="workbench-grid min-h-0 flex-1">
           <MissionRail
             missions={state.missions}
             selectedMissionId={state.mission?.missionId}
+            initializing={initializing}
             onSelect={(missionId) => {
               setSelected({ _tag: "mission", missionId });
               void loadMission(missionId);
@@ -345,6 +352,7 @@ export function MissionListPage() {
             nodes={state.nodes}
             dispatches={state.dispatches}
             selected={selected}
+            initializing={initializing}
             onSelect={setSelected}
           />
           <InspectorPanel
@@ -352,6 +360,7 @@ export function MissionListPage() {
             node={selectedNode}
             dispatches={state.dispatches}
             transcripts={state.transcripts}
+            initializing={initializing}
           />
         </div>
       </div>
@@ -364,6 +373,7 @@ function WorkbenchHeader({
   running,
   goal,
   error,
+  initializing,
   onGoalChange,
   onRun,
 }: {
@@ -371,6 +381,7 @@ function WorkbenchHeader({
   readonly running: boolean;
   readonly goal: string;
   readonly error: string;
+  readonly initializing: boolean;
   readonly onGoalChange: (value: string) => void;
   readonly onRun: () => void;
 }) {
@@ -388,15 +399,15 @@ function WorkbenchHeader({
         <div className="dashboard-kpis">
           <div>
             <span className="eyebrow">mission</span>
-            <p>{mission?.missionId ?? "--"}</p>
+            <p>{mission?.missionId ?? (initializing ? "loading" : "--")}</p>
           </div>
           <div>
             <span className="eyebrow">state</span>
-            <p>{mission?.state ?? "--"}</p>
+            <p>{mission?.state ?? (initializing ? "loading" : "--")}</p>
           </div>
           <div>
             <span className="eyebrow">capsule</span>
-            <p>{mission?.capsuleId ?? "--"}</p>
+            <p>{mission?.capsuleId ?? (initializing ? "loading" : "--")}</p>
           </div>
         </div>
       </div>
@@ -418,10 +429,12 @@ function WorkbenchHeader({
 function MissionRail({
   missions,
   selectedMissionId,
+  initializing,
   onSelect,
 }: {
   readonly missions: ReadonlyArray<MissionSession>;
   readonly selectedMissionId: string | undefined;
+  readonly initializing: boolean;
   readonly onSelect: (missionId: string) => void;
 }) {
   return (
@@ -433,7 +446,9 @@ function MissionRail({
         <PanelBody>
           <div className="grid gap-0">
             {missions.length === 0 ? (
-              <div className="field text-muted-foreground">-- no missions --</div>
+              <div className="field text-muted-foreground">
+                {initializing ? "-- loading missions --" : "-- no missions --"}
+              </div>
             ) : (
               missions.map((mission) => (
                 <QueueItem
@@ -465,15 +480,17 @@ function WorkTreePanel({
   nodes,
   dispatches,
   selected,
+  initializing,
   onSelect,
 }: {
   readonly mission: MissionSession | null;
   readonly nodes: ReadonlyArray<WorkNodeSession>;
   readonly dispatches: ReadonlyArray<DispatchSession>;
   readonly selected: InspectorSelection | null;
+  readonly initializing: boolean;
   readonly onSelect: (selection: InspectorSelection) => void;
 }) {
-  const roots = nodes.filter((node) => node.parentWorkNodeId === undefined);
+  const roots = nodes.filter((node) => node.parentWorkNodeId == null);
   return (
     <main className="min-h-0 overflow-auto">
       <Panel className="min-h-full">
@@ -482,7 +499,9 @@ function WorkTreePanel({
         </PanelHeader>
         <PanelBody>
           {mission === null ? (
-            <div className="field text-muted-foreground">-- no mission selected --</div>
+            <div className="field text-muted-foreground">
+              {initializing ? "-- loading work tree --" : "-- no mission selected --"}
+            </div>
           ) : (
             <div className="field">
               <button
@@ -573,11 +592,13 @@ function InspectorPanel({
   node,
   dispatches,
   transcripts,
+  initializing,
 }: {
   readonly mission: MissionSession | null;
   readonly node: WorkNodeSession | undefined;
   readonly dispatches: ReadonlyArray<DispatchSession>;
   readonly transcripts: ReadonlyArray<DispatchTranscript>;
+  readonly initializing: boolean;
 }) {
   const dispatch = dispatches.find((candidate) => candidate.workNodeId === node?.workNodeId);
   const transcript = transcripts.find((candidate) => candidate.dispatchId === dispatch?.dispatchId);
@@ -591,7 +612,9 @@ function InspectorPanel({
           <PanelTitle>Inspector</PanelTitle>
         </PanelHeader>
         <PanelBody>
-          {node === undefined ? (
+          {initializing && mission === null && node === undefined ? (
+            <div className="field text-muted-foreground">-- loading runtime state --</div>
+          ) : node === undefined ? (
             <MissionInspector mission={mission} />
           ) : (
             <div className="field rhythm">

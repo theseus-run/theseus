@@ -1,20 +1,15 @@
 /**
- * POC RPC client for the Theseus server.
+ * Browser RPC client for the Theseus server.
  *
- * Speaks the current Effect RPC wire protocol over WebSocket without importing
- * Effect. This is smoke-tested scaffolding for the runtime POC, not the durable
- * browser client boundary.
- *
- * Messages are JSON-encoded with the structure:
- *   Request:  { _tag: "Request", id, tag, payload, headers }
- *   Chunk:    { _tag: "Chunk", requestId, values: [...] }
- *   Exit:     { _tag: "Exit", requestId, exit: { _tag: "Success"|"Failure", ... } }
- *
- * For streaming RPCs, chunks arrive as the dispatch runs.
- * For non-streaming RPCs, the result comes in the Exit message.
+ * React code consumes Promise/callback methods; transport, framing, retries,
+ * schema codecs, and stream lifecycle are delegated to Effect RPC.
  */
 
 import type { CapsuleEvent } from "@theseus.run/core/Capsule";
+import { TheseusRpc } from "@theseus.run/core/Rpc";
+import { Effect, Exit, Layer, Scope, Stream } from "effect";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as Socket from "effect/unstable/socket/Socket";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,7 +30,7 @@ export interface DispatchEvent {
   readonly phase?: string;
   readonly action?: string;
   readonly injection?: string;
-  readonly detail?: string;
+  readonly detail?: string | null;
   readonly reason?: string;
   readonly result?: {
     readonly dispatchId: string;
@@ -61,7 +56,7 @@ export interface MissionSession {
 
 export interface DispatchSession {
   readonly workNodeId: string;
-  readonly parentWorkNodeId?: string;
+  readonly parentWorkNodeId?: string | null;
   readonly kind: "dispatch";
   readonly relation: WorkNodeRelation;
   readonly label: string;
@@ -70,7 +65,7 @@ export interface DispatchSession {
   readonly missionId: string;
   readonly capsuleId: string;
   readonly name: string;
-  readonly modelRequest?: ModelRequest;
+  readonly modelRequest?: ModelRequest | null;
   readonly iteration: number;
   readonly state: WorkNodeState;
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
@@ -80,14 +75,14 @@ export interface WorkNodeSession {
   readonly workNodeId: string;
   readonly missionId: string;
   readonly capsuleId: string;
-  readonly parentWorkNodeId?: string;
+  readonly parentWorkNodeId?: string | null;
   readonly kind: "dispatch" | "task" | "external";
   readonly relation: WorkNodeRelation;
   readonly label: string;
   readonly state: WorkNodeState;
   readonly control: WorkNodeControlDescriptor;
-  readonly startedAt?: number;
-  readonly completedAt?: number;
+  readonly startedAt?: number | null;
+  readonly completedAt?: number | null;
 }
 
 export type WorkNodeRelation = "root" | "delegated" | "continued" | "branched";
@@ -120,14 +115,14 @@ export type ModelRequest =
   | {
       readonly provider: "openai";
       readonly model: string;
-      readonly maxOutputTokens?: number;
-      readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh";
-      readonly textVerbosity?: "low" | "medium" | "high";
+      readonly maxOutputTokens?: number | null;
+      readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh" | null;
+      readonly textVerbosity?: "low" | "medium" | "high" | null;
     }
   | {
       readonly provider: "copilot";
       readonly model: string;
-      readonly maxTokens?: number;
+      readonly maxTokens?: number | null;
     };
 
 export type RuntimeDispatchEvent =
@@ -161,16 +156,6 @@ export type ConnectionListener = (state: ConnectionState) => void;
 // ---------------------------------------------------------------------------
 // RPC wire protocol helpers
 // ---------------------------------------------------------------------------
-
-let reqCounter = 0;
-const makeId = () => `${++reqCounter}`;
-
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (error: Error) => void;
-  onChunk?: (values: unknown[]) => void;
-  timeout?: ReturnType<typeof setTimeout>;
-}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -207,20 +192,21 @@ const rpcErrorMessage = (value: unknown, fallback: string): string => {
   return encoded === undefined ? fallback : encoded;
 };
 
-export const rpcRequestPayload = (payload: unknown): unknown =>
-  payload === undefined ? null : payload;
-
 // ---------------------------------------------------------------------------
 // TheseusClient
 // ---------------------------------------------------------------------------
 
+type TheseusRpcClient = RpcClient.FromGroup<typeof TheseusRpc, unknown>;
+
+interface ClientRuntime {
+  readonly client: TheseusRpcClient;
+  readonly scope: Scope.Closeable;
+}
+
 export class TheseusClient {
-  private ws: WebSocket | null = null;
-  private pending = new Map<string, PendingRequest>();
   private _state: ConnectionState = "disconnected";
   private stateListeners = new Set<ConnectionListener>();
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private outboundQueue: string[] = [];
+  private runtime: Promise<ClientRuntime> | null = null;
 
   constructor(private url: string) {}
 
@@ -242,209 +228,81 @@ export class TheseusClient {
   }
 
   connect() {
-    if (this.ws) return;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.setState("connecting");
-
-    const ws = new WebSocket(this.url);
-
-    ws.onopen = () => {
-      this.setState("connected");
-      this.flushOutboundQueue();
-    };
-
-    ws.onclose = () => {
-      this.setState("disconnected");
-      this.ws = null;
-      this.outboundQueue = [];
-      // Reject all pending requests
-      for (const [id, req] of this.pending) {
-        req.reject(new Error("Connection closed"));
-        this.pending.delete(id);
-      }
-      // Auto-reconnect
-      this.reconnectTimer = setTimeout(() => this.connect(), 2000);
-    };
-
-    ws.onerror = () => {
-      // onclose will fire
-    };
-
-    ws.onmessage = (ev) => {
-      try {
-        // RPC uses ndjson — each message may contain multiple JSON objects separated by newlines
-        const text = ev.data as string;
-        const lines = text.split("\n").filter(Boolean);
-        for (const line of lines) {
-          const msg = JSON.parse(line);
-          this.handleMessage(msg);
-        }
-      } catch {
-        // Single JSON message fallback
-        try {
-          const msg = JSON.parse(ev.data as string);
-          this.handleMessage(msg);
-        } catch {
-          // ignore parse errors
-        }
-      }
-    };
-
-    this.ws = ws;
+    void this.getRuntime().catch(() => undefined);
   }
 
   disconnect() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.outboundQueue = [];
-    this.ws?.close();
-    this.ws = null;
+    const runtime = this.runtime;
+    this.runtime = null;
     this.setState("disconnected");
+    void runtime?.then(({ scope }) => Effect.runPromise(Scope.close(scope, Exit.void)));
   }
 
-  private handleMessage(msg: unknown) {
-    if (!isRecord(msg)) return;
-
-    if (msg["_tag"] === "Chunk") {
-      const requestId = String(msg["requestId"] ?? "");
-      const req = this.pending.get(requestId);
-      if (req?.onChunk) {
-        req.onChunk(Array.isArray(msg["values"]) ? msg["values"] : []);
-      }
-      this.ack(requestId);
-    } else if (msg["_tag"] === "Exit") {
-      const req = this.pending.get(String(msg["requestId"] ?? ""));
-      if (req) {
-        this.pending.delete(String(msg["requestId"] ?? ""));
-        if (req.timeout) clearTimeout(req.timeout);
-        const exit = isRecord(msg["exit"]) ? msg["exit"] : {};
-        if (exit["_tag"] === "Success") {
-          req.resolve(exit["value"]);
-        } else {
-          req.reject(new Error(rpcErrorMessage(exit, "RPC failed")));
-        }
-      }
-    } else if (msg["_tag"] === "Defect") {
-      const error = new Error(rpcErrorMessage(msg["defect"], "RPC server defect"));
-      for (const [id, req] of this.pending) {
-        this.pending.delete(id);
-        if (req.timeout) clearTimeout(req.timeout);
-        req.reject(error);
-      }
-    } else if (msg["_tag"] === "ClientProtocolError") {
-      const error = new Error(rpcErrorMessage(msg["error"], "RPC protocol error"));
-      for (const [id, req] of this.pending) {
-        this.pending.delete(id);
-        if (req.timeout) clearTimeout(req.timeout);
-        req.reject(error);
-      }
-    } else if (msg["_tag"] === "Pong") {
-      // ignore pongs
-    }
+  private makeLayer() {
+    const socketLayer = Layer.provide(
+      Socket.layerWebSocket(this.url, { openTimeout: "10 seconds" }),
+      Socket.layerWebSocketConstructorGlobal,
+    );
+    const protocolDeps = Layer.mergeAll(
+      socketLayer,
+      RpcSerialization.layerJson,
+      Layer.succeed(RpcClient.ConnectionHooks)({
+        onConnect: Effect.sync(() => this.setState("connected")),
+        onDisconnect: Effect.sync(() => this.setState("disconnected")),
+      }),
+    );
+    return Layer.provide(
+      RpcClient.layerProtocolSocket({ retryTransientErrors: true }),
+      protocolDeps,
+    );
   }
 
-  private ack(requestId: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(`${JSON.stringify({ _tag: "Ack", requestId })}\n`);
-    }
-  }
-
-  private flushOutboundQueue() {
-    const ws = this.ws;
-    if (ws?.readyState !== WebSocket.OPEN) return;
-    while (this.outboundQueue.length > 0) {
-      const frame = this.outboundQueue.shift();
-      if (frame !== undefined) ws.send(frame);
-      if (ws.readyState !== WebSocket.OPEN) return;
-    }
-  }
-
-  private write(frame: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(frame);
-      return;
-    }
-    this.outboundQueue.push(frame);
-    if (this.ws === null || this.ws.readyState === WebSocket.CLOSED) this.connect();
-  }
-
-  private send(id: string, tag: string, payload: unknown): void {
-    const msg = {
-      _tag: "Request" as const,
-      id,
-      tag,
-      payload: rpcRequestPayload(payload),
-      headers: [],
-    };
-    this.write(`${JSON.stringify(msg)}\n`);
-  }
-
-  /** Send a non-streaming RPC request and await the result. */
-  private async request<T>(tag: string, payload: unknown): Promise<T> {
-    const id = makeId();
-    return await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Request timed out"));
-      }, 30_000);
-      this.pending.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer);
-          resolve(value as T);
-        },
-        reject: (err) => {
-          clearTimeout(timer);
-          reject(err);
-        },
-      });
-      try {
-        this.send(id, tag, payload);
-      } catch (error) {
-        this.pending.delete(id);
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
+  private getRuntime(): Promise<ClientRuntime> {
+    if (this.runtime !== null) return this.runtime;
+    this.setState("connecting");
+    this.runtime = Effect.runPromise(
+      Effect.gen(
+        function* (this: TheseusClient) {
+          const scope = yield* Scope.make();
+          const context = yield* Layer.buildWithScope(this.makeLayer(), scope);
+          const client = yield* RpcClient.make(TheseusRpc).pipe(
+            Effect.provideService(Scope.Scope, scope),
+            Effect.provideContext(context),
+          );
+          return { client, scope };
+        }.bind(this),
+      ),
+    ).catch((cause) => {
+      this.runtime = null;
+      this.setState("disconnected");
+      throw new Error(rpcErrorMessage(cause, "RPC client failed"));
     });
+    return this.runtime;
   }
 
-  private async streamRequest<T>(
-    tag: string,
-    payload: unknown,
-    onEvent: (event: T) => void,
-    timeoutMessage: string,
+  private async run<A>(
+    effect: (client: TheseusRpcClient) => Effect.Effect<A, unknown>,
+  ): Promise<A> {
+    const runtime = await this.getRuntime();
+    try {
+      return await Effect.runPromise(effect(runtime.client));
+    } catch (cause) {
+      throw new Error(rpcErrorMessage(cause, "RPC failed"));
+    }
+  }
+
+  private async runStream<A>(
+    stream: (client: TheseusRpcClient) => Stream.Stream<A, unknown>,
+    onEvent: (event: A) => void,
   ): Promise<void> {
-    const id = makeId();
-    return await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(timeoutMessage));
-      }, 120_000);
-      this.pending.set(id, {
-        resolve: () => {
-          clearTimeout(timeout);
-          resolve();
-        },
-        reject: (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        },
-        timeout,
-        onChunk: (values) => {
-          for (const value of values) {
-            onEvent(value as T);
-          }
-        },
-      });
-      try {
-        this.send(id, tag, payload);
-      } catch (error) {
-        this.pending.delete(id);
-        clearTimeout(timeout);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+    const runtime = await this.getRuntime();
+    try {
+      await Effect.runPromise(
+        Stream.runForEach(stream(runtime.client), (event) => Effect.sync(() => onEvent(event))),
+      );
+    } catch (cause) {
+      throw new Error(rpcErrorMessage(cause, "RPC stream failed"));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -456,10 +314,10 @@ export class TheseusClient {
     readonly goal: string;
     readonly criteria: ReadonlyArray<string>;
   }): Promise<MissionSession> {
-    return await this.request<MissionSession>("createMission", input);
+    return await this.run((client) => client.createMission(input));
   }
 
-  startMissionDispatch(
+  async startMissionDispatch(
     input: {
       readonly missionId: string;
       readonly spec: {
@@ -474,73 +332,63 @@ export class TheseusClient {
     },
     onEvent: (event: RuntimeDispatchEvent) => void,
   ): Promise<void> {
-    return this.streamRequest(
-      "startMissionDispatch",
-      input,
-      onEvent,
-      "Runtime dispatch stream timed out before completing",
-    );
+    return await this.runStream((client) => client.startMissionDispatch(input), onEvent);
   }
 
   async listMissions(): Promise<ReadonlyArray<MissionSession>> {
-    return await this.request<MissionSession[]>("listMissions", null);
+    return await this.run((client) => client.listMissions(undefined));
   }
 
   async getMission(missionId: string): Promise<MissionSession | null> {
-    return await this.request<MissionSession>("getMission", { missionId });
+    return await this.run((client) => client.getMission({ missionId }));
   }
 
   async listRuntimeDispatches(limit?: number): Promise<ReadonlyArray<DispatchSession>> {
-    return await this.request<DispatchSession[]>("listRuntimeDispatches", { limit });
+    return await this.run((client) => client.listRuntimeDispatches({ limit }));
   }
 
   async getMissionWorkTree(missionId: string): Promise<ReadonlyArray<WorkNodeSession>> {
-    return await this.request<WorkNodeSession[]>("getMissionWorkTree", { missionId });
+    return await this.run((client) => client.getMissionWorkTree({ missionId }));
   }
 
   async inject(dispatchId: string, text: string): Promise<void> {
-    await this.request("inject", { dispatchId, text });
+    await this.run((client) => client.inject({ dispatchId, text }, { discard: true }));
   }
 
   async interrupt(dispatchId: string): Promise<void> {
-    await this.request("interrupt", { dispatchId });
+    await this.run((client) => client.interrupt({ dispatchId }, { discard: true }));
   }
 
   async controlWorkNode(workNodeId: string, command: WorkControlCommand): Promise<void> {
-    await this.request("controlWorkNode", { workNodeId, command });
+    await this.run((client) => client.controlWorkNode({ workNodeId, command }, { discard: true }));
   }
 
   async getDispatchResult(dispatchId: string): Promise<DispatchEvent["result"] | null> {
-    return await this.request<DispatchEvent["result"]>("getResult", { dispatchId });
+    return await this.run((client) => client.getResult({ dispatchId }));
   }
 
   async getCapsuleEvents(capsuleId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    return await this.request<CapsuleEvent[]>("getCapsuleEvents", { capsuleId });
+    return await this.run((client) => client.getCapsuleEvents({ capsuleId }));
   }
 
   async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    return await this.request<CapsuleEvent[]>("getDispatchCapsuleEvents", { dispatchId });
+    return await this.run((client) => client.getDispatchCapsuleEvents({ dispatchId }));
   }
 
   async getDispatchEvents(dispatchId: string): Promise<ReadonlyArray<DispatchEventEntry>> {
-    return await this.request<DispatchEventEntry[]>("getDispatchEvents", { dispatchId });
+    return await this.run((client) => client.getDispatchEvents({ dispatchId }));
   }
 
-  startResearchPoc(
+  async startResearchPoc(
     input: { readonly goal: string },
     onEvent: (event: ResearchPocEvent) => void,
   ): Promise<void> {
-    return this.streamRequest(
-      "startResearchPoc",
-      input,
-      onEvent,
-      "Research POC stream timed out before completing",
-    );
+    return await this.runStream((client) => client.startResearchPoc(input), onEvent);
   }
 
   async status(): Promise<ReadonlyArray<unknown>> {
     try {
-      return await this.request("status", null);
+      return await this.run((client) => client.status(undefined));
     } catch {
       return [];
     }
