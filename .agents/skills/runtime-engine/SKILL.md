@@ -113,7 +113,7 @@ ordinary server, web, build, deployment, or environment configuration.
 - `types.ts` owns runtime protocol contracts; keep variants explicit and
   exhaustively matched.
 - `systems/*/system.ts` owns runtime behavior for one concept: commands,
-  controls, facts, or services in; facts, state transitions, fibers, or
+  controls, events, or services in; events, state transitions, fibers, or
   primitive calls out.
 - `sinks/*` owns side-effect consumers.
 - `projections/*` owns read models and query derivation.
@@ -136,14 +136,14 @@ When adding runtime capability, prefer this order:
 1. Identify whether the feature is a system, satellite, projection, sink, or
    capability module.
 2. Add or extend the narrow typed module.
-3. Emit named runtime facts if other modules or operators need to observe it.
+3. Emit named RuntimeEvents if other modules or operators need to observe it.
 4. Wire it statically through `host.ts`, `live.ts`, or the nearest existing
    assembly point.
 5. Add focused tests next to the owning package/module.
 
 Examples:
 
-- file minimap: add file activity facts, a file activity system or dispatch
+- file minimap: add file activity events, a file activity system or dispatch
   observation seam, and a projection
 - stricter policy: add a `Satellite` and policy events
 - alternate mission behavior: replace or fork mission system wiring while
@@ -163,7 +163,7 @@ module and static wiring instead.
   link. Do not mutate the old dispatch into a new run.
 - Empty tool selections mean no tools. Broad authority must be explicit.
 - Active registry state is not durable history.
-- Runtime events and capsule events should be append-only facts.
+- RuntimeEvents and CapsuleEvents should be append-only events.
 - Sandbox and Workspace are distinct axes:
   - Sandbox controls execution isolation: process space, filesystem root,
     network, secrets, mounts, resources, and host access.
@@ -175,14 +175,15 @@ module and static wiring instead.
 - Do not lock runtime contracts to Docker Sandboxes, Sandcastle, Vercel
   Sandbox, E2B, Daytona, Modal, Podman, or git worktrees. Treat them as
   provider candidates wired explicitly through source.
-- Runtime fact identity is `_tag`. Do not create a parallel dot-case runtime
-  event namespace. Persist `_tag` for indexing and serialize the tagged fact as
+- RuntimeEvent identity is `_tag`. Do not create a parallel dot-case runtime
+  event namespace. Persist `_tag` for indexing and serialize the tagged event as
   JSON.
-- Emit runtime facts through named constructors in `runtime/events.ts` or the
+- Emit RuntimeEvents through named constructors in `runtime/events.ts` or the
   owning event module; do not duplicate `_tag` literals across systems.
-- Runtime facts and Capsule events are different truth buckets:
-  - runtime facts are the mechanical execution ledger for one run/session
-  - Capsule events are curated mission record entries for review, evidence,
+- Event streams are scoped by source and audience:
+  - DispatchEvents are dispatch-loop events from the Dispatch primitive
+  - RuntimeEvents are the mechanical runtime ledger for one run/session
+  - CapsuleEvents are curated mission record entries for review, evidence,
     decisions, artifacts, and continuation
 - For now, one Mission owns exactly one primary Capsule. Do not introduce
   free-floating Capsules or arbitrary nested Capsules.
@@ -190,9 +191,9 @@ module and static wiring instead.
   mission-like child work envelopes first; each child may then own its own
   Capsule.
 - Do not mirror raw model calls or complete tool result streams into Capsule by
-  default. Capsule sinks should select mission-relevant facts.
-- Capsule event strings and OpenTelemetry span/metric names are adapter outputs,
-  not runtime fact identities.
+  default. Capsule sinks should select mission-relevant events.
+- CapsuleEvent strings and OpenTelemetry span/metric names are adapter outputs,
+  not RuntimeEvent identities.
 - Keep Mission/Capsule assumptions local to the systems, sinks, and projections
   that actually need them. Future work models should not require rewriting
   unrelated runtime modules.
@@ -224,13 +225,13 @@ Satellite or as a second runtime host.
 Use Effect DI to cut the graph and test the behavior owner in isolation.
 
 Default to focused owner tests with fake layers, fake services, fake stores,
-fake runtime facts, deterministic clocks/ids/models, and package-local test
+fake RuntimeEvents, deterministic clocks/ids/models, and package-local test
 helpers.
 
 Expected tests:
 
 - systems: command/control/fact/lifecycle behavior
-- projections: derivation from stored facts
+- projections: derivation from stored events
 - sinks: curation and side effects
 - capability/catalog modules: selection and hydration
 - codecs: `_tag` round trips and unknown boundary handling
@@ -253,6 +254,6 @@ When changing runtime contracts:
 
 - update first-party server/web/client callers in the same pass
 - update stores, projections, sinks, serializers, tests, docs, and skills that
-  consume changed runtime facts
+  consume changed RuntimeEvents
 - update active design docs and skills when Mission/Capsule semantics change
 - leave one coherent path, not a migration maze

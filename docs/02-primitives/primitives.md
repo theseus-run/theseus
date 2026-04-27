@@ -104,10 +104,11 @@ Current core surface lives under `@theseus.run/core/Capsule`:
 - `Capsule.makeCapsuleId`
 - `Capsule.CapsuleStore`
 
-Capsule is not the raw runtime event log. Runtime facts record exactly what
-happened in a run; Capsule records what matters about the mission. Runtime
-facts may feed Capsule sinks, but Capsule should not blindly mirror model calls,
-tool result streams, or every low-level execution event.
+Capsule is not the raw runtime event log. RuntimeEvents record exactly what
+happened in a run; CapsuleEvents record what matters about the mission.
+RuntimeEvents and selected DispatchEvents may feed Capsule sinks, but Capsule
+should not blindly mirror model calls, tool result streams, or every low-level
+execution event.
 
 Do not create free-floating Capsules or arbitrary nested Capsules. If future
 side quests or sub-missions need separate black boxes, they should first become
@@ -186,12 +187,13 @@ future work model replaces Mission or a future audit model replaces Capsule
 storage, unrelated dispatch, capability, projection, and transport code should
 not need a rewrite.
 
-Keep runtime facts and Capsule events distinct. Runtime facts are an execution
-ledger. Capsule events are the mission record.
+Keep scoped event streams distinct. DispatchEvents come from the dispatch loop.
+RuntimeEvents are the runtime execution ledger. CapsuleEvents are the mission
+record.
 
 ## RuntimeBus Boundary
 
-`RuntimeBus` is the operator/client transport concept: runtime facts out,
+`RuntimeBus` is the operator/client transport concept: RuntimeEvents out,
 operator intent in.
 
 It is useful product vocabulary, but it is not primitive floor and it must not

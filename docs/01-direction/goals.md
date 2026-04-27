@@ -116,7 +116,7 @@ not as the mission itself.
 | Dispatch | You always need to invoke an AI with context and get a result |
 | Satellite | Dispatches need scoped observation, policy, and intervention hooks |
 
-`RuntimeBus` remains the operator/client transport concept: runtime facts out,
+`RuntimeBus` remains the operator/client transport concept: RuntimeEvents out,
 operator intent in. It is not the same thing as Satellite and should adapt to
 the runtime command/control/query surface when implemented.
 
@@ -179,7 +179,7 @@ source model is stable.
 The extension model is source evolution:
 
 - need stricter dispatch policy: add or change a [[primitives|Satellite]]
-- need a minimap of touched files: add a runtime system, durable facts, and a
+- need a minimap of touched files: add a runtime system, durable events, and a
   projection
 - need a new audit channel: add a sink
 - need different mission behavior: replace or fork the mission system wiring

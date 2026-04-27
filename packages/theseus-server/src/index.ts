@@ -8,6 +8,7 @@
  */
 
 import { join } from "node:path";
+import { BunHttpClient } from "@effect/platform-bun";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Agent from "@theseus.run/core/Agent";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
@@ -22,8 +23,12 @@ import { type Cause, Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { ServerConfig, ServerConfigLive } from "./config.ts";
+import { ServerEnvLive } from "./env.ts";
 import { HandlersLive } from "./handlers.ts";
-import { CopilotLanguageModelLive } from "./providers/copilot-lm.ts";
+import { CopilotConfigLive } from "./providers/copilot/config.ts";
+import { ServerLanguageModelGatewayLive } from "./providers/language-model.ts";
+import { OpenAIConfigLive } from "./providers/openai/config.ts";
 import { RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
 // ---------------------------------------------------------------------------
@@ -31,7 +36,6 @@ import { RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 // ---------------------------------------------------------------------------
 
 const workspace = process.argv[2] ?? process.cwd();
-const port = Number(process.env["THESEUS_PORT"] ?? 4800);
 
 // ---------------------------------------------------------------------------
 // Layer composition
@@ -59,11 +63,29 @@ const RpcLayer = RpcServer.layerHttp({
 });
 
 // HTTP server (Bun)
-const HttpLive = BunHttpServer.layer({ port });
+const HttpLive = Layer.provide(
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const config = yield* ServerConfig;
+      return BunHttpServer.layer({ port: config.port });
+    }),
+  ),
+  Layer.provide(ServerConfigLive, ServerEnvLive),
+);
 
 // Services layer — all business logic dependencies
+const ConfigLive = Layer.provide(ServerConfigLive, ServerEnvLive);
+const ProviderConfigLive = Layer.mergeAll(
+  Layer.provide(CopilotConfigLive, ServerEnvLive),
+  Layer.provide(OpenAIConfigLive, ServerEnvLive),
+);
+const LanguageModelGatewayLive = Layer.provide(
+  ServerLanguageModelGatewayLive,
+  Layer.mergeAll(ConfigLive, ProviderConfigLive, BunHttpClient.layer),
+);
+
 const ServicesLayer = Layer.mergeAll(
-  CopilotLanguageModelLive,
+  LanguageModelGatewayLive,
   PersistentDispatchStore,
   RingLive,
   ToolCatalogLive,
@@ -85,9 +107,10 @@ const RouterAppLayer = Layer.provideMerge(RpcRoutesLayer, HttpRouter.layer);
 // Start
 // ---------------------------------------------------------------------------
 
-console.log(`[theseus-server] starting on port ${port} (workspace: ${workspace})`);
-
 const program = Effect.gen(function* () {
+  const config = yield* ServerConfig;
+  console.log(`[theseus-server] starting on port ${config.port} (workspace: ${workspace})`);
+
   // Build the router app to get the HTTP handler
   const httpEffect = yield* HttpRouter.toHttpEffect(RouterAppLayer);
 
@@ -95,14 +118,14 @@ const program = Effect.gen(function* () {
   const serveFn = yield* HttpServer.HttpServer;
   yield* serveFn.serve(httpEffect);
 
-  console.log(`[theseus-server] listening on port ${port}`);
+  console.log(`[theseus-server] listening on port ${config.port}`);
 
   // Keep the server alive
   return yield* Effect.never;
 });
 
 const main = program.pipe(
-  Effect.provide(HttpLive),
+  Effect.provide(Layer.mergeAll(HttpLive, ConfigLive)),
   Effect.scoped,
   Effect.catchCause((cause: Cause.Cause<unknown>) =>
     Effect.logError("[theseus-server] fatal", cause),

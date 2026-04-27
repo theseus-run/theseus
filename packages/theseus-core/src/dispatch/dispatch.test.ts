@@ -12,6 +12,7 @@ import {
 import { Defaults, defineTool } from "../tool/index.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
+import { LanguageModelGatewayFromLanguageModel } from "./model-gateway.ts";
 import { CurrentDispatch, DispatchStore, InMemoryDispatchStore } from "./store.ts";
 import type { DispatchSpec } from "./types.ts";
 
@@ -43,6 +44,9 @@ const textAndToolCallParts = (
   ...textParts("", 10, 5).filter((part) => part.type === "finish"),
 ];
 
+const modelGatewayLayer = (responses: Parameters<typeof makeMockLanguageModel>[0]) =>
+  Layer.provide(LanguageModelGatewayFromLanguageModel, makeMockLanguageModel(responses));
+
 describe("dispatch loop", () => {
   test("generates dispatch id through DispatchStore", async () => {
     const now = Date.UTC(2024, 0, 2, 3, 4, 5);
@@ -54,7 +58,7 @@ describe("dispatch loop", () => {
     };
 
     const layer = Layer.mergeAll(
-      makeMockLanguageModel([textParts("done")]),
+      modelGatewayLayer([textParts("done")]),
       DispatchDefaults,
       TestClock.layer(),
     );
@@ -79,7 +83,7 @@ describe("dispatch loop", () => {
     };
 
     const layer = Layer.merge(
-      makeMockLanguageModel([
+      modelGatewayLayer([
         toolCallParts([
           {
             id: "complete-1",
@@ -105,6 +109,28 @@ describe("dispatch loop", () => {
     expect(error.message).toContain("InvalidOutputError");
   });
 
+  test("explicit model requests fail without a provider-backed gateway", async () => {
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 1,
+      modelRequest: { provider: "openai", model: "gpt-requested" },
+    };
+
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it");
+        return yield* Effect.flip(handle.result);
+      }).pipe(
+        Effect.provide(Layer.merge(modelGatewayLayer([textParts("unused")]), DispatchDefaults)),
+      ),
+    );
+
+    expect(error._tag).toBe("DispatchModelFailed");
+    expect(error.message).toContain("provider-backed gateway");
+  });
+
   test("continues on tool calls while preserving assistant text in replay", async () => {
     const prompts: LanguageModel.ProviderOptions[] = [];
     const spec: DispatchSpec = {
@@ -115,21 +141,24 @@ describe("dispatch loop", () => {
     };
 
     const layer = Layer.merge(
-      makeMockLanguageModel(
-        [
-          textAndToolCallParts("I will report now.", [
-            {
-              id: "complete-1",
-              name: completeTool.name,
-              arguments: JSON.stringify({
-                result: "success",
-                summary: "done",
-              }),
-            },
-          ]),
-          textParts("final answer"),
-        ],
-        { onGenerateText: (options) => prompts.push(options) },
+      Layer.provide(
+        LanguageModelGatewayFromLanguageModel,
+        makeMockLanguageModel(
+          [
+            textAndToolCallParts("I will report now.", [
+              {
+                id: "complete-1",
+                name: completeTool.name,
+                arguments: JSON.stringify({
+                  result: "success",
+                  summary: "done",
+                }),
+              },
+            ]),
+            textParts("final answer"),
+          ],
+          { onGenerateText: (options) => prompts.push(options) },
+        ),
       ),
       DispatchDefaults,
     );
@@ -183,7 +212,7 @@ describe("dispatch loop", () => {
     };
 
     const layer = Layer.merge(
-      makeMockLanguageModel([
+      modelGatewayLayer([
         toolCallParts([
           {
             id: "first-1",
@@ -247,7 +276,7 @@ describe("dispatch loop", () => {
     };
 
     const layer = Layer.merge(
-      makeMockLanguageModel([
+      modelGatewayLayer([
         toolCallParts([
           {
             id: "current-1",
@@ -285,7 +314,7 @@ describe("dispatch loop", () => {
         const store = yield* DispatchStore;
         const summaries = yield* store.list();
         return summaries.find((entry) => entry.dispatchId === handle.dispatchId);
-      }).pipe(Effect.provide(Layer.merge(makeMockLanguageModel([]), DispatchDefaults))),
+      }).pipe(Effect.provide(Layer.merge(modelGatewayLayer([]), DispatchDefaults))),
     );
 
     expect(summary?.status).toBe("failed");
@@ -319,7 +348,7 @@ describe("dispatch loop", () => {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            makeMockLanguageModel([
+            modelGatewayLayer([
               toolCallParts([
                 {
                   id: "complete-1",

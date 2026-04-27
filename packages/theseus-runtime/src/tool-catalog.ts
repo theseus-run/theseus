@@ -15,7 +15,7 @@ export interface SerializedDispatchSpec {
   readonly systemPrompt: string;
   readonly tools: ReadonlyArray<{ readonly name: string }>;
   readonly maxIterations?: number | undefined;
-  readonly model?: string | undefined;
+  readonly modelRequest?: Dispatch.ModelRequest | undefined;
 }
 
 export class ToolCatalog extends Context.Service<ToolCatalog, ToolCatalogService>()(
@@ -63,7 +63,7 @@ export const makeToolCatalog = (tools: ReadonlyArray<Tool.ToolAny>): ToolCatalog
           systemPrompt: spec.systemPrompt,
           tools,
           ...(spec.maxIterations !== undefined ? { maxIterations: spec.maxIterations } : {}),
-          ...(spec.model !== undefined ? { model: spec.model } : {}),
+          ...(spec.modelRequest !== undefined ? { modelRequest: spec.modelRequest } : {}),
         };
       }),
   };

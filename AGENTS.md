@@ -142,7 +142,7 @@ build, deployment, or environment configuration.
 - Translate once at each boundary: external shape -> internal shape, or internal shape -> external shape. Avoid repeated half-normalization across layers.
 - Keep provider-specific shapes out of core/domain types unless deliberately promoted into a shared contract.
 - Do not let raw `Record<string, unknown>` flow past ingress or opaque passthrough boundaries; decode it into schemas or explicit extension points.
-- Protocol events/log entries should be immutable once created. Emit a new event for new facts instead of mutating prior events.
+- Protocol events/log entries should be immutable once created. Emit a new event instead of mutating prior events.
 - Logs, capsules, dispatch events, and telemetry should be append-only unless an explicit compaction/snapshot boundary says otherwise.
 - If ordering matters, encode it in the API. Do not rely on incidental object key order, registration order, import order, or array order.
 

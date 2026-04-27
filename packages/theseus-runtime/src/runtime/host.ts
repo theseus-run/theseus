@@ -2,7 +2,6 @@ import type * as Agent from "@theseus.run/core/Agent";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import type * as Satellite from "@theseus.run/core/Satellite";
 import { Effect, Match } from "effect";
-import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
 import type { ToolCatalog } from "../tool-catalog.ts";
@@ -23,7 +22,7 @@ import type {
 export interface RuntimeHostDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly toolCatalog: (typeof ToolCatalog)["Service"];
-  readonly languageModel: (typeof LanguageModel.LanguageModel)["Service"];
+  readonly languageModelGateway: (typeof Dispatch.LanguageModelGateway)["Service"];
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
   readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];

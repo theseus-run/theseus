@@ -16,6 +16,7 @@ import type {
   ToolOutcome,
   ToolOutputError,
 } from "../tool/index.ts";
+import type { ModelRequest } from "./model-gateway.ts";
 
 // ---------------------------------------------------------------------------
 // DispatchSpec — raw dispatch configuration
@@ -26,7 +27,7 @@ export interface DispatchSpec<R = never> {
   readonly systemPrompt: string;
   readonly tools: ReadonlyArray<ToolAnyWith<R>>;
   readonly maxIterations?: number;
-  readonly model?: string;
+  readonly modelRequest?: ModelRequest;
 }
 
 // ---------------------------------------------------------------------------

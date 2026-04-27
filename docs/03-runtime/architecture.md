@@ -47,7 +47,7 @@ Modularity exists so agents can safely evolve the source:
 - change static harness assembly when the runtime shape changes
 
 Prefer source modules and tests over public extension APIs. The runtime should
-make it obvious where to add a feature, how to wire it, what facts it emits, and
+make it obvious where to add a feature, how to wire it, what events it emits, and
 which tests prove it.
 
 Do not introduce plugin manifests, dynamic loading, extension registries,
@@ -208,8 +208,8 @@ The game-engine analogy is useful here but should stay lightweight. Theseus is
 not adopting ECS entities, components, tick loops, or generic schedulers.
 
 A system is a named runtime behavior module that advances or reacts to live
-harness state. It consumes commands, controls, runtime facts, or services, and
-produces facts, state transitions, fibers, or calls into primitives.
+harness state. It consumes commands, controls, runtime events, or services, and
+produces events, state transitions, fibers, or calls into primitives.
 
 Systems can be small and stateless. They do not need to be long-lived. The key
 is named ownership of behavior.
@@ -242,11 +242,26 @@ Not every module is a system:
 Capability selection or hydration can become a system when it owns behavior,
 not merely because a catalog exists.
 
-## Runtime Facts And Capsules
+## Scoped Event Streams
 
-Theseus has two durable truth buckets.
+Theseus uses event streams at different scopes. Do not use "fact" as a
+competing event category.
 
-**Runtime facts** are the mechanical execution ledger. They answer:
+**DispatchEvent** is emitted by the Dispatch primitive.
+
+It is scoped to one dispatch loop and records model/tool-loop events:
+
+- model response
+- tool call
+- tool result
+- tool error
+- injection
+- dispatch done or failed
+
+**RuntimeEvent** is emitted by the runtime host and runtime systems.
+
+It is scoped to mission/session/runtime execution and records the mechanical
+runtime ledger. It answers:
 
 ```txt
 What exactly happened in this run?
@@ -263,21 +278,22 @@ Examples:
 - dispatch finished or failed
 - projection updated
 
-Runtime facts are run/session scoped, high-volume, replay/debug oriented, and
-mostly not PR-facing. They are the right substrate for reconstruction,
-projections, minimaps, telemetry, and failure analysis.
+RuntimeEvents are high-volume, replay/debug oriented, and mostly not PR-facing.
+They are the right substrate for reconstruction, projections, minimaps,
+telemetry, and failure analysis. Runtime may observe and wrap or reference
+DispatchEvents.
 
-Runtime fact identity is the Effect/TypeScript `_tag`. Do not maintain a
+RuntimeEvent identity is the Effect/TypeScript `_tag`. Do not maintain a
 parallel dot-case runtime event namespace. Internal code should emit tagged
-facts through named constructors, for example `RuntimeFacts.dispatchStarted(...)`
-returning `{ _tag: "DispatchStarted", ... }`.
+events through named constructors, for example
+`RuntimeEvents.dispatchStarted(...)` returning `{ _tag: "DispatchStarted", ... }`.
 
-Persistence may index `fact._tag` in a column, but the serialized tagged fact is
-the source. First-party wire formats should preserve `_tag` unless an external
-protocol requires adaptation. External protocols such as OpenTelemetry can be
-served by dedicated sinks/adapters.
+Persistence may index `event._tag` in a column, but the serialized tagged event
+is the source. First-party wire formats should preserve `_tag` unless an
+external protocol requires adaptation. External protocols such as OpenTelemetry
+can be served by dedicated sinks/adapters.
 
-**Capsule events** are the durable mission record. They answer:
+**CapsuleEvent** is the durable mission record. It answers:
 
 ```txt
 What matters about this mission?
@@ -297,23 +313,28 @@ Examples:
 Capsules are curated, mission scoped, durable across sessions, and review/PR
 facing. For now, one Mission owns exactly one primary Capsule. A mission Capsule
 may continue tomorrow from a different runtime session with a different set of
-runtime facts.
+RuntimeEvents.
 
-Both buckets are sources of truth at different layers:
+All three event streams are sources of truth at different scopes:
 
 ```txt
-runtime facts = execution ledger
-capsule       = mission record
+DispatchEvent = dispatch-loop event stream
+RuntimeEvent  = runtime execution ledger
+CapsuleEvent  = curated mission record
 ```
 
-Runtime facts may feed Capsule sinks, but Capsule is not a dump of raw runtime
-facts. Do not store verbatim model calls, complete tool result streams, or every
-low-level execution event in Capsule unless that detail is itself mission
-evidence.
+RuntimeEvents and selected DispatchEvents may feed Capsule sinks, but Capsule
+is not a dump of raw runtime or dispatch events. Do not store verbatim model
+calls, complete tool result streams, or every low-level execution event in
+Capsule unless that detail is itself mission evidence.
 
-Capsule event types are mission-facing and do not need to match runtime fact
-tags one-to-one. Converting a runtime fact into a Capsule entry is curation, not
-a generic naming mapper.
+CapsuleEvent types are mission-facing and do not need to match RuntimeEvent or
+DispatchEvent tags one-to-one. Converting runtime or dispatch events into a
+Capsule entry is curation, not a generic naming mapper.
+
+`Trace` remains Cortex research vocabulary, not an active fourth persistence
+layer. If Cortex is promoted later, it should likely project from these scoped
+event streams rather than create a hidden duplicate log.
 
 Do not introduce free-floating Capsules or arbitrary nested Capsules. If future
 side quests or sub-missions need separate black boxes, they should first become
@@ -323,7 +344,7 @@ envelope.
 
 ## Sinks
 
-Sinks consume runtime facts and perform side effects.
+Sinks consume RuntimeEvents and perform side effects.
 
 Current sink:
 
@@ -333,7 +354,7 @@ Current sink:
 Sinks keep side effects out of core control logic. If another side effect is
 needed, prefer a named sink over scattering writes through systems or handlers.
 
-`CapsuleSink` should curate mission-relevant facts from runtime execution. It
+`CapsuleSink` should curate mission-relevant events from runtime execution. It
 should not blindly mirror the execution ledger.
 
 Examples that may become sinks later:
@@ -357,8 +378,8 @@ Current projection:
 Projection code may read store tables directly when building a runtime read
 model. It must not start work, execute tools, or mutate orchestration state.
 
-New operator views should usually begin as projections over durable runtime
-facts, not as hidden mutable state inside systems.
+New operator views should usually begin as projections over durable
+RuntimeEvents, not as hidden mutable state inside systems.
 
 ## Stores
 
@@ -371,7 +392,7 @@ Current stores:
 - SQLite capsule store: capsule events and artifacts
 - runtime link tables: cheap joins between missions, dispatches, and capsules
 
-Runtime facts and Capsule events should both be append-only unless an explicit
+RuntimeEvents and CapsuleEvents should both be append-only unless an explicit
 compaction or snapshot boundary says otherwise. Keep their schemas and purposes
 distinct.
 
@@ -424,7 +445,7 @@ Continuation creates a child dispatch with inherited context and a parent link.
 It must not mutate the old dispatch identity into a second run.
 
 Capsule is the curated mission black box, not the raw runtime event log.
-Runtime writes capsule events for mission-relevant facts, decisions, evidence,
+Runtime writes capsule events for mission-relevant events, decisions, evidence,
 artifacts, and outcomes. Workers should not be forced into logging ceremony for
 normal work.
 
@@ -439,7 +460,7 @@ client transport, UI eventing, or global mission control.
 
 ## RuntimeBus Boundary
 
-`RuntimeBus` is the operator/client transport concept: runtime facts out,
+`RuntimeBus` is the operator/client transport concept: RuntimeEvents out,
 operator intent in. It is not currently the implemented runtime host in this
 package, and it is not a primitive that replaces Satellite.
 
@@ -486,7 +507,7 @@ transport-specific errors.
 Theseus runtime is still WIP. Prefer clean-break replacement over compatibility
 layers when the design improves.
 
-Runtime contracts may change, including commands, controls, queries, facts,
+Runtime contracts may change, including commands, controls, queries, events,
 sessions, projections, and errors. The same pass must migrate first-party
 adapters, stores, sinks, projections, tests, docs, and skills that depend on the
 changed contract.
@@ -495,7 +516,7 @@ Rules:
 
 - if `RuntimeCommand`, `RuntimeControl`, or `RuntimeQuery` changes, update
   server handlers and web/client callers in the same pass
-- if a runtime fact changes, update stores, projections, sinks, serializers,
+- if a RuntimeEvent changes, update stores, projections, sinks, serializers,
   tests, and docs in the same pass
 - if Mission/Capsule semantics change, update active docs and skills in the
   same pass
@@ -511,8 +532,8 @@ first-party path.
 Runtime tests should follow ownership boundaries.
 
 Effect dependency injection gives Theseus clean graph cut points. Use them.
-Default to isolated owner tests with fake services, fake stores, fake runtime
-facts, deterministic clocks/ids/models, and package-local layers.
+Default to isolated owner tests with fake services, fake stores, fake
+RuntimeEvents, deterministic clocks/ids/models, and package-local layers.
 
 Testing is not only regression protection. In this repo, tests are executable
 design context for future agents. They show concrete contracts, examples, and
@@ -521,7 +542,7 @@ expected behavior, which reduces hallucinated APIs and hidden assumptions.
 Rules:
 
 - systems get focused tests for command/control/fact/lifecycle behavior
-- projections get focused tests for derivation from stored facts
+- projections get focused tests for derivation from stored events
 - sinks get focused tests for curation and side effects
 - capability/catalog modules get focused tests for selection and hydration
 - codecs get focused tests for `_tag` round trips and unknown boundary handling

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { BlueprintRegistryLive } from "../agent/index.ts";
 import { DispatchDefaults } from "../dispatch/defaults.ts";
+import { LanguageModelGatewayFromLanguageModel } from "../dispatch/model-gateway.ts";
 import * as Tool from "../Tool.ts";
 import {
   makeMockLanguageModel,
@@ -38,7 +39,7 @@ const testLayer = (responses: Parameters<typeof makeMockLanguageModel>[0]) =>
         tools: [],
       },
     ]),
-    makeMockLanguageModel(responses),
+    Layer.provide(LanguageModelGatewayFromLanguageModel, makeMockLanguageModel(responses)),
     DispatchDefaults,
   );
 

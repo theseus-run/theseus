@@ -35,7 +35,22 @@ export const DispatchSpecSchema = Schema.Struct({
   systemPrompt: Schema.String,
   tools: Schema.Array(SerializedToolRefSchema),
   maxIterations: Schema.optional(Schema.Number),
-  model: Schema.optional(Schema.String),
+  modelRequest: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        provider: Schema.Literal("openai"),
+        model: Schema.String,
+        maxOutputTokens: Schema.optional(Schema.Number),
+        reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high", "xhigh"])),
+        textVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
+      }),
+      Schema.Struct({
+        provider: Schema.Literal("copilot"),
+        model: Schema.String,
+        maxTokens: Schema.optional(Schema.Number),
+      }),
+    ]),
+  ),
 });
 
 // ---------------------------------------------------------------------------

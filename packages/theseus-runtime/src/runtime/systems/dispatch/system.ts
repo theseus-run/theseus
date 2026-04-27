@@ -3,7 +3,6 @@ import * as CapsuleNs from "@theseus.run/core/Capsule";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { Cause, Effect, Exit, Layer, Stream } from "effect";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { DispatchRegistry } from "../../../registry.ts";
 import { TheseusDb } from "../../../store/sqlite.ts";
 import { SqliteCurrentCapsuleByIdLive } from "../../../store/sqlite-capsule.ts";
@@ -38,7 +37,7 @@ const reasonFromCause = (cause: Cause.Cause<unknown>): string =>
 export interface DispatchRunnerDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly toolCatalog: (typeof ToolCatalog)["Service"];
-  readonly languageModel: (typeof LanguageModel.LanguageModel)["Service"];
+  readonly languageModelGateway: (typeof Dispatch.LanguageModelGateway)["Service"];
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
   readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];
@@ -47,7 +46,7 @@ export interface DispatchRunnerDeps {
 
 type RuntimeToolRequirements =
   | Agent.BlueprintRegistry
-  | LanguageModel.LanguageModel
+  | Dispatch.LanguageModelGateway
   | Satellite.SatelliteRing
   | Dispatch.DispatchStore
   | CapsuleNs.CurrentCapsule
@@ -87,7 +86,7 @@ const makeDispatchDepsLayer = (
   currentCapsule: CapsuleNs.CapsuleRecord,
 ) =>
   Layer.mergeAll(
-    Layer.succeed(LanguageModel.LanguageModel)(deps.languageModel),
+    Layer.succeed(Dispatch.LanguageModelGateway)(deps.languageModelGateway),
     Layer.succeed(Satellite.SatelliteRing)(deps.satelliteRing),
     Layer.succeed(Dispatch.DispatchStore)(deps.dispatchStore),
     Layer.succeed(Agent.BlueprintRegistry)(deps.blueprintRegistry),

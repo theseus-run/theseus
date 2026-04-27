@@ -12,6 +12,12 @@
 export { DispatchDefaults } from "./defaults.ts";
 // Dispatch — full machine
 export { dispatch, dispatchAwait } from "./dispatch.ts";
+export type { CopilotModelRequest, ModelRequest, OpenAIModelRequest } from "./model-gateway.ts";
+export {
+  LanguageModelGateway,
+  LanguageModelGatewayFromLanguageModel,
+  ModelUnavailable,
+} from "./model-gateway.ts";
 // Step — pure, reusable independently
 export {
   runToolCall,

@@ -162,7 +162,7 @@ branch, pull request, or artifact promotion for high-autonomy work.
 
 ## Capsule
 
-Capsule records mission-relevant isolation facts:
+Capsule records mission-relevant isolation events and decisions:
 
 - Sandbox kind and provider
 - Workspace kind and branch/checkout identity
@@ -172,8 +172,8 @@ Capsule records mission-relevant isolation facts:
 - important destructive operations
 - promotion decisions and artifacts
 
-Capsule should not mirror every raw command or low-level runtime fact. Runtime
-facts can hold the mechanical execution ledger.
+Capsule should not mirror every raw command or low-level RuntimeEvent.
+RuntimeEvents can hold the mechanical execution ledger.
 
 ## Provider Posture
 
@@ -209,7 +209,7 @@ Docker one provider. Never make the primitive `GitWorktree`. Make the concept
 Runtime code should avoid assuming that "the filesystem" means the user's real
 project checkout.
 
-Tool paths, command execution, dispatch facts, Capsule entries, test fakes, and
+Tool paths, command execution, dispatch events, Capsule entries, test fakes, and
 promotion flows should have a place to carry Sandbox and Workspace identity
 when behavior crosses into mutable world access.
 

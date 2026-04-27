@@ -12,7 +12,7 @@
  */
 
 import { type Cause, Deferred, Effect, Fiber, Queue, Ref, Stream } from "effect";
-import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteScope } from "../satellite/types.ts";
@@ -20,6 +20,7 @@ import * as DispatchEvents from "./events.ts";
 import { normalizeLoopError, settleDispatchResult, zeroUsage } from "./lifecycle.ts";
 import { runDispatchLoop } from "./loop.ts";
 import { defaultMessages } from "./messages.ts";
+import { LanguageModelGateway } from "./model-gateway.ts";
 import { CurrentDispatch, DispatchStore } from "./store.ts";
 import type {
   DispatchError,
@@ -30,6 +31,7 @@ import type {
   DispatchSpec,
   Injection,
 } from "./types.ts";
+import { DispatchModelFailed } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // dispatch
@@ -42,7 +44,7 @@ export const dispatch = <R = never>(
 ): Effect.Effect<
   DispatchHandle,
   never,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+  LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > =>
   Effect.gen(function* () {
     const maxIter = spec.maxIterations ?? 20;
@@ -62,6 +64,7 @@ export const dispatch = <R = never>(
     const injectionQueue = yield* Queue.unbounded<Injection>();
     const resultDeferred = yield* Deferred.make<DispatchOutput, DispatchError>();
     const messagesRef = yield* Ref.make<ReadonlyArray<Prompt.MessageEncoded>>([]);
+    const modelGateway = yield* LanguageModelGateway;
     const ring = yield* SatelliteRing;
     const satelliteScope = yield* (
       ring.openScope({
@@ -96,22 +99,36 @@ export const dispatch = <R = never>(
     }
 
     const loopFiber = yield* Effect.forkDetach({ startImmediately: true })(
-      runDispatchLoop<R>(
-        {
-          dispatchId,
-          spec,
-          task,
-          maxIterations: maxIter,
-          store,
-          injectionQueue,
-          messagesRef,
-          satelliteScope,
-          emit,
-        },
-        initialMessages,
-        initialUsage,
-        initialIteration,
-      ).pipe(
+      Effect.gen(function* () {
+        const languageModel = yield* modelGateway.resolve(spec.modelRequest).pipe(
+          Effect.mapError(
+            (error) =>
+              new DispatchModelFailed({
+                dispatchId,
+                name: spec.name,
+                message: error.reason,
+                cause: error,
+              }),
+          ),
+        );
+
+        return yield* runDispatchLoop<R>(
+          {
+            dispatchId,
+            spec,
+            task,
+            maxIterations: maxIter,
+            store,
+            injectionQueue,
+            messagesRef,
+            satelliteScope,
+            emit,
+          },
+          initialMessages,
+          initialUsage,
+          initialIteration,
+        ).pipe(Effect.provideService(LanguageModel.LanguageModel, languageModel));
+      }).pipe(
         Effect.mapError((err) => normalizeLoopError({ dispatchId, name: spec.name }, err)),
         Effect.tap((result) => emit(DispatchEvents.done(spec.name, result))),
         Effect.onExit((exit) =>
@@ -149,7 +166,7 @@ export const dispatch = <R = never>(
   }) as Effect.Effect<
     DispatchHandle,
     never,
-    LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+    LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
   >;
 
 // ---------------------------------------------------------------------------
@@ -163,5 +180,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   DispatchOutput,
   DispatchError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+  LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > => dispatch(spec, task, options).pipe(Effect.flatMap((handle) => handle.result));

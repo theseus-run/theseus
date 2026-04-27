@@ -109,12 +109,12 @@ const executeRequest = (
     return res;
   });
 
-/** Core layer — requires HttpClient from environment. */
-export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageModel)(
+export const makeCopilotLanguageModel = (
+  config: (typeof CopilotConfig)["Service"],
+  http: (typeof HttpClient.HttpClient)["Service"],
+  clock: (typeof Clock.Clock)["Service"],
+): Effect.Effect<(typeof LanguageModel.LanguageModel)["Service"]> =>
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
-    const config = yield* CopilotConfig;
-    const clock = yield* Clock.Clock;
     const tokenCacheRef = yield* Ref.make<TokenCache | null>(null);
 
     const getBearer = (): Effect.Effect<string, CopilotAuthError | CopilotParseError> =>
@@ -188,6 +188,15 @@ export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageMode
           }).pipe(Effect.mapError(mapCopilotError)),
         ),
     });
+  });
+
+/** Core layer — requires HttpClient from environment. */
+export const CopilotLanguageModelLayer = Layer.effect(LanguageModel.LanguageModel)(
+  Effect.gen(function* () {
+    const config = yield* CopilotConfig;
+    const http = yield* HttpClient.HttpClient;
+    const clock = yield* Clock.Clock;
+    return yield* makeCopilotLanguageModel(config, http, clock);
   }),
 );
 

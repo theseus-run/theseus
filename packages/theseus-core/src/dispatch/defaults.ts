@@ -1,9 +1,8 @@
 /**
  * DispatchDefaults — pre-composed layer providing SatelliteRing + DispatchStore.
  *
- * dispatch() requires LanguageModel | SatelliteRing | DispatchStore.
- * LanguageModel is caller-provided (it varies by environment).
- * The other dispatch primitives have sensible defaults — this layer bundles them.
+ * dispatch() requires LanguageModelGateway | SatelliteRing | DispatchStore.
+ * Model selection is caller-provided because it varies by runtime.
  *
  * Usage:
  *   // Just need defaults:

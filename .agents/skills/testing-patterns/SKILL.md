@@ -22,8 +22,8 @@ Do not use this skill for web-only `packages/icarus-web` testing unless the user
 - Runtime behavior owners need isolated tests by default. Effect DI should be
   used to cut the graph and replace dependencies with fake layers/services.
 - Services with behavior need direct tests: registries, stores, parsers, dispatch loops, satellite rings, tool execution boundaries, persistence adapters, and protocol serializers.
-- Systems should test command/control/fact/lifecycle behavior.
-- Projections should test derivation from stored facts.
+- Systems should test command/control/event/lifecycle behavior.
+- Projections should test derivation from stored events.
 - Sinks should test curation and side effects.
 - Capability/catalog modules should test selection and hydration.
 - Codecs should test `_tag` round trips and unknown boundary handling.

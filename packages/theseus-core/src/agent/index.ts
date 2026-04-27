@@ -7,6 +7,7 @@
  */
 
 import { Data } from "effect";
+import type { ModelRequest } from "../dispatch/model-gateway.ts";
 import type { Usage } from "../dispatch/types.ts";
 import type { ToolAnyWith } from "../tool/index.ts";
 
@@ -33,7 +34,7 @@ export interface Blueprint<R = never> {
   readonly systemPrompt: string;
   readonly tools: ReadonlyArray<ToolAnyWith<R>>;
   readonly maxIterations?: number;
-  readonly model?: string;
+  readonly modelRequest?: ModelRequest;
 }
 
 // ---------------------------------------------------------------------------

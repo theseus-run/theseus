@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Agent from "@theseus.run/core/Agent";
 import * as AgentComm from "@theseus.run/core/AgentComm";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
 import * as Tool from "@theseus.run/core/Tool";
 import { Effect, Fiber, Layer, Schema, Stream } from "effect";
@@ -89,14 +90,17 @@ const runtimeLayer = (responses = pocResponses) => {
       tools: [probe],
     },
   ]);
-  const LanguageModelLive = makeMockLanguageModel(responses);
+  const LanguageModelGatewayLive = Layer.provide(
+    Dispatch.LanguageModelGatewayFromLanguageModel,
+    makeMockLanguageModel(responses),
+  );
   const Services = Layer.mergeAll(
     DbLive,
     StoreLive,
     RegistryLive,
     CatalogLive,
     BlueprintsLive,
-    LanguageModelLive,
+    LanguageModelGatewayLive,
     Satellite.DefaultSatelliteRing,
   );
   return {
@@ -207,7 +211,7 @@ describe("TheseusRuntime POC", () => {
       RegistryLive,
       CatalogLive,
       Agent.BlueprintRegistryLive([]),
-      makeMockLanguageModel([]),
+      Layer.provide(Dispatch.LanguageModelGatewayFromLanguageModel, makeMockLanguageModel([])),
       Satellite.DefaultSatelliteRing,
     );
     const secondLayer = Layer.provide(Layer.effect(TheseusRuntime)(TheseusRuntimeLive), Services);

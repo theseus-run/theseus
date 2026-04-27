@@ -30,6 +30,7 @@ export {
 // ---------------------------------------------------------------------------
 
 export type {
+  CopilotModelRequest,
   DispatchCreate,
   DispatchError,
   DispatchEvent,
@@ -43,6 +44,8 @@ export type {
   DispatchSpec,
   DispatchSummary,
   Injection,
+  ModelRequest,
+  OpenAIModelRequest,
   StepResult,
   ToolCall,
   ToolCallError,
@@ -54,6 +57,9 @@ export {
   DispatchDefaults,
   DispatchStore,
   InMemoryDispatchStore,
+  LanguageModelGateway,
+  LanguageModelGatewayFromLanguageModel,
+  ModelUnavailable,
   makeDispatchId,
 } from "./dispatch/index.ts";
 

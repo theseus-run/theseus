@@ -6,9 +6,9 @@
 
 import { render } from "@theseus.run/jsx-md";
 import { Cause, Effect, Exit, Fiber, Match, Ref, Schema, Stream } from "effect";
-import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { BlueprintRegistry } from "../agent/index.ts";
 import { dispatch as dispatchLoop } from "../dispatch/index.ts";
+import type { LanguageModelGateway } from "../dispatch/model-gateway.ts";
 import type { DispatchStore } from "../dispatch/store.ts";
 import type { DispatchEvent } from "../dispatch/types.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
@@ -82,7 +82,7 @@ export const dispatchGruntTool: Tool<
   DispatchGruntInput,
   DispatchGruntResultType,
   DispatchGruntFailed,
-  BlueprintRegistry | LanguageModel.LanguageModel | SatelliteRing | DispatchStore
+  BlueprintRegistry | LanguageModelGateway | SatelliteRing | DispatchStore
 > = defineTool({
   name: "theseus_dispatch_grunt",
   description:

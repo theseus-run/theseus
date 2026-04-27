@@ -12,7 +12,6 @@
  */
 
 import { Effect, Match, type Stream } from "effect";
-import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { AgentError, AgentResult, Blueprint } from "../agent/index.ts";
 import {
   AgentCycleExceeded,
@@ -25,6 +24,7 @@ import {
   type DispatchEvent,
   type DispatchOptions,
   dispatch as dispatchLoop,
+  type LanguageModelGateway,
 } from "../dispatch/index.ts";
 import type { DispatchStore } from "../dispatch/store.ts";
 import type { SatelliteRing } from "../satellite/ring.ts";
@@ -88,11 +88,7 @@ export const dispatch = <R = never>(
   blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<
-  GruntHandle,
-  never,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | R
-> =>
+): Effect.Effect<GruntHandle, never, LanguageModelGateway | SatelliteRing | DispatchStore | R> =>
   dispatchLoop(blueprint, task, options).pipe(
     Effect.map((handle) => ({
       events: handle.events,
@@ -111,5 +107,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   AgentResult,
   AgentError,
-  LanguageModel.LanguageModel | SatelliteRing | DispatchStore | R
+  LanguageModelGateway | SatelliteRing | DispatchStore | R
 > => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));
