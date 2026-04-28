@@ -15,23 +15,23 @@ current, what is draft, what is speculative, and what is superseded.
 ```text
 docs/
   README.md
-  01-direction/       current product direction
-  02-primitives/      current primitive and protocol doctrine
-  03-runtime/         current runtime architecture and implementation notes
-  04-clients/         current client/operator surface notes
-  05-drafts/          unadopted design drafts, research notes, and POCs
-  06-brainstorms/     loose speculative ideas
-  90-archive/         superseded designs kept for archaeology
-  99-design-notes/    adopted or active rationale that does not fit a concept note
+  direction/          current product direction
+  primitives/         current primitive and protocol doctrine
+  runtime/            current runtime architecture and implementation notes
+  clients/            current client/operator surface notes
+  drafts/             unadopted design drafts, research notes, and POCs
+  brainstorms/        loose speculative ideas
+  archive/            superseded designs kept for archaeology
+  design-notes/       adopted or active rationale that does not fit a concept note
 ```
 
 Default placement:
 
-- current truth about implemented or intended architecture: `01`-`04`
-- useful but unadopted design/research: `05-drafts`
-- deliberately wild or unvalidated ideation: `06-brainstorms`
-- superseded history: `90-archive`
-- adopted time-bound rationale: `99-design-notes`
+- current truth about implemented or intended architecture: `direction`, `primitives`, `runtime`, `clients`
+- useful but unadopted design/research: `drafts`
+- deliberately wild or unvalidated ideation: `brainstorms`
+- superseded history: `archive`
+- adopted time-bound rationale: `design-notes`
 
 Do not leave stray top-level folders under `docs/`.
 
@@ -42,7 +42,7 @@ Use relative Markdown links, not Obsidian wikilinks.
 Good:
 
 ```md
-[architecture](../03-runtime/architecture.md)
+[architecture](../runtime/architecture.md)
 [tool](tool.md)
 ```
 
@@ -67,10 +67,10 @@ Use short status banners when they prevent confusion:
 > Status: active doctrine
 > Status: draft
 > Status: brainstorm
-> Status: SUPERSEDED — see [architecture](../03-runtime/architecture.md)
+> Status: SUPERSEDED — see [architecture](../runtime/architecture.md)
 ```
 
-If a note moves to `90-archive`, add or keep a superseded banner.
+If a note moves to `archive`, add or keep a superseded banner.
 
 ## Editing Rules
 
@@ -102,5 +102,5 @@ bun -e '<small link checker or equivalent>'
 ## Preservation Rule
 
 Before deleting or heavily reducing a note, verify it has no unique durable
-value. Prefer moving to `05-drafts`, `06-brainstorms`, or `90-archive` with a
+value. Prefer moving to `drafts`, `brainstorms`, or `archive` with a
 status banner.

@@ -208,5 +208,5 @@ should not describe them as available behavior.
 
 - [architecture](architecture.md)
 - [mission-hardening](mission-hardening.md)
-- [primitives](../02-primitives/primitives.md)
-- [crew-scaffolding](../90-archive/crew-scaffolding.md)
+- [primitives](../primitives/primitives.md)
+- [crew-scaffolding](../archive/crew-scaffolding.md)

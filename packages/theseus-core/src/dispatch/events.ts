@@ -1,5 +1,6 @@
 import { Match } from "effect";
 import type { Presentation } from "../tool/index.ts";
+import type { CortexFrame } from "./cortex.ts";
 import { presentationToText, tryParseArgs } from "./step.ts";
 import type {
   DispatchEvent,
@@ -13,6 +14,7 @@ export const isTerminal = (event: DispatchEvent): boolean =>
   Match.value(event).pipe(
     Match.tags({
       Calling: () => false,
+      CortexRendered: () => false,
       Text: () => false,
       Thinking: () => false,
       ToolCalling: () => false,
@@ -30,6 +32,21 @@ export const calling = (name: string, iteration: number): DispatchEvent => ({
   _tag: "Calling",
   name,
   iteration,
+});
+
+export const cortexRendered = (
+  name: string,
+  iteration: number,
+  historyMessageCount: number,
+  frame: CortexFrame,
+): DispatchEvent => ({
+  _tag: "CortexRendered",
+  name,
+  iteration,
+  signals: frame.signals,
+  historyMessageCount,
+  cortexMessageCount: frame.messages.length - historyMessageCount,
+  promptMessageCount: frame.messages.length,
 });
 
 export const text = (name: string, iteration: number, content: string): DispatchEvent => ({

@@ -5,8 +5,8 @@
 
 Reference for Theseus crew scaffolding: possible agent roster, dispatch topology,
 agent traits, and mission workflow. This is not active runtime architecture.
-Runtime doctrine lives in [architecture](../03-runtime/architecture.md). Current mission implementation lives
-in [mission-system](../03-runtime/mission-system.md). Historical mission tool names and file-backed session
+Runtime doctrine lives in [architecture](../runtime/architecture.md). Current mission implementation lives
+in [mission-system](../runtime/mission-system.md). Historical mission tool names and file-backed session
 claims below are not implemented.
 
 ---

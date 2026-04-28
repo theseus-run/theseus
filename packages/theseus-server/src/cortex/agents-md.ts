@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as Dispatch from "@theseus.run/core/Dispatch";
-import { Effect, Match } from "effect";
+import { Data, Effect, Match } from "effect";
 
 type AgentsMdContent =
   | { readonly _tag: "Missing" }
@@ -12,6 +12,10 @@ interface AgentsMdSnapshot {
   readonly content: AgentsMdContent;
 }
 
+class AgentsMdReadFailed extends Data.TaggedError("AgentsMdReadFailed")<{
+  readonly cause: unknown;
+}> {}
+
 const nodeId = "root-agents-md";
 const missingContent: AgentsMdContent = { _tag: "Missing" };
 const missing = Effect.succeed(missingContent);
@@ -20,17 +24,20 @@ const loaded = (text: string): AgentsMdContent => ({ _tag: "Loaded", text });
 const isNodeFsError = (cause: unknown): cause is { readonly code?: unknown } =>
   typeof cause === "object" && cause !== null && "code" in cause;
 
-const isMissingFileError = (cause: unknown): boolean =>
-  isNodeFsError(cause) && cause.code === "ENOENT";
+const isMissingFileError = (error: AgentsMdReadFailed): boolean =>
+  isNodeFsError(error.cause) && error.cause.code === "ENOENT";
+
+const dieReadFailure = (path: string, error: AgentsMdReadFailed): Effect.Effect<never> =>
+  Effect.die(new Error(`AgentsMdReadFailed: ${path}`, { cause: error }));
 
 const readOptionalText = (path: string): Effect.Effect<AgentsMdContent> =>
   Effect.tryPromise({
     try: () => readFile(path, "utf8"),
-    catch: (cause) => cause,
+    catch: (cause) => new AgentsMdReadFailed({ cause }),
   }).pipe(
     Effect.map(loaded),
     Effect.catchIf(isMissingFileError, () => missing),
-    Effect.catch((cause) => Effect.die(cause)),
+    Effect.catch((error) => dieReadFailure(path, error)),
   );
 
 const renderAgentsMd = (snapshot: AgentsMdSnapshot): ReadonlyArray<Dispatch.CortexSignal> =>

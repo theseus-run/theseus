@@ -308,8 +308,8 @@ history -> Cortex candidate frame -> Satellite final frame -> model call
 
 ## Relation To Existing Notes
 
-This note narrows [006-context-management-protocol-notes](006-context-management-protocol-notes.md) and
-[007-cortex-first-principles-architecture](007-cortex-first-principles-architecture.md) into the first dispatch-loop seam.
+This note narrows [context-management-protocol-notes](context-management-protocol-notes.md) and
+[cortex-first-principles-architecture](cortex-first-principles-architecture.md) into the first dispatch-loop seam.
 
-It also preserves the power of [001-thinking-telemetry-satellite](001-thinking-telemetry-satellite.md) style
+It also preserves the power of [thinking-telemetry-satellite](thinking-telemetry-satellite.md) style
 middleware: Satellites remain active loop participants, not passive observers.

@@ -7,7 +7,7 @@ Research into whether we should build naive tool implementations (ripgrep wrappe
 
 Companion to [tools](tools.md) (the tool catalog). This doc covers the *how* — what backends and technologies to use for each tool.
 
-Terminology note: this note uses current [Sandbox and Workspace](../03-runtime/isolation.md)
+Terminology note: this note uses current [Sandbox and Workspace](../runtime/isolation.md)
 vocabulary. Older drafts called that slot `WorkspaceContext`.
 
 ---

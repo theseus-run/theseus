@@ -1,6 +1,6 @@
 # Persistent Agent Runtime
 
-> Status: SUPERSEDED — see [architecture](../03-runtime/architecture.md)
+> Status: SUPERSEDED — see [architecture](../runtime/architecture.md)
 > Archived: 2026-04-26
 
 This note preserves the old actor-daemon direction at a summary level. It is

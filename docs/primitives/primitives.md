@@ -173,7 +173,7 @@ The runtime host is not a sixth primitive. It composes primitives into live work
 through commands, controls, queries, systems, sinks, projections, stores,
 catalogs, and active handles.
 
-See [architecture](../03-runtime/architecture.md) for current runtime doctrine.
+See [architecture](../runtime/architecture.md) for current runtime doctrine.
 
 Sandbox and Workspace are runtime/harness concepts that may become stable
 contracts, but they do not currently replace the primitive floor. Sandbox is

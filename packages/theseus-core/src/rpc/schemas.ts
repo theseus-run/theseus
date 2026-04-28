@@ -69,10 +69,35 @@ export const SerializedToolCallErrorSchema = Schema.Struct({
 // DispatchEvent (serialized — the union sent over the wire)
 // ---------------------------------------------------------------------------
 
+export const CortexSignalSchema = Schema.Struct({
+  id: Schema.String,
+  nodeId: Schema.String,
+  slot: Schema.Literals([
+    "harness",
+    "workspace",
+    "mission",
+    "work-node",
+    "observations",
+    "history",
+    "recall",
+  ]),
+  authority: Schema.Literals(["system", "developer", "user", "assistant", "tool"]),
+  priority: Schema.Number,
+  text: Schema.String,
+});
+
 export const DispatchEventSchema = Schema.Union([
   Schema.TaggedStruct("Calling", {
     name: Schema.String,
     iteration: Schema.Number,
+  }),
+  Schema.TaggedStruct("CortexRendered", {
+    name: Schema.String,
+    iteration: Schema.Number,
+    signals: Schema.Array(CortexSignalSchema),
+    historyMessageCount: Schema.Number,
+    cortexMessageCount: Schema.Number,
+    promptMessageCount: Schema.Number,
   }),
   Schema.TaggedStruct("Text", {
     name: Schema.String,

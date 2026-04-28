@@ -15,20 +15,20 @@ Always start with:
 
 1. `docs/README.md`
 2. the section README for the package or concept you are touching
-3. the nearest current concept note in `01-direction`, `02-primitives`,
-   `03-runtime`, or `04-clients`
+3. the nearest current concept note in `direction`, `primitives`, `runtime`,
+   or `clients`
 
 Then read source code and tests. Docs guide what to inspect; code proves what
 exists.
 
 ## Status Semantics
 
-- `01-direction`, `02-primitives`, `03-runtime`, `04-clients`: current doctrine
+- `direction`, `primitives`, `runtime`, `clients`: current doctrine
   or current implementation notes.
-- `05-drafts`: proposals, research, or POCs. Useful context, not authority.
-- `06-brainstorms`: speculative ideas. Never implementation authority.
-- `90-archive`: superseded history. Read only to avoid reintroducing old paths.
-- `99-design-notes`: adopted or active rationale. Use to understand why a
+- `drafts`: proposals, research, or POCs. Useful context, not authority.
+- `brainstorms`: speculative ideas. Never implementation authority.
+- `archive`: superseded history. Read only to avoid reintroducing old paths.
+- `design-notes`: adopted or active rationale. Use to understand why a
   current concept exists, then verify against current code.
 
 If a draft conflicts with current docs or code, current docs/code win. Mention
@@ -36,21 +36,21 @@ the conflict if it affects the task.
 
 ## Package Pointers
 
-- Core primitives: `docs/02-primitives/primitives.md`, plus the specific note
+- Core primitives: `docs/primitives/primitives.md`, plus the specific note
   such as `tool.md` or `agent-comm.md`.
-- Runtime: `docs/03-runtime/architecture.md`,
-  `docs/03-runtime/mission-system.md`, and `docs/03-runtime/isolation.md`.
+- Runtime: `docs/runtime/architecture.md`,
+  `docs/runtime/mission-system.md`, and `docs/runtime/isolation.md`.
 - Server: read runtime docs first, then server package code; server is a host
   adapter, not runtime owner.
-- Client/operator surfaces: `docs/04-clients/README.md` and runtime command,
+- Client/operator surfaces: `docs/clients/README.md` and runtime command,
   control, query contracts.
-- Design changes: also read `docs/99-design-notes/002-self-editable-harness.md`
+- Design changes: also read `docs/design-notes/self-editable-harness.md`
   and relevant drafts only if the task is exploring new direction.
 
 ## Coding-Agent Rules
 
 - Verify before asserting a doc is current.
-- Do not implement from `05-drafts`, `06-brainstorms`, or `90-archive` unless
+- Do not implement from `drafts`, `brainstorms`, or `archive` unless
   the user explicitly asks to promote that design.
 - When code and active docs disagree, report the mismatch and update docs if the
   task includes docs maintenance.

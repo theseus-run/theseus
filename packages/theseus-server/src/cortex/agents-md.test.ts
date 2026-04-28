@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Dispatch from "@theseus.run/core/Dispatch";
@@ -53,5 +53,14 @@ describe("RootAgentsMdCortexNode", () => {
 
     expect(frame.signals).toEqual([]);
     expect(frame.messages).toEqual([{ role: "user", content: "task" }]);
+  });
+
+  test("surfaces non-missing AGENTS.md read failures", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "theseus-bad-agents-md-"));
+    await mkdir(join(workspace, "AGENTS.md"));
+
+    await expect(Effect.runPromise(renderRootAgentsMd(workspace))).rejects.toThrow(
+      "AgentsMdReadFailed",
+    );
   });
 });

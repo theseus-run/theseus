@@ -178,7 +178,7 @@ source model is stable.
 
 The extension model is source evolution:
 
-- need stricter dispatch policy: add or change a [Satellite](../02-primitives/primitives.md)
+- need stricter dispatch policy: add or change a [Satellite](../primitives/primitives.md)
 - need a minimap of touched files: add a runtime system, durable events, and a
   projection
 - need a new audit channel: add a sink
@@ -194,5 +194,5 @@ plugin lifecycle hooks, or compatibility layers unless explicitly scheduled.
 
 Related design notes:
 
-- [010-theseus-outcome-execution-layer](../06-brainstorms/010-theseus-outcome-execution-layer.md)
-- [002-self-editable-harness](../99-design-notes/002-self-editable-harness.md)
+- [theseus-outcome-execution-layer](../brainstorms/theseus-outcome-execution-layer.md)
+- [self-editable-harness](../design-notes/self-editable-harness.md)

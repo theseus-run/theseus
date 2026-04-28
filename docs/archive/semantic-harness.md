@@ -1,6 +1,6 @@
 # Semantic Coding Harness
 
-> Status: SUPERSEDED — see [architecture](../03-runtime/architecture.md) § Coding Harness
+> Status: SUPERSEDED — see [architecture](../runtime/architecture.md) § Coding Harness
 > Last updated: 2026-03-18
 >
 > The SemanticStore and semantic patch format were dropped after analysis:

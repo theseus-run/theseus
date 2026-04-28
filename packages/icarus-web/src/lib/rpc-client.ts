@@ -16,10 +16,23 @@ import * as Socket from "effect/unstable/socket/Socket";
 // ---------------------------------------------------------------------------
 
 /** Serialized dispatch event matching DispatchEventSchema */
+export interface CortexSignal {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly slot: "harness" | "workspace" | "mission" | "work-node" | "observations" | "history" | "recall";
+  readonly authority: "system" | "developer" | "user" | "assistant" | "tool";
+  readonly priority: number;
+  readonly text: string;
+}
+
 export interface DispatchEvent {
   readonly _tag: string;
   readonly name?: string;
   readonly iteration?: number;
+  readonly signals?: ReadonlyArray<CortexSignal>;
+  readonly historyMessageCount?: number;
+  readonly cortexMessageCount?: number;
+  readonly promptMessageCount?: number;
   readonly tool?: string;
   readonly content?: string;
   readonly structured?: unknown;

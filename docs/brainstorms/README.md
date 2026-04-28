@@ -8,5 +8,5 @@ draft, or design note promotes the idea.
 
 ## Notes
 
-- [005-theseus-wild-directions](005-theseus-wild-directions.md)
-- [010-theseus-outcome-execution-layer](010-theseus-outcome-execution-layer.md)
+- [theseus-wild-directions](theseus-wild-directions.md)
+- [theseus-outcome-execution-layer](theseus-outcome-execution-layer.md)

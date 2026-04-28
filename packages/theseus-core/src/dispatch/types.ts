@@ -16,6 +16,7 @@ import type {
   ToolOutcome,
   ToolOutputError,
 } from "../tool/index.ts";
+import type { CortexSignal } from "./cortex.ts";
 import type { ModelRequest } from "./model-gateway.ts";
 
 // ---------------------------------------------------------------------------
@@ -174,6 +175,15 @@ export interface StepResult {
 
 export type DispatchEvent =
   | { readonly _tag: "Calling"; readonly name: string; readonly iteration: number }
+  | {
+      readonly _tag: "CortexRendered";
+      readonly name: string;
+      readonly iteration: number;
+      readonly signals: ReadonlyArray<CortexSignal>;
+      readonly historyMessageCount: number;
+      readonly cortexMessageCount: number;
+      readonly promptMessageCount: number;
+    }
   | {
       readonly _tag: "Text";
       readonly name: string;

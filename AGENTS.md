@@ -81,7 +81,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 
 ## Harness Shape
 
-- The current runtime architecture is a host/world model, not the old persistent named-agent daemon model. Read `docs/03-runtime/architecture.md` before changing runtime code.
+- The current runtime architecture is a host/world model, not the old persistent named-agent daemon model. Read `docs/runtime/architecture.md` before changing runtime code.
 - Theseus is a self-editable harness, not a plugin host. Do not introduce plugin APIs, manifests, dynamic loading, generic extension registries, or marketplace-style compatibility promises unless explicitly requested.
 - Harness behavior must use explicit assembly. If behavior changes what agents see, can do, observe, decide, or auto-load, the source module introducing it must be visible in wiring, named, typed, ordered, and removable.
 
@@ -149,11 +149,11 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - Use `docs-reading` before coding or reviewing work where docs define package boundaries, runtime concepts, primitive doctrine, or product vocabulary.
 - Use `docs-management` for note moves, splits, archive handling, status changes, and navigation updates.
 - Use relative Markdown links, not Obsidian wikilinks.
-- Current truth belongs in `docs/01-direction`, `docs/02-primitives`, `docs/03-runtime`, and `docs/04-clients`.
-- Unadopted drafts and research POCs belong in `docs/05-drafts`.
-- Loose speculative ideas belong in `docs/06-brainstorms`.
-- Superseded designs belong in `docs/90-archive`.
-- Adopted or active rationale that does not fit a concept note belongs in `docs/99-design-notes`.
+- Current truth belongs in `docs/direction`, `docs/primitives`, `docs/runtime`, and `docs/clients`.
+- Unadopted drafts and research POCs belong in `docs/drafts`.
+- Loose speculative ideas belong in `docs/brainstorms`.
+- Superseded designs belong in `docs/archive`.
+- Adopted or active rationale that does not fit a concept note belongs in `docs/design-notes`.
 
 </docs>
 

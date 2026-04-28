@@ -213,6 +213,7 @@ export const runDispatchIteration = <R>({
         iteration,
       },
     });
+    yield* emit(DispatchEvents.cortexRendered(spec.name, iteration, afterCheckpoint.length, frame));
 
     const beforeCallDecision = yield* satelliteScope.beforeCall(
       { messages: frame.messages },

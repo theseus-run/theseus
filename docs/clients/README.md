@@ -6,4 +6,4 @@ Client notes describe attachable interfaces over the runtime.
 
 No active client concept notes yet.
 
-Superseded client plans live in [icarus-cli-plan](../90-archive/icarus-cli-plan.md).
+Superseded client plans live in [icarus-cli-plan](../archive/icarus-cli-plan.md).
