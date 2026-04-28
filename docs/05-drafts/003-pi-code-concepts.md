@@ -15,8 +15,8 @@ before locking its own runtime shape?
 
 Pi is useful prior art because it keeps the core agent loop small while making
 session history, context, tools, model changes, and UI events concrete. Theseus
-should translate the useful mechanics into its own [[architecture]],
-[[primitives]], [[mission-system]], and [[isolation]] model.
+should translate the useful mechanics into its own [architecture](../03-runtime/architecture.md),
+[primitives](../02-primitives/primitives.md), [mission-system](../03-runtime/mission-system.md), and [isolation](../03-runtime/isolation.md) model.
 
 References:
 
@@ -39,7 +39,7 @@ The strongest ideas are not plugin APIs. They are durable execution substrate:
 - shell execution behind a backend interface
 - operator actions that may or may not enter model context
 
-These fit Theseus better than Pi because [[mission-system]] and Capsule give them
+These fit Theseus better than Pi because [mission-system](../03-runtime/mission-system.md) and Capsule give them
 mission-level meaning.
 
 ## Adopted And Candidate Concepts
@@ -272,7 +272,7 @@ interface CommandExecutor {
 Providers can be host process, git worktree, container, microVM, cloud sandbox,
 SSH, or test fake. Tool definitions should not know which provider is active.
 
-This matches [[isolation]]: Sandbox is execution isolation, Workspace is source
+This matches [isolation](../03-runtime/isolation.md): Sandbox is execution isolation, Workspace is source
 state inside it.
 
 ### 10. Operator Actions Separate From Agent Actions

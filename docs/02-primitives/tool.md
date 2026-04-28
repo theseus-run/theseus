@@ -21,10 +21,10 @@ This note is the canonical design note for the `Tool` primitive.
 
 ## Companion notes
 
-- [[tools]] for the example tool set
-- [[tool-composition]] for toolkit assembly
-- [[tool-backends]] for implementation choices
-- [[primitives]] for the larger primitive stack
+- [tools](tools.md) for the example tool set
+- [tool-composition](tool-composition.md) for toolkit assembly
+- [tool-backends](tool-backends.md) for implementation choices
+- [primitives](primitives.md) for the larger primitive stack
 
 ## Open questions
 

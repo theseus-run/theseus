@@ -1,9 +1,13 @@
 # Crew
 
+> Status: SUPERSEDED / SCAFFOLDING — not active runtime architecture
+> Archived: 2026-04-28
+
 Reference for Theseus crew scaffolding: possible agent roster, dispatch topology,
 agent traits, and mission workflow. This is not active runtime architecture.
-Runtime doctrine lives in [[architecture]]. The mission/session model lives in
-[[mission-system]].
+Runtime doctrine lives in [architecture](../03-runtime/architecture.md). Current mission implementation lives
+in [mission-system](../03-runtime/mission-system.md). Historical mission tool names and file-backed session
+claims below are not implemented.
 
 ---
 
@@ -513,4 +517,5 @@ If a prior mission is still `active` at session start — surface it to user bef
 
 Subagents (`forge`, `crusher`, `sentinel`, etc.) have read access only. The only write path to mission state is through Theseus. Violations are permission-denied at runtime.
 
-Sessions have no tools — they are auto-managed by the runtime (see [[mission-system]]).
+Sessions have no tools in this historical plan. Current runtime does not
+implement this automatic session model.

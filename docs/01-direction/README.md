@@ -4,5 +4,5 @@ Direction notes define what Theseus is for and what constraints the system is bu
 
 ## Notes
 
-- [[goals]]
-- [[agent-comm-prior-art]]
+- [goals](goals.md)
+- [agent-comm-prior-art](agent-comm-prior-art.md)

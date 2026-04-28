@@ -31,9 +31,16 @@ export {
 
 export type {
   CopilotModelRequest,
+  CortexAuthority,
+  CortexDiff,
   CortexFrame,
+  CortexNode,
+  CortexNodeId,
   CortexRenderInput,
   CortexService,
+  CortexSignal,
+  CortexSignalId,
+  CortexSlot,
   DispatchCreate,
   DispatchError,
   DispatchEvent,
@@ -57,6 +64,9 @@ export type {
 } from "./dispatch/index.ts";
 export {
   Cortex,
+  CortexDiffs,
+  CortexSignals,
+  CortexStack,
   CurrentDispatch,
   DispatchDefaults,
   DispatchStore,

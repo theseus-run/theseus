@@ -8,8 +8,19 @@
  * Uses LanguageModel from effect/unstable/ai.
  */
 
-export type { CortexFrame, CortexRenderInput, CortexService } from "./cortex.ts";
-export { Cortex, NoopCortex } from "./cortex.ts";
+export type {
+  CortexAuthority,
+  CortexDiff,
+  CortexFrame,
+  CortexNode,
+  CortexNodeId,
+  CortexRenderInput,
+  CortexService,
+  CortexSignal,
+  CortexSignalId,
+  CortexSlot,
+} from "./cortex.ts";
+export { Cortex, CortexDiffs, CortexSignals, CortexStack, NoopCortex } from "./cortex.ts";
 // Defaults — pre-composed layer for SatelliteRing + DispatchStore
 export { DispatchDefaults } from "./defaults.ts";
 // Dispatch — full machine

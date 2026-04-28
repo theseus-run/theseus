@@ -16,7 +16,19 @@ Use this skill for Bun runtime and workspace operations.
   - `bun run lint`
   - `bun run test`
   - `bun run typecheck`
+  - `bun run effect:diagnostics`
+  - `bun run effect:ls:check`
+  - `bun run effect:ls:patch`
 - Package-local scripts exist under `packages/*/package.json`.
+
+## Root Scripts
+
+- `bun run effect:diagnostics` - Effect language-service diagnostics for configured non-web packages.
+- `bun run effect:ls:check` - check whether local TypeScript is patched for Effect diagnostics.
+- `bun run effect:ls:patch` - patch local TypeScript so Effect diagnostics surface through build-time checks.
+- `bun run lint` - Biome check.
+- `bun run test` - Bun tests.
+- `bun run typecheck` - TypeScript checks for the configured packages.
 
 ## Command Rules
 
@@ -50,4 +62,3 @@ Use this skill for Bun runtime and workspace operations.
 - Package manager or workspace changes: `bun install --frozen-lockfile` if checking lockfile integrity.
 - Cross-package TypeScript changes: `bun run typecheck`.
 - Script or runtime changes: run the relevant package script first, then root checks if the change crosses packages.
-

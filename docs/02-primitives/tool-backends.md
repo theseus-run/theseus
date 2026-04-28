@@ -1,8 +1,14 @@
 # Tool Backends — Next-Gen Alternatives Research
 
+> Status: research note, not current implementation doctrine
+> Last updated: 2026-04-28
+
 Research into whether we should build naive tool implementations (ripgrep wrapper, raw file read, bare `Bun.spawn`) or invest in better backends. Constraint: **local only, no SaaS, no API keys.** Native builds (Zig, Rust) and local servers/daemons are allowed.
 
-Companion to [[tools]] (the tool catalog). This doc covers the *how* — what backends and technologies to use for each tool.
+Companion to [tools](tools.md) (the tool catalog). This doc covers the *how* — what backends and technologies to use for each tool.
+
+Terminology note: this note uses current [Sandbox and Workspace](../03-runtime/isolation.md)
+vocabulary. Older drafts called that slot `WorkspaceContext`.
 
 ---
 
@@ -460,9 +466,15 @@ Overkill for local dev, but interesting for hosted Theseus deployments where you
 
 **Phase 1 (now):** `Bun.$` with timeout + output cap. No sandboxing. The `shell` tool contract (`Tool<I, O>`) doesn't change when we add isolation later.
 
-**Phase 2:** Sandcastle's worktree pattern for parallel agents via `WorkspaceContext`. Docker on macOS, nsjail on Linux. The tool definition stays the same; isolation wraps execution at the runtime level.
+**Phase 2:** Sandcastle's worktree pattern for parallel agents via explicit
+Sandbox/Workspace wiring. Docker on macOS, nsjail on Linux. The tool definition
+stays the same; isolation wraps execution at the runtime level.
 
-**The key design decision:** Sandboxing is a runtime concern, not a tool concern. Our `shell` tool is `{ name: "shell", safety: "destructive", capabilities: ["shell.exec"] }`. The runtime decides whether to execute it bare, in a container, or in a microVM. `WorkspaceContext` is already the slot for this.
+**The key design decision:** Sandboxing is a runtime concern, not a tool concern.
+Our `shell` tool is `{ name: "shell", safety: "destructive", capabilities:
+["shell.exec"] }`. The runtime decides whether to execute it bare, in a
+container, or in a microVM. Sandbox/Workspace identity is the current conceptual
+slot for this.
 
 ---
 
@@ -546,7 +558,7 @@ The model doesn't need to *see* the code to know *where* it is. It needs to see 
 
 ## Structural Search/Replace — GritQL, ast-grep, Comby
 
-This is a category we didn't cover in [[tools]] and it changes the picture for `search_replace` and `grep`. Instead of text matching (exact string, regex), structural tools match against the AST — they understand code structure.
+This is a category we didn't cover in [tools](tools.md) and it changes the picture for `search_replace` and `grep`. Instead of text matching (exact string, regex), structural tools match against the AST — they understand code structure.
 
 ### The Design Space
 
@@ -684,7 +696,7 @@ Not AST-aware — matches structural patterns without parsing. This means it wor
 
 **ripgrep `--json` note:** The `--json` flag outputs one JSON object per line. Match objects have `{type: "match", data: {path: {text}, lines: {text}, line_number, ...}}`. Combined with `--max-count`, `--sort modified`, `--glob`, we get a fully structured grep from one subprocess call. No stdout parsing.
 
-### Phase 2 — Plug In Later (MCP + WorkspaceContext)
+### Phase 2 — Plug In Later (MCP + Sandbox/Workspace)
 
 | Capability | Solution | Interface |
 |---|---|---|
@@ -692,8 +704,8 @@ Not AST-aware — matches structural patterns without parsing. This means it wor
 | Semantic search | Codemogger (ships own embedding model) or Context+ (Ollama) | MCP tools |
 | Blast radius | Context+ spectral clustering | MCP tools |
 | Repo map | Aider-style PageRank + tree-sitter, inject into system prompt | Session-level, not a tool |
-| Parallel isolation | Sandcastle pattern (Docker + worktree) via WorkspaceContext | Runtime concern, not tool concern |
-| Hard sandboxing | nsjail (Linux) / Docker (macOS) wrapping `Bun.$` | Runtime concern via WorkspaceContext |
+| Parallel isolation | Sandcastle pattern (Docker + worktree) via Sandbox/Workspace | Runtime concern, not tool concern |
+| Hard sandboxing | nsjail (Linux) / Docker (macOS) wrapping `Bun.$` | Runtime concern via Sandbox/Workspace |
 | Structural search/replace | ast-grep CLI or MCP server | Optional `Tool<I, O>`, model chooses text vs structural |
 
 ### What NOT to Build Into Core
@@ -702,7 +714,7 @@ Not AST-aware — matches structural patterns without parsing. This means it wor
 |---|---|
 | Trigram/inverted index | codedb does this better than we would. Use as MCP when needed. |
 | Embedding infrastructure | Too much infra (Ollama + vector store). MCP slot via Codemogger/Context+. |
-| Docker/VM sandbox | Deferred to WorkspaceContext. Tool contract doesn't change. |
+| Docker/VM sandbox | Deferred to Sandbox/Workspace wiring. Tool contract doesn't change. |
 | Full LSP suite | Start with `find_references` only. Expand if needed. |
 | Custom search engine | ripgrep + structured output formatting covers 80%. Indexed search via MCP for the rest. |
 

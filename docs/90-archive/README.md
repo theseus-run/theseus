@@ -4,5 +4,7 @@ Archived notes are kept for design archaeology. They are not active doctrine.
 
 ## Notes
 
-- [[persistent-agent-runtime]]
-- [[semantic-harness]]
+- [crew-scaffolding](crew-scaffolding.md)
+- [icarus-cli-plan](icarus-cli-plan.md)
+- [persistent-agent-runtime](persistent-agent-runtime.md)
+- [semantic-harness](semantic-harness.md)

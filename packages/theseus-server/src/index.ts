@@ -30,6 +30,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { ServerConfig, ServerConfigLive } from "./config.ts";
+import { RootAgentsMdCortexNode } from "./cortex/agents-md.ts";
 import { ServerEnvLive } from "./env.ts";
 import { HandlersLive } from "./handlers.ts";
 import { researchGruntBlueprint } from "./poc/research.ts";
@@ -67,6 +68,7 @@ const PersistentDispatchStore = Layer.provide(SqliteDispatchStore, DbLive);
 
 // Satellite middleware
 const RingLive = Satellite.DefaultSatelliteRing;
+const CortexLive = Dispatch.CortexStack([RootAgentsMdCortexNode(workspace)]);
 
 // RPC server layer — registers WebSocket endpoint at /rpc on the HttpRouter
 const RpcLayer = RpcServer.layerHttp({
@@ -98,7 +100,7 @@ const LanguageModelGatewayLive = Layer.provide(
 );
 
 const ServicesLayer = Layer.mergeAll(
-  Dispatch.NoopCortex,
+  CortexLive,
   LanguageModelGatewayLive,
   PersistentDispatchStore,
   RingLive,

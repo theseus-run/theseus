@@ -77,7 +77,7 @@ Do not lock runtime contracts to Docker Sandboxes, Sandcastle, Vercel Sandbox,
 E2B, Daytona, Modal, Podman, or git worktrees. Those are candidate providers.
 The doctrine is provider-shaped isolation with explicit static wiring.
 
-See [[isolation]].
+See [isolation](isolation.md).
 
 ## Explicit Assembly
 

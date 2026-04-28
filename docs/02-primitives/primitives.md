@@ -82,8 +82,8 @@ The ordered world-interaction policy is `policy.interaction`:
 - `write`
 - `write_destructive`
 
-See [[tool]] for canonical Tool doctrine, [[tools]] for example tool sets, and
-[[tool-composition]] for assembly/filtering.
+See [tool](tool.md) for canonical Tool doctrine, [tools](tools.md) for example tool sets, and
+[tool-composition](tool-composition.md) for assembly/filtering.
 
 ## Capsule
 
@@ -173,7 +173,7 @@ The runtime host is not a sixth primitive. It composes primitives into live work
 through commands, controls, queries, systems, sinks, projections, stores,
 catalogs, and active handles.
 
-See [[architecture]] for current runtime doctrine.
+See [architecture](../03-runtime/architecture.md) for current runtime doctrine.
 
 Sandbox and Workspace are runtime/harness concepts that may become stable
 contracts, but they do not currently replace the primitive floor. Sandbox is

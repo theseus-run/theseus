@@ -144,7 +144,7 @@ all require the same ceremony. Structure scales with risk and ambiguity.
 - Not a chatbot
 - Not a one-LLM-per-request system
 - Not tied to a fixed agent roster
-- Not opinionated about isolation strategy (deferred — WorkspaceContext is opaque)
+- Not locked to one isolation provider; current doctrine separates Sandbox and Workspace
 - Not a one-stop binary
 - Not a replacement for existing systems of record
 
@@ -178,7 +178,7 @@ source model is stable.
 
 The extension model is source evolution:
 
-- need stricter dispatch policy: add or change a [[primitives|Satellite]]
+- need stricter dispatch policy: add or change a [Satellite](../02-primitives/primitives.md)
 - need a minimap of touched files: add a runtime system, durable events, and a
   projection
 - need a new audit channel: add a sink
@@ -192,7 +192,7 @@ ownership, durable event seams, static wiring, and focused tests.
 Do not build plugin manifests, dynamic loading, extension marketplaces, generic
 plugin lifecycle hooks, or compatibility layers unless explicitly scheduled.
 
-Related research notes:
+Related design notes:
 
-- [[theseus-outcome-execution-layer]]
-- [[002-self-editable-harness]]
+- [010-theseus-outcome-execution-layer](../06-brainstorms/010-theseus-outcome-execution-layer.md)
+- [002-self-editable-harness](../99-design-notes/002-self-editable-harness.md)

@@ -4,8 +4,9 @@ Primitive notes define the publishable core abstractions.
 
 ## Notes
 
-- [[primitives]] — stack overview
-- [[tool]] — canonical tool primitive note
-- [[tools]] — example toolset and catalog
-- [[tool-composition]] — how tools are assembled and filtered
-- [[tool-backends]] — backend choices for concrete tools
+- [primitives](primitives.md) — stack overview
+- [agent-comm](agent-comm.md) — current actor-to-actor protocol design and implemented core surface
+- [tool](tool.md) — canonical tool primitive note
+- [tools](tools.md) — tool-system research plus current concrete tool list
+- [tool-composition](tool-composition.md) — proposed tool assembly/filtering design
+- [tool-backends](tool-backends.md) — backend research for concrete tools

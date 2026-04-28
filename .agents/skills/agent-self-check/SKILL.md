@@ -18,7 +18,27 @@ Treat lint, type, language-service, and test failures as prompts attached to exa
 3. Load any skill named by the diagnostic message.
 4. Fix the source pattern, not only the immediate line.
 5. Re-run the failed check.
-6. If the same class of mistake appears repeatedly, ask whether it can be caught deterministically.
+6. Self-review the changed code for agent-shaped leftovers and weak modeling.
+7. If the same class of mistake appears repeatedly, ask whether it can be caught deterministically.
+
+## Self-Review Pass
+
+Before finalizing code changes, inspect the diff as if reviewing another agent's work.
+
+Fix these directly when they are in your changed code:
+
+- closed protocol/domain/state handling written as if/else return soup instead of exhaustive `Match` or `switch` with a `never` check
+- boolean matrices where a discriminated union or explicit state machine would make the state space clear
+- optional/default soup: scattered `options?.x`, `x ?? fallback`, conditional object spreads, or defaults repeated inside function bodies instead of one boundary normalizer
+- unsupported internal variants hidden behind fallback/default branches instead of failing loudly
+- repeated exported `_tag` object literals that should use named constructors
+- raw `string` IDs crossing package, persistence, tool, RPC, dispatch, or mission boundaries where a branded/schema-backed ID is expected
+- broad `Record<string, unknown>` values flowing past ingress without schema decoding or an explicit extension point
+- constructors/builders that perform I/O, allocate runtime resources, read config, call providers, or start fibers
+- large mixed modules, stale aliases, compatibility wrappers, empty stubs, or old/new parallel paths left by the change
+- missing focused tests for new runtime behavior, service behavior, boundary translation, constructors with defaults, or changed protocol variants
+
+Do not preserve bad code because checks pass. If a cleanup may change public behavior or compatibility, stop and report it instead of deleting it silently.
 
 ## Rule Escalation
 
@@ -45,3 +65,4 @@ Before final response:
 - report which checks ran
 - report failures that remain and why
 - do not claim a check passed unless it was run after the final relevant edit
+- report any self-review concerns you intentionally deferred

@@ -189,6 +189,7 @@ describe("dispatch loop", () => {
       Cortex.of({
         render: ({ history }) =>
           Effect.succeed({
+            signals: [],
             messages: [{ role: "system", content: "cortex-instruction" } as const, ...history],
           }),
       }),

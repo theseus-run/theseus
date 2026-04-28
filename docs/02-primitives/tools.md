@@ -1,8 +1,30 @@
 # Tools — The Agent's Hands
 
+> Status: research note with current implementation snapshot
+> Last updated: 2026-04-28
+
 What tools should a coding agent have? We studied six production systems — opencode, Claude Code, Cursor, Aider, SWE-agent, and Codex CLI — to find the minimal set that makes an agent genuinely useful. This document is the result: a tiered catalog with design notes, rationale, and cross-system comparison.
 
 The short answer: **6 irreducible tools** (`read_file`, `list_dir`, `search_replace`, `shell`, `grep`, `glob`), **3 high-leverage additions** (`write_file`, `multi_edit`, `web_fetch`), and a few scaffolding tools that will thin as models improve. Everything else is either covered by shell or better served by MCP.
+
+## Current Implementation
+
+Concrete first-party tools currently live in `packages/theseus-tools/src`.
+
+Implemented today:
+
+- `read_file`
+- `write_file`
+- `search_replace`
+- `list_dir`
+- `glob`
+- `grep`
+- `shell`
+- `outline`
+
+There is no first-party `multi_edit` or `web_fetch` tool in this package today.
+Tool selection for runtime dispatch goes through `ToolCatalog` in
+`packages/theseus-runtime/src/tool-catalog.ts`.
 
 ---
 
@@ -312,7 +334,9 @@ Design:
 
 **Why destructive, not write.** Shell can do anything — `rm -rf /`, `git push --force`, `curl -X DELETE`. The capability is `shell.exec` so it can be filtered out of read-only toolsets entirely via `toolsWithoutCapability`.
 
-**Sandboxing.** Deferred to WorkspaceContext. The tool contract doesn't change — sandboxing wraps the execution, not the tool definition. Codex CLI demonstrates this: swap `Bun.spawn` → `docker exec` and the tool interface stays identical.
+**Sandboxing.** Deferred to runtime Sandbox/Workspace wiring. The tool contract
+doesn't change; isolation wraps execution rather than changing the tool
+definition.
 
 Cross-system comparison:
 - Claude Code: 2-minute timeout, background execution supported, explicit restrictions on file operations

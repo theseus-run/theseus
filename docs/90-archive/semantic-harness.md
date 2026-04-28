@@ -1,10 +1,10 @@
 # Semantic Coding Harness
 
-> Status: SUPERSEDED — see [[architecture]] § Coding Harness  
-> Last updated: 2026-03-18  
->  
-> The SemanticStore and semantic patch format were dropped after analysis:  
-> SEARCH/REPLACE + TS Language Service (in-process) covers the same ground  
+> Status: SUPERSEDED — see [architecture](../03-runtime/architecture.md) § Coding Harness
+> Last updated: 2026-03-18
+>
+> The SemanticStore and semantic patch format were dropped after analysis:
+> SEARCH/REPLACE + TS Language Service (in-process) covers the same ground
 > with far less implementation surface. This doc is kept for design archaeology only.
 
 ---

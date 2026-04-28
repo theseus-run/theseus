@@ -1,5 +1,8 @@
 # Agent-Comm Protocol Design Intent
 
+> Status: draft design with partial implementation
+> Last updated: 2026-04-28
+
 Agent-comm is the protocol layer for actor-to-actor coordination in Theseus.
 
 It is not a prompt trick, not a UI format, and not raw dispatch. It exists because independent actors need a reliable way to receive orders, acknowledge intent, operate under authority, report status, fail cleanly, and return evidence-backed results.
@@ -7,6 +10,31 @@ It is not a prompt trick, not a UI format, and not raw dispatch. It exists becau
 The protocol is inspired by military and medical communication patterns because those domains are battle-tested under uncertainty, fatigue, partial information, high stakes, and noisy handoffs. Theseus does not copy their surface ceremony blindly; it borrows the durable principles: clarity, accountability, scoped authority, explicit failure channels, evidence, and reconstructable history.
 
 This document is intent-level. It should not freeze packet schemas or TypeScript shapes before real usage proves them. The design must stay extensible and steerable.
+
+## Current Implementation
+
+The implemented core surface lives under `@theseus.run/core/AgentComm`.
+
+Current exports include:
+
+- `dispatchGruntTool`
+- `report`
+- `DispatchGruntLauncher`
+- `DispatchGruntFailed`
+- `ProtocolEnvelopeSchema`
+- `OrderSchema`
+- `DispatchGruntInputSchema`
+- `ReportSchema`
+- `DispatchGruntResultSchema`
+- `SalvageSchema`
+
+Runtime wires `DispatchGruntLauncher` in `packages/theseus-runtime` so a running
+dispatch can launch a child dispatch as a `delegated` work node. The child gets
+the current mission id, capsule id, parent work node id, and parent dispatch id.
+
+Only a narrow task/report path is implemented today. Acknowledgement, amendment,
+abort, status query, human actor packets, external transport packets, and
+capability-card routing remain design direction.
 
 ## Core Principle
 
