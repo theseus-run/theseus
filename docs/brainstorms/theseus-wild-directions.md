@@ -1,3 +1,10 @@
+---
+status: brainstorm
+owner: brainstorms
+kind: brainstorm
+updated: 2026-04-28
+---
+
 # Theseus Wild Directions
 
 > Status: brainstorm

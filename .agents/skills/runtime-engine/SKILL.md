@@ -15,7 +15,7 @@ Layer/service wiring.
 
 ## Read First
 
-- `docs/03-runtime/architecture.md`
+- `docs/runtime/architecture.md`
 - `packages/theseus-runtime/package.json`
 - `packages/theseus-runtime/src/index.ts`
 - `packages/theseus-runtime/src/live.ts`
@@ -33,7 +33,7 @@ Then read only the relevant slice:
 - active handles: `src/registry.ts`
 - tool catalog hydration: `src/tool-catalog.ts`
 - durable state: `src/store/`
-- isolation doctrine: `docs/03-runtime/isolation.md`
+- isolation doctrine: `docs/runtime/isolation.md`
 
 ## Current Model
 

@@ -77,8 +77,8 @@ Do not use this skill for web-only `packages/icarus-web` work unless the user ex
 
 - Keep package and primitive barrels thin. They should expose the public surface, not contain runtime behavior.
 - Prefer direct namespace imports from primitive barrels over root catch-all imports in examples and public docs.
-- Do not add compatibility exports, duplicate old/new paths, or alias layers unless the user explicitly requires back compatibility.
-- When replacing a public path without back compatibility, remove stale exports, comments, tests, and docs in the same pass when feasible.
+- During authorized refactors/replacements, do not add compatibility exports, duplicate old/new paths, or alias layers unless the user explicitly requires back compatibility.
+- When an authorized replacement removes a public path without back compatibility, remove stale exports, comments, tests, and docs in the same pass when feasible.
 - Match `package.json` exports, TypeScript path aliases, and source entrypoints.
 
 ## Review Checklist

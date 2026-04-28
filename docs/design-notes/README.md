@@ -1,3 +1,10 @@
+---
+status: active-rationale
+owner: design-notes
+kind: rationale
+updated: 2026-04-28
+---
+
 # Design Notes
 
 Design notes capture adopted or active rationale that should remain easy to

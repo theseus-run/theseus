@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Drafts
 
 Draft notes are useful design or research work that is not active doctrine and

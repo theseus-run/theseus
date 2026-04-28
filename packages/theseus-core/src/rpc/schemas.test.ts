@@ -15,6 +15,31 @@ const dispatchControl = {
 } as const;
 
 describe("DispatchEventSchema", () => {
+  test("preserves CortexRendered frame metadata on the wire", async () => {
+    const event = {
+      _tag: "CortexRendered",
+      name: "runner",
+      iteration: 1,
+      signals: [
+        {
+          id: "root-agents-md:AGENTS.md",
+          nodeId: "root-agents-md",
+          slot: "workspace",
+          authority: "developer",
+          priority: 0,
+          text: "Follow workspace rules.",
+        },
+      ],
+      historyMessageCount: 2,
+      cortexMessageCount: 1,
+      promptMessageCount: 3,
+    } as const;
+
+    await expect(
+      Effect.runPromise(Schema.decodeUnknownEffect(DispatchEventSchema)(event)),
+    ).resolves.toEqual(event);
+  });
+
   test("preserves ToolResult isError on the wire", async () => {
     const decoded = await Effect.runPromise(
       Schema.decodeUnknownEffect(DispatchEventSchema)({

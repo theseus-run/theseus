@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Design Note 003: Pi Code Concepts Worth Lifting
 
 > Status: draft

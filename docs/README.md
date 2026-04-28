@@ -1,3 +1,10 @@
+---
+status: current
+owner: docs
+kind: index
+updated: 2026-04-28
+---
+
 # Theseus Docs
 
 This `docs/` directory is the Theseus Obsidian vault.
@@ -12,6 +19,7 @@ This `docs/` directory is the Theseus Obsidian vault.
 - `brainstorms/` — loose speculative ideas
 - `archive/` — superseded designs kept for archaeology
 - `design-notes/` — adopted or active rationale that does not belong in a concept note
+- `maps/` — navigation maps for humans and coding agents
 
 ## Start Here
 
@@ -23,6 +31,7 @@ This `docs/` directory is the Theseus Obsidian vault.
 - [Brainstorms](brainstorms/README.md)
 - [Archive](archive/README.md)
 - [Design Notes](design-notes/README.md)
+- [Maps](maps/README.md)
 
 ## Conventions
 
@@ -31,3 +40,4 @@ This `docs/` directory is the Theseus Obsidian vault.
 - Current truth belongs in `direction/`, `primitives/`, `runtime/`, and `clients/`; drafts in `drafts/`; loose ideas in `brainstorms/`.
 - Move superseded designs to `archive/` instead of deleting them.
 - Keep stable doctrine in the concept note; put time-bound reasoning in `design-notes/`.
+- Run `bun run docs:check` after docs moves or link edits.

@@ -1,3 +1,10 @@
+---
+status: brainstorm
+owner: brainstorms
+kind: brainstorm
+updated: 2026-04-28
+---
+
 # Theseus as an outcome execution layer
 
 Status: brainstorm note, not a design spec.

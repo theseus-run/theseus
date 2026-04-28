@@ -23,6 +23,7 @@ docs/
   brainstorms/        loose speculative ideas
   archive/            superseded designs kept for archaeology
   design-notes/       adopted or active rationale that does not fit a concept note
+  maps/               navigation maps for humans and coding agents
 ```
 
 Default placement:
@@ -32,6 +33,7 @@ Default placement:
 - deliberately wild or unvalidated ideation: `brainstorms`
 - superseded history: `archive`
 - adopted time-bound rationale: `design-notes`
+- navigation over existing docs: `maps`
 
 Do not leave stray top-level folders under `docs/`.
 
@@ -96,7 +98,7 @@ Useful checks:
 
 ```sh
 rg -n "\\[\\[" docs
-bun -e '<small link checker or equivalent>'
+bun run docs:check
 ```
 
 ## Preservation Rule

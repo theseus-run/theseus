@@ -2,6 +2,7 @@
  * Runtime workbench — single-root operator playground.
  */
 
+import { Match } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
@@ -15,6 +16,7 @@ import { StatusMark } from "@/components/ui/status-mark";
 import { Token } from "@/components/ui/token";
 import { client } from "@/lib/client";
 import type {
+  CortexSignal,
   DispatchEvent,
   DispatchEventEntry,
   DispatchSession,
@@ -55,6 +57,22 @@ interface WorkbenchState {
 type InspectorSelection =
   | { readonly _tag: "mission"; readonly missionId: string }
   | { readonly _tag: "node"; readonly workNodeId: string };
+
+type CortexPanelState =
+  | { readonly _tag: "Loading" }
+  | { readonly _tag: "NoDispatchSelected" }
+  | { readonly _tag: "Empty" }
+  | { readonly _tag: "Ready"; readonly events: ReadonlyArray<DispatchEventEntry> };
+
+const CortexPanelStates = {
+  loading: (): CortexPanelState => ({ _tag: "Loading" }),
+  noDispatchSelected: (): CortexPanelState => ({ _tag: "NoDispatchSelected" }),
+  empty: (): CortexPanelState => ({ _tag: "Empty" }),
+  ready: (events: ReadonlyArray<DispatchEventEntry>): CortexPanelState => ({
+    _tag: "Ready",
+    events,
+  }),
+};
 
 const defaultGoal = "Ask a research grunt to inspect this repository and report what it is.";
 
@@ -102,6 +120,8 @@ const eventLine = (event: DispatchEvent): string => {
   switch (event._tag) {
     case "Calling":
       return `calling iteration ${event.iteration ?? "?"}`;
+    case "CortexRendered":
+      return `cortex ${event.signals?.length ?? 0} signals / ${event.promptMessageCount ?? 0} prompt messages`;
     case "Text":
       return event.content ?? "";
     case "Thinking":
@@ -139,6 +159,27 @@ const reportFromEvents = (events: ReadonlyArray<DispatchEventEntry>): ReportPack
 
 const finalTextFromEvents = (events: ReadonlyArray<DispatchEventEntry>): string | undefined =>
   [...events].reverse().find((entry) => entry.event._tag === "Done")?.event.result?.content;
+
+const cortexEventsFromTranscript = (
+  transcript: DispatchTranscript | undefined,
+): ReadonlyArray<DispatchEventEntry> =>
+  transcript?.events.filter((entry) => entry.event._tag === "CortexRendered") ?? [];
+
+const cortexPanelState = (input: {
+  readonly initializing: boolean;
+  readonly node: WorkNodeSession | undefined;
+  readonly dispatch: DispatchSession | undefined;
+  readonly events: ReadonlyArray<DispatchEventEntry>;
+}): CortexPanelState =>
+  Match.value(input).pipe(
+    Match.when(
+      ({ initializing, node }) => initializing && node === undefined,
+      CortexPanelStates.loading,
+    ),
+    Match.when(({ dispatch }) => dispatch === undefined, CortexPanelStates.noDispatchSelected),
+    Match.when(({ events }) => events.length === 0, CortexPanelStates.empty),
+    Match.orElse(({ events }) => CortexPanelStates.ready(events)),
+  );
 
 const modelLabel = (session: DispatchSession | undefined): string =>
   session?.modelRequest == null
@@ -357,6 +398,12 @@ export function MissionListPage() {
           />
           <InspectorPanel
             mission={selectedMission}
+            node={selectedNode}
+            dispatches={state.dispatches}
+            transcripts={state.transcripts}
+            initializing={initializing}
+          />
+          <CortexPanel
             node={selectedNode}
             dispatches={state.dispatches}
             transcripts={state.transcripts}
@@ -692,5 +739,93 @@ function DispatchLog({ transcript }: { readonly transcript: DispatchTranscript |
         )}
       </div>
     </section>
+  );
+}
+
+function CortexPanel({
+  node,
+  dispatches,
+  transcripts,
+  initializing,
+}: {
+  readonly node: WorkNodeSession | undefined;
+  readonly dispatches: ReadonlyArray<DispatchSession>;
+  readonly transcripts: ReadonlyArray<DispatchTranscript>;
+  readonly initializing: boolean;
+}) {
+  const dispatch = dispatches.find((candidate) => candidate.workNodeId === node?.workNodeId);
+  const transcript = transcripts.find((candidate) => candidate.dispatchId === dispatch?.dispatchId);
+  const cortexEvents = cortexEventsFromTranscript(transcript);
+  const viewState = cortexPanelState({ initializing, node, dispatch, events: cortexEvents });
+
+  return (
+    <aside className="min-h-0 overflow-auto">
+      <Panel className="min-h-full">
+        <PanelHeader>
+          <PanelTitle>Cortex</PanelTitle>
+        </PanelHeader>
+        <PanelBody>{renderCortexPanelState(viewState)}</PanelBody>
+      </Panel>
+    </aside>
+  );
+}
+
+const renderCortexPanelState = (state: CortexPanelState) =>
+  Match.value(state).pipe(
+    Match.tag("Loading", () => (
+      <div className="field text-muted-foreground">-- loading cortex --</div>
+    )),
+    Match.tag("NoDispatchSelected", () => (
+      <div className="field text-muted-foreground">-- select a dispatch node --</div>
+    )),
+    Match.tag("Empty", () => (
+      <div className="field text-muted-foreground">-- no cortex frames --</div>
+    )),
+    Match.tag("Ready", ({ events }) => (
+      <div className="field rhythm">
+        {events.map((entry) => (
+          <CortexFrameView key={eventKey(entry)} event={entry.event} />
+        ))}
+      </div>
+    )),
+    Match.exhaustive,
+  );
+
+function CortexFrameView({ event }: { readonly event: DispatchEvent }) {
+  const signals = event.signals ?? [];
+  return (
+    <section className="dashboard-note">
+      <div className="flex flex-wrap items-baseline justify-between gap-[1ch]">
+        <p className="eyebrow">iteration {event.iteration ?? "?"}</p>
+        <div className="flex flex-wrap gap-[1ch]">
+          <Token>{signals.length} signals</Token>
+          <Token>{event.cortexMessageCount ?? 0} cortex msg</Token>
+          <Token>{event.promptMessageCount ?? 0} prompt msg</Token>
+        </div>
+      </div>
+      <div className="mt-[calc(var(--lh)/2)] grid gap-[calc(var(--lh)/2)]">
+        {signals.length === 0 ? (
+          <div className="text-muted-foreground">-- no cortex signals --</div>
+        ) : (
+          signals.map((signal) => <CortexSignalView key={signal.id} signal={signal} />)
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CortexSignalView({ signal }: { readonly signal: CortexSignal }) {
+  return (
+    <div className="cortex-signal">
+      <div className="flex flex-wrap items-baseline gap-[1ch]">
+        <Token>{signal.slot}</Token>
+        <Token>{signal.authority}</Token>
+        <span className="text-muted-foreground">{signal.nodeId}</span>
+        <span className="text-muted-foreground">p{signal.priority}</span>
+      </div>
+      <pre className="payload-block mt-[calc(var(--lh)/2)] max-h-[calc(var(--lh)*10)] overflow-auto">
+        {signal.text}
+      </pre>
+    </div>
   );
 }

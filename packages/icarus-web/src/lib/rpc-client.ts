@@ -19,7 +19,14 @@ import * as Socket from "effect/unstable/socket/Socket";
 export interface CortexSignal {
   readonly id: string;
   readonly nodeId: string;
-  readonly slot: "harness" | "workspace" | "mission" | "work-node" | "observations" | "history" | "recall";
+  readonly slot:
+    | "harness"
+    | "workspace"
+    | "mission"
+    | "work-node"
+    | "observations"
+    | "history"
+    | "recall";
   readonly authority: "system" | "developer" | "user" | "assistant" | "tool";
   readonly priority: number;
   readonly text: string;

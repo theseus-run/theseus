@@ -1,3 +1,10 @@
+---
+status: active-rationale
+owner: design-notes
+kind: rationale
+updated: 2026-04-28
+---
+
 # Design Note 002: Self-Editable Harness
 
 > Status: active rationale

@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Design Note 001: Thinking Telemetry Satellite
 
 **Date**: 2026-04-13

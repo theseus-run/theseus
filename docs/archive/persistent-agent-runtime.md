@@ -1,3 +1,10 @@
+---
+status: archived
+owner: archive
+kind: archive
+updated: 2026-04-28
+---
+
 # Persistent Agent Runtime
 
 > Status: SUPERSEDED — see [architecture](../runtime/architecture.md)

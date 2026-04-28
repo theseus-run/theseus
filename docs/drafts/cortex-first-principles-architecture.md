@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Cortex first-principles architecture
 
 Status: conceptual research note, not final design.

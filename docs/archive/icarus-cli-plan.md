@@ -1,3 +1,10 @@
+---
+status: archived
+owner: archive
+kind: archive
+updated: 2026-04-28
+---
+
 # Icarus CLI Plan
 
 > Status: SUPERSEDED — see [architecture](../runtime/architecture.md)

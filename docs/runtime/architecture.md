@@ -1,3 +1,10 @@
+---
+status: current
+owner: runtime
+kind: concept
+updated: 2026-04-28
+---
+
 # Runtime Architecture
 
 > Status: active doctrine

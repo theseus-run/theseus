@@ -1,3 +1,10 @@
+---
+status: current
+owner: clients
+kind: index
+updated: 2026-04-28
+---
+
 # Clients
 
 Client notes describe attachable interfaces over the runtime.

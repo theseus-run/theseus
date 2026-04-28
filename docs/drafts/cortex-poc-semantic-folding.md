@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Cortex POC: semantic folding of bounded spans
 
 Status: POC note, not final design.

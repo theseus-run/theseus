@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Design Note 004: Cortex, Dispatch, And Satellite Seam
 
 > Status: draft

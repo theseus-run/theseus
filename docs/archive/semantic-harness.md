@@ -1,3 +1,10 @@
+---
+status: archived
+owner: archive
+kind: archive
+updated: 2026-04-28
+---
+
 # Semantic Coding Harness
 
 > Status: SUPERSEDED — see [architecture](../runtime/architecture.md) § Coding Harness

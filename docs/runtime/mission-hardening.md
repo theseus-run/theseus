@@ -1,3 +1,10 @@
+---
+status: draft
+owner: runtime
+kind: draft
+updated: 2026-04-28
+---
+
 # Mission Hardening
 
 Mission hardening is the phase that turns messy human intent into something Theseus can safely act on.

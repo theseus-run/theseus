@@ -14,8 +14,9 @@ implemented truth.
 Always start with:
 
 1. `docs/README.md`
-2. the section README for the package or concept you are touching
-3. the nearest current concept note in `direction`, `primitives`, `runtime`,
+2. `docs/maps/coding-agent-reading-map.md`
+3. the section README for the package or concept you are touching
+4. the nearest current concept note in `direction`, `primitives`, `runtime`,
    or `clients`
 
 Then read source code and tests. Docs guide what to inspect; code proves what

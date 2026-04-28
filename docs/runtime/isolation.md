@@ -1,3 +1,10 @@
+---
+status: current
+owner: runtime
+kind: concept
+updated: 2026-04-28
+---
+
 # Isolation And Workspaces
 
 > Status: active doctrine

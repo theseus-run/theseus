@@ -203,7 +203,11 @@ body {
 
 @media (min-width: 1120px) {
   .workbench-grid {
-    grid-template-columns: minmax(22rem, 0.85fr) minmax(0, 1.45fr) minmax(25rem, 1fr);
+    grid-template-columns:
+      minmax(18rem, 0.78fr)
+      minmax(0, 1.22fr)
+      minmax(22rem, 1fr)
+      minmax(22rem, 1fr);
   }
 }
 
@@ -367,6 +371,16 @@ body {
 .dashboard-signal-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+.cortex-signal {
+  border-top: var(--border) dashed var(--color-border);
+  padding-top: calc(var(--lh) / 2);
+}
+
+.cortex-signal:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .dashboard-signal-symbol {

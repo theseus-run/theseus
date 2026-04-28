@@ -1,3 +1,10 @@
+---
+status: current
+owner: primitives
+kind: research
+updated: 2026-04-28
+---
+
 # Tool Backends — Next-Gen Alternatives Research
 
 > Status: research note, not current implementation doctrine

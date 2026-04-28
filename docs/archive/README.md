@@ -1,3 +1,10 @@
+---
+status: archived
+owner: archive
+kind: archive
+updated: 2026-04-28
+---
+
 # Archive
 
 Archived notes are kept for design archaeology. They are not active doctrine.

@@ -216,12 +216,23 @@ describe("dispatch loop", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const handle = yield* dispatch<never>(spec, "do it");
-        return yield* handle.result;
+        const eventsFiber = yield* handle.events.pipe(Stream.runCollect, Effect.forkChild);
+        const output = yield* handle.result;
+        const events = yield* Fiber.join(eventsFiber);
+        return { output, events: Array.from(events) };
       }).pipe(Effect.provide(layer)),
     );
 
-    expect(result.content).toBe("done");
+    expect(result.output.content).toBe("done");
     expect(stringifyPrompt(prompts[0])).toContain("cortex-instruction");
+    expect(result.events.find((event) => event._tag === "CortexRendered")).toMatchObject({
+      _tag: "CortexRendered",
+      name: "runner",
+      iteration: 0,
+      historyMessageCount: 2,
+      cortexMessageCount: 1,
+      promptMessageCount: 3,
+    });
   });
 
   test("executes tool calls sequentially in model order", async () => {

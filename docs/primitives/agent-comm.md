@@ -1,3 +1,10 @@
+---
+status: current
+owner: primitives
+kind: concept
+updated: 2026-04-28
+---
+
 # Agent-Comm Protocol Design Intent
 
 > Status: draft design with partial implementation

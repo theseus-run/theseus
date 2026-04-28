@@ -1,3 +1,10 @@
+---
+status: archived
+owner: archive
+kind: archive
+updated: 2026-04-28
+---
+
 # Crew
 
 > Status: SUPERSEDED / SCAFFOLDING — not active runtime architecture

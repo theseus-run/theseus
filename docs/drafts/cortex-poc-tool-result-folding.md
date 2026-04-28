@@ -1,3 +1,10 @@
+---
+status: draft
+owner: drafts
+kind: draft
+updated: 2026-04-28
+---
+
 # Cortex POC: tool-result folding with recall
 
 Status: POC note, not final design.

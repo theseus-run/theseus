@@ -1,3 +1,10 @@
+---
+status: brainstorm
+owner: brainstorms
+kind: brainstorm
+updated: 2026-04-28
+---
+
 # Brainstorms
 
 Brainstorm notes are intentionally loose. They may contain product imagery,

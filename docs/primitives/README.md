@@ -1,3 +1,10 @@
+---
+status: current
+owner: primitives
+kind: index
+updated: 2026-04-28
+---
+
 # Primitives
 
 Primitive notes define the publishable core abstractions.

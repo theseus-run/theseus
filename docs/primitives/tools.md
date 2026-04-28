@@ -1,3 +1,10 @@
+---
+status: current
+owner: primitives
+kind: research
+updated: 2026-04-28
+---
+
 # Tools — The Agent's Hands
 
 > Status: research note with current implementation snapshot

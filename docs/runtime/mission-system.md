@@ -1,3 +1,10 @@
+---
+status: current
+owner: runtime
+kind: implementation
+updated: 2026-04-28
+---
+
 # Mission System
 
 > Status: current implementation

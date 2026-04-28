@@ -1,3 +1,10 @@
+---
+status: current
+owner: primitives
+kind: concept
+updated: 2026-04-28
+---
+
 # Tool
 
 > Status: draft

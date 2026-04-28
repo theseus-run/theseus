@@ -1,3 +1,10 @@
+---
+status: current
+owner: direction
+kind: concept
+updated: 2026-04-28
+---
+
 # Theseus — Goals
 
 > Status: active direction

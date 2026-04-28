@@ -144,7 +144,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 
 ## Documentation
 
-`docs/` is an Obsidian vault, not a generated docs site.
+`docs/` is an Obsidian-readable docs vault, not a generated docs site.
 
 - Use `docs-reading` before coding or reviewing work where docs define package boundaries, runtime concepts, primitive doctrine, or product vocabulary.
 - Use `docs-management` for note moves, splits, archive handling, status changes, and navigation updates.
