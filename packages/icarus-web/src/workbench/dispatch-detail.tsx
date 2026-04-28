@@ -1,6 +1,7 @@
 import { SheetBody, SheetHeader, SheetMeta, SheetSection, SheetTitle } from "@/components/ui/sheet";
 import { Token } from "@/components/ui/token";
 import { MissingSheet } from "./missing-sheet";
+import { PayloadView } from "./payload-view";
 import { finalTextFromEvents, modelLabel, reportFromEvents, stateTone } from "./projection";
 import { DispatchTranscriptView } from "./transcript";
 import type { DispatchTranscript, WorkbenchState } from "./types";
@@ -37,16 +38,21 @@ export function DispatchSheet({
         {final !== undefined && (
           <SheetSection>
             <p className="eyebrow">final</p>
-            <p className="whitespace-pre-wrap">{final}</p>
+            <PayloadView value={final} format="markdown" />
           </SheetSection>
         )}
         {report !== undefined && (
           <SheetSection>
             <p className="eyebrow">structured report</p>
             <p>{report._tag === "Reported" ? report.report?.summary : report.salvage?.summary}</p>
-            <pre className="payload-block mt-[calc(var(--lh)/2)]">
-              {report._tag === "Reported" ? report.report?.content : report.salvage?.content}
-            </pre>
+            <div className="mt-[calc(var(--lh)/2)]">
+              <PayloadView
+                value={
+                  report._tag === "Reported" ? report.report?.content : report.salvage?.content
+                }
+                format="markdown"
+              />
+            </div>
           </SheetSection>
         )}
         <SheetSection>

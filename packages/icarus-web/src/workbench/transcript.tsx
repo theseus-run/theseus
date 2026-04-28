@@ -1,6 +1,8 @@
 import { Match } from "effect";
 import type { DispatchEvent, DispatchEventEntry } from "@/lib/rpc-client";
+import { PayloadView } from "./payload-view";
 import { eventGlyph, eventLine, eventTitle } from "./projection";
+import { RuntimeItem } from "./runtime-item";
 import type { DispatchTranscript } from "./types";
 
 export function DispatchTranscriptView({
@@ -62,12 +64,18 @@ function TranscriptEventRow({
       Match.orElse(() => onOpenEvent(missionId, dispatchId, eventIndex)),
     );
   return (
-    <button type="button" className={`runtime-transcript-row row-${event._tag}`} onClick={open}>
-      <span className="runtime-transcript-prefix">{eventGlyph(event)}</span>
-      <span className="runtime-transcript-body">
-        <span className="runtime-transcript-meta">{eventTitle(event)}</span>
-        <span className="runtime-transcript-content">{eventLine(event)}</span>
-      </span>
-    </button>
+    <RuntimeItem
+      className={`runtime-transcript-row row-${event._tag}`}
+      symbol={eventGlyph(event)}
+      title={eventTitle(event)}
+      summary={
+        event._tag === "Text" ? (
+          <PayloadView value={event.content ?? ""} format="markdown" surface="inline" />
+        ) : (
+          eventLine(event)
+        )
+      }
+      onClick={open}
+    />
   );
 }

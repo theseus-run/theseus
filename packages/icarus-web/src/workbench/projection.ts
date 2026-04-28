@@ -47,11 +47,11 @@ export const stateTone = (state: WorkNodeState | MissionSession["state"]) =>
 
 export const stateSymbol = (state: WorkNodeState | MissionSession["state"]) =>
   Match.value(state).pipe(
-    Match.when("done", () => "ok"),
-    Match.when("running", () => ">>"),
-    Match.when("pending", () => ".."),
-    Match.when("failed", () => "!!"),
-    Match.when("aborted", () => "!!"),
+    Match.when("done", () => "*"),
+    Match.when("running", () => ">"),
+    Match.when("pending", () => "."),
+    Match.when("failed", () => "!"),
+    Match.when("aborted", () => "x"),
     Match.orElse(() => "--"),
   );
 
@@ -69,6 +69,34 @@ export const eventTitle = (event: DispatchEvent): string =>
     Match.orElse((value) => value._tag),
   );
 
+const compactLimit = 160;
+
+const oneLine = (value: string): string => value.replaceAll(/\s+/g, " ").trim();
+
+const truncate = (value: string, limit = compactLimit): string => {
+  const compact = oneLine(value);
+  if (compact.length <= limit) return compact;
+  return `${compact.slice(0, limit - 1)}…`;
+};
+
+const previewUnknown = (value: unknown, limit = compactLimit): string => {
+  if (value === undefined) return "";
+  if (typeof value === "string") return truncate(value, limit);
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) return truncate(String(value), limit);
+  return truncate(encoded, limit);
+};
+
+const bracketFields = (fields: ReadonlyArray<readonly [string, string | undefined]>): string => {
+  const rendered = fields
+    .filter(
+      (field): field is readonly [string, string] => field[1] !== undefined && field[1] !== "",
+    )
+    .map(([key, value]) => `${key}=${value}`);
+  if (rendered.length === 0) return "";
+  return ` [${rendered.join(", ")}]`;
+};
+
 export const eventLine = (event: DispatchEvent): string =>
   Match.value(event).pipe(
     Match.when({ _tag: "Calling" }, (value) => `calling iteration ${value.iteration ?? "?"}`),
@@ -78,31 +106,52 @@ export const eventLine = (event: DispatchEvent): string =>
         `cortex ${value.signals?.length ?? 0} signals / ${value.promptMessageCount ?? 0} prompt messages`,
     ),
     Match.when({ _tag: "Text" }, (value) => value.content ?? ""),
-    Match.when({ _tag: "Thinking" }, (value) => `[thinking] ${value.content ?? ""}`),
     Match.when(
-      { _tag: "ToolCalling" },
-      (value) => `-> ${value.tool ?? "tool"} ${JSON.stringify(value.args ?? {})}`,
+      { _tag: "Thinking" },
+      (value) => `thinking${bracketFields([["preview", previewUnknown(value.content)]])}`,
     ),
+    Match.when({ _tag: "ToolCalling" }, (value) => previewUnknown(value.args)),
     Match.when(
       { _tag: "ToolResult" },
       (value) =>
-        `<- ${value.tool ?? "tool"}${value.isError ? " error" : ""}: ${value.content ?? ""}`,
+        `result${bracketFields([
+          ["status", value.isError ? "error" : "success"],
+          ["preview", previewUnknown(value.content)],
+        ])}`,
     ),
     Match.when(
       { _tag: "ToolError" },
-      (value) => `tool error ${value.tool ?? "tool"}: ${JSON.stringify(value.error ?? {})}`,
+      (value) => `error${bracketFields([["detail", previewUnknown(value.error)]])}`,
     ),
     Match.when(
       { _tag: "Injected" },
-      (value) => `injected ${value.injection ?? ""}${value.detail ? `: ${value.detail}` : ""}`,
+      (value) =>
+        `injected${bracketFields([
+          ["type", value.injection],
+          ["detail", previewUnknown(value.detail)],
+        ])}`,
     ),
-    Match.when({ _tag: "Done" }, (value) => `done: ${value.result?.content ?? ""}`),
-    Match.when({ _tag: "Failed" }, (value) => `failed: ${value.reason ?? "unknown reason"}`),
+    Match.when(
+      { _tag: "Done" },
+      (value) => `done${bracketFields([["preview", previewUnknown(value.result?.content)]])}`,
+    ),
+    Match.when(
+      { _tag: "Failed" },
+      (value) => `failed${bracketFields([["reason", previewUnknown(value.reason)]])}`,
+    ),
     Match.when(
       { _tag: "SatelliteAction" },
       (value) => `satellite ${value.satellite ?? ""} ${value.phase ?? ""}: ${value.action ?? ""}`,
     ),
     Match.orElse((value) => value._tag),
+  );
+
+export const eventDetailLine = (event: DispatchEvent): string =>
+  Match.value(event).pipe(
+    Match.when({ _tag: "Text" }, (value) => value.content ?? ""),
+    Match.when({ _tag: "Done" }, (value) => value.result?.content ?? ""),
+    Match.when({ _tag: "Failed" }, (value) => value.reason ?? "unknown reason"),
+    Match.orElse(eventLine),
   );
 
 export const eventGlyph = (event: DispatchEvent): string =>

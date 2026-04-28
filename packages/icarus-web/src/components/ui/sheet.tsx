@@ -1,5 +1,6 @@
 import { Sheet as SilkSheet, SheetStack as SilkSheetStack } from "@silk-hq/components";
 import type { HTMLAttributes, ReactNode } from "react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export function SheetStack({ children }: { readonly children: ReactNode }) {
@@ -46,6 +47,14 @@ export function SheetContent({
   readonly showOverlay?: boolean;
   readonly onDismissed?: () => void;
 }) {
+  const travelProgress = useRef(1);
+  const userTraveling = useRef(false);
+  const dismissFromTravel = () => {
+    if (!userTraveling.current) return;
+    userTraveling.current = false;
+    if (travelProgress.current < 0.96) onDismissed?.();
+  };
+
   return (
     <SilkSheet.Portal>
       <SilkSheet.View
@@ -53,11 +62,17 @@ export function SheetContent({
         contentPlacement="right"
         tracks="right"
         nativeEdgeSwipePrevention={true}
+        swipeDismissal={true}
+        onTravel={({ progress }) => {
+          travelProgress.current = progress;
+        }}
+        onTravelEnd={dismissFromTravel}
         onTravelStatusChange={(status) => {
-          if (status === "idleOutside") onDismissed?.();
+          if (status === "stepping") userTraveling.current = true;
+          if (status === "exiting" || status === "idleOutside") onDismissed?.();
         }}
       >
-        {showOverlay && <SheetOverlay />}
+        {showOverlay && <SheetOverlay onClick={onDismissed} />}
         <SilkSheet.Content className={cn("sheet-content", className)} {...props}>
           <SilkSheet.BleedingBackground className="sheet-bleeding-background" />
           {children}

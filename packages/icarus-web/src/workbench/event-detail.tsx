@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { SheetBody, SheetHeader, SheetMeta, SheetSection, SheetTitle } from "@/components/ui/sheet";
 import { Token } from "@/components/ui/token";
-import type { DispatchEventEntry } from "@/lib/rpc-client";
+import type { DispatchEvent, DispatchEventEntry } from "@/lib/rpc-client";
 import { MissingSheet } from "./missing-sheet";
-import { eventLine, eventTitle, isReportPacket } from "./projection";
+import { PayloadView } from "./payload-view";
+import { eventDetailLine, eventTitle, isReportPacket } from "./projection";
 import type { WorkbenchRoute } from "./route-state";
 
 export function EventSheet({
@@ -55,14 +56,75 @@ export function EventSheet({
           </SheetSection>
         )}
         <SheetSection>
-          <p className="eyebrow">compact</p>
-          <pre className="payload-block">{eventLine(entry.event)}</pre>
+          <p className="eyebrow">detail</p>
+          <EventDetail event={entry.event} />
         </SheetSection>
         <SheetSection>
           <p className="eyebrow">event</p>
-          <pre className="payload-block">{JSON.stringify(entry.event, null, 2)}</pre>
+          <PayloadView value={entry.event} format="json" />
         </SheetSection>
       </SheetBody>
     </>
+  );
+}
+
+function EventDetail({ event }: { readonly event: DispatchEvent }) {
+  if (event._tag === "ToolCalling") {
+    return (
+      <div className="event-detail-grid">
+        <DetailField label="tool" value={event.tool ?? "tool"} />
+        <DetailBlock label="args" value={event.args} format="json" />
+      </div>
+    );
+  }
+  if (event._tag === "ToolResult") {
+    return (
+      <div className="event-detail-grid">
+        <DetailField label="tool" value={event.tool ?? "tool"} />
+        <DetailField label="status" value={event.isError ? "error" : "success"} />
+        <DetailBlock label="content" value={event.content ?? ""} format="markdown" />
+        {event.structured !== undefined && (
+          <DetailBlock label="structured" value={event.structured} format="json" />
+        )}
+      </div>
+    );
+  }
+  if (event._tag === "ToolError") {
+    return (
+      <div className="event-detail-grid">
+        <DetailField label="tool" value={event.tool ?? "tool"} />
+        <DetailBlock label="error" value={event.error} format="json" />
+      </div>
+    );
+  }
+  if (event._tag === "Text" || event._tag === "Done") {
+    return <PayloadView value={eventDetailLine(event)} format="markdown" />;
+  }
+  return <PayloadView value={eventDetailLine(event)} format="text" />;
+}
+
+function DetailField({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="event-detail-field">
+      <span className="eyebrow">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function DetailBlock({
+  label,
+  value,
+  format,
+}: {
+  readonly label: string;
+  readonly value: unknown;
+  readonly format: "json" | "markdown" | "text";
+}) {
+  return (
+    <div>
+      <p className="eyebrow">{label}</p>
+      <PayloadView value={value} format={format} />
+    </div>
   );
 }
