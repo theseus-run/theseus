@@ -10,6 +10,7 @@ import {
   toolCallParts,
 } from "../test-utils/mock-language-model.ts";
 import { Defaults, defineTool } from "../tool/index.ts";
+import { Cortex, NoopCortex } from "./cortex.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
 import { LanguageModelGatewayFromLanguageModel } from "./model-gateway.ts";
@@ -47,6 +48,11 @@ const textAndToolCallParts = (
 
 const modelGatewayLayer = (responses: Parameters<typeof makeMockLanguageModel>[0]) =>
   Layer.provide(LanguageModelGatewayFromLanguageModel, makeMockLanguageModel(responses));
+
+const stringifyPrompt = (value: unknown): string =>
+  JSON.stringify(value, (_key, nested: unknown) =>
+    typeof nested === "bigint" ? nested.toString() : nested,
+  );
 
 describe("dispatch loop", () => {
   test("generates dispatch id through DispatchStore", async () => {
@@ -174,11 +180,47 @@ describe("dispatch loop", () => {
     expect(result.content).toBe("final answer");
     expect(result.messages.at(-1)).toEqual({ role: "assistant", content: "final answer" });
     expect(prompts).toHaveLength(2);
-    expect(
-      JSON.stringify(prompts[1], (_key, value: unknown) =>
-        typeof value === "bigint" ? value.toString() : value,
+    expect(stringifyPrompt(prompts[1])).toContain("I will report now.");
+  });
+
+  test("routes model-visible messages through Cortex", async () => {
+    const prompts: LanguageModel.ProviderOptions[] = [];
+    const CortexLive = Layer.succeed(Cortex)(
+      Cortex.of({
+        render: ({ history }) =>
+          Effect.succeed({
+            messages: [{ role: "system", content: "cortex-instruction" } as const, ...history],
+          }),
+      }),
+    );
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 1,
+    };
+
+    const layer = Layer.mergeAll(
+      Layer.provide(
+        LanguageModelGatewayFromLanguageModel,
+        makeMockLanguageModel([textParts("done")], {
+          onGenerateText: (options) => prompts.push(options),
+        }),
       ),
-    ).toContain("I will report now.");
+      CortexLive,
+      InMemoryDispatchStore,
+      SatelliteRingLive([]),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it");
+        return yield* handle.result;
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(result.content).toBe("done");
+    expect(stringifyPrompt(prompts[0])).toContain("cortex-instruction");
   });
 
   test("executes tool calls sequentially in model order", async () => {
@@ -431,6 +473,7 @@ describe("dispatch loop", () => {
                 },
               ]),
             ]),
+            NoopCortex,
             SatelliteRingLive([badCheckpoint]),
             InMemoryDispatchStore,
           ),

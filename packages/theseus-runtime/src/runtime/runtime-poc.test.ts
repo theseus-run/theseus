@@ -115,6 +115,7 @@ const runtimeLayer = (responses = pocResponses) => {
     WorkNodeControlLive,
     CatalogLive,
     BlueprintsLive,
+    Dispatch.NoopCortex,
     LanguageModelGatewayLive,
     Satellite.DefaultSatelliteRing,
   );
@@ -249,6 +250,7 @@ describe("TheseusRuntime POC", () => {
       WorkNodeControlLive,
       CatalogLive,
       Agent.BlueprintRegistryLive([]),
+      Dispatch.NoopCortex,
       Layer.provide(Dispatch.LanguageModelGatewayFromLanguageModel, makeMockLanguageModel([])),
       Satellite.DefaultSatelliteRing,
     );

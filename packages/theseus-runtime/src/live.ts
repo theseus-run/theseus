@@ -13,6 +13,7 @@ export const TheseusRuntimeLive = Effect.gen(function* () {
   const deps = {
     registry: yield* DispatchRegistry,
     toolCatalog: yield* ToolCatalog,
+    cortex: yield* Dispatch.Cortex,
     languageModelGateway: yield* Dispatch.LanguageModelGateway,
     satelliteRing: yield* Satellite.SatelliteRing,
     dispatchStore: yield* Dispatch.DispatchStore,

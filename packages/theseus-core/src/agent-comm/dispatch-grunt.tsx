@@ -7,7 +7,7 @@
 import { render } from "@theseus.run/jsx-md";
 import { Cause, Context, Effect, Exit, Fiber, Match, Ref, Schema, Stream } from "effect";
 import { type Blueprint, BlueprintRegistry } from "../agent/index.ts";
-import { dispatch as dispatchLoop } from "../dispatch/index.ts";
+import { type Cortex, dispatch as dispatchLoop } from "../dispatch/index.ts";
 import type { LanguageModelGateway } from "../dispatch/model-gateway.ts";
 import { CurrentDispatch, type DispatchStore } from "../dispatch/store.ts";
 import type { DispatchEvent, DispatchHandle, DispatchSpec } from "../dispatch/types.ts";
@@ -41,7 +41,7 @@ export class DispatchGruntLauncher extends Context.Service<
   {
     readonly launch: <R>(
       input: DispatchGruntLaunchInput<R>,
-    ) => Effect.Effect<DispatchHandle, DispatchGruntFailed, R | CurrentDispatch>;
+    ) => Effect.Effect<DispatchHandle, DispatchGruntFailed, R | Cortex | CurrentDispatch>;
   }
 >()("DispatchGruntLauncher") {}
 
@@ -69,7 +69,7 @@ export const DispatchGruntLauncherLive = Effect.gen(function* () {
               }),
           ),
         );
-      }) as Effect.Effect<DispatchHandle, DispatchGruntFailed, R | CurrentDispatch>,
+      }) as Effect.Effect<DispatchHandle, DispatchGruntFailed, R | Cortex | CurrentDispatch>,
   });
 });
 
@@ -127,6 +127,7 @@ export const dispatchGruntTool: Tool<
   DispatchGruntResultType,
   DispatchGruntFailed,
   | BlueprintRegistry
+  | Cortex
   | DispatchGruntLauncher
   | LanguageModelGateway
   | SatelliteRing

@@ -12,6 +12,7 @@ import { BunHttpClient } from "@effect/platform-bun";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Agent from "@theseus.run/core/Agent";
 import * as AgentComm from "@theseus.run/core/AgentComm";
+import * as Dispatch from "@theseus.run/core/Dispatch";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { TheseusRuntime } from "@theseus.run/runtime";
@@ -97,6 +98,7 @@ const LanguageModelGatewayLive = Layer.provide(
 );
 
 const ServicesLayer = Layer.mergeAll(
+  Dispatch.NoopCortex,
   LanguageModelGatewayLive,
   PersistentDispatchStore,
   RingLive,

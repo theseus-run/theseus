@@ -42,6 +42,7 @@ const reasonFromCause = (cause: Cause.Cause<unknown>): string =>
 export interface DispatchRunnerDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly toolCatalog: (typeof ToolCatalog)["Service"];
+  readonly cortex: (typeof Dispatch.Cortex)["Service"];
   readonly languageModelGateway: (typeof Dispatch.LanguageModelGateway)["Service"];
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
@@ -52,6 +53,7 @@ export interface DispatchRunnerDeps {
 type RuntimeToolRequirements =
   | Agent.BlueprintRegistry
   | AgentComm.DispatchGruntLauncher
+  | Dispatch.Cortex
   | Dispatch.LanguageModelGateway
   | Satellite.SatelliteRing
   | Dispatch.DispatchStore
@@ -95,6 +97,7 @@ const makeDispatchDepsLayer = (
   currentWorkNode: CurrentWorkNodeValue,
 ) =>
   Layer.mergeAll(
+    Layer.succeed(Dispatch.Cortex)(deps.cortex),
     Layer.succeed(Dispatch.LanguageModelGateway)(deps.languageModelGateway),
     Layer.succeed(Satellite.SatelliteRing)(deps.satelliteRing),
     Layer.succeed(Dispatch.DispatchStore)(deps.dispatchStore),

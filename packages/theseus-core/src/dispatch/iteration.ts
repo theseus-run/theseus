@@ -10,6 +10,7 @@ import type {
   SatelliteContext,
   SatelliteScope,
 } from "../satellite/types.ts";
+import { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { assistantToolMessage, finalAssistantMessages, toolResultMessages } from "./messages.ts";
 import { step } from "./step.ts";
@@ -180,7 +181,7 @@ export const runDispatchIteration = <R>({
 }: IterationInput<R>): Effect.Effect<
   IterationResult,
   DispatchError | SatelliteAbort,
-  R | LanguageModel.LanguageModel
+  R | LanguageModel.LanguageModel | Cortex
 > =>
   Effect.gen(function* () {
     yield* ensureWithinCycleLimit({
@@ -202,12 +203,23 @@ export const runDispatchIteration = <R>({
     );
     const afterCheckpoint = checkpointMessages(messages, iterationStartDecision);
 
+    const cortex = yield* Cortex;
+    const frame = yield* cortex.render({
+      history: afterCheckpoint,
+      dispatch: {
+        dispatchId,
+        name: spec.name,
+        task,
+        iteration,
+      },
+    });
+
     const beforeCallDecision = yield* satelliteScope.beforeCall(
-      { messages: afterCheckpoint },
+      { messages: frame.messages },
       satelliteContext,
       onSatelliteAction,
     );
-    const callMessages = beforeCallMessages(afterCheckpoint, beforeCallDecision);
+    const callMessages = beforeCallMessages(frame.messages, beforeCallDecision);
 
     yield* emit(DispatchEvents.calling(spec.name, iteration));
 

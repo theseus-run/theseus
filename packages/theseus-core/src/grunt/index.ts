@@ -20,6 +20,7 @@ import {
   AgentToolFailed,
 } from "../agent/index.ts";
 import {
+  type Cortex,
   type DispatchError,
   type DispatchEvent,
   type DispatchOptions,
@@ -88,7 +89,11 @@ export const dispatch = <R = never>(
   blueprint: Blueprint<R>,
   task: string,
   options?: DispatchOptions,
-): Effect.Effect<GruntHandle, never, LanguageModelGateway | SatelliteRing | DispatchStore | R> =>
+): Effect.Effect<
+  GruntHandle,
+  never,
+  Cortex | LanguageModelGateway | SatelliteRing | DispatchStore | R
+> =>
   dispatchLoop(blueprint, task, options).pipe(
     Effect.map((handle) => ({
       events: handle.events,
@@ -107,5 +112,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   AgentResult,
   AgentError,
-  LanguageModelGateway | SatelliteRing | DispatchStore | R
+  Cortex | LanguageModelGateway | SatelliteRing | DispatchStore | R
 > => dispatch(blueprint, task, options).pipe(Effect.flatMap((handle) => handle.result));

@@ -31,6 +31,9 @@ export {
 
 export type {
   CopilotModelRequest,
+  CortexFrame,
+  CortexRenderInput,
+  CortexService,
   DispatchCreate,
   DispatchError,
   DispatchEvent,
@@ -53,6 +56,7 @@ export type {
   Usage,
 } from "./dispatch/index.ts";
 export {
+  Cortex,
   CurrentDispatch,
   DispatchDefaults,
   DispatchStore,
@@ -61,6 +65,7 @@ export {
   LanguageModelGatewayFromLanguageModel,
   ModelUnavailable,
   makeDispatchId,
+  NoopCortex,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------

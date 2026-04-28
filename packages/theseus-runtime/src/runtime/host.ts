@@ -23,6 +23,7 @@ import type {
 export interface RuntimeHostDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly toolCatalog: (typeof ToolCatalog)["Service"];
+  readonly cortex: (typeof Dispatch.Cortex)["Service"];
   readonly languageModelGateway: (typeof Dispatch.LanguageModelGateway)["Service"];
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];

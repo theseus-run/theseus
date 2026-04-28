@@ -16,6 +16,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteScope } from "../satellite/types.ts";
+import type { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { normalizeLoopError, settleDispatchResult, zeroUsage } from "./lifecycle.ts";
 import { runDispatchLoop } from "./loop.ts";
@@ -44,7 +45,7 @@ export const dispatch = <R = never>(
 ): Effect.Effect<
   DispatchHandle,
   never,
-  LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+  Cortex | LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > =>
   Effect.gen(function* () {
     const maxIter = spec.maxIterations ?? 20;
@@ -167,7 +168,7 @@ export const dispatch = <R = never>(
   }) as Effect.Effect<
     DispatchHandle,
     never,
-    LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+    Cortex | LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
   >;
 
 // ---------------------------------------------------------------------------
@@ -181,5 +182,5 @@ export const dispatchAwait = <R = never>(
 ): Effect.Effect<
   DispatchOutput,
   DispatchError,
-  LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
+  Cortex | LanguageModelGateway | SatelliteRing | DispatchStore | Exclude<R, CurrentDispatch>
 > => dispatch(spec, task, options).pipe(Effect.flatMap((handle) => handle.result));

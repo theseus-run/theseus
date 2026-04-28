@@ -2,6 +2,7 @@ import { Effect, Match, type Queue, Ref } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
+import type { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { drainInjections, injectionDetail } from "./injections.ts";
 import { runDispatchIteration } from "./iteration.ts";
@@ -69,7 +70,11 @@ export const runDispatchLoop = <R>(
   messages: ReadonlyArray<Prompt.MessageEncoded>,
   usage: Usage,
   iteration: number,
-): Effect.Effect<DispatchOutput, DispatchError | SatelliteAbort, LanguageModel.LanguageModel | R> =>
+): Effect.Effect<
+  DispatchOutput,
+  DispatchError | SatelliteAbort,
+  LanguageModel.LanguageModel | Cortex | R
+> =>
   Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iteration } })(
     Effect.gen(function* () {
       yield* Effect.yieldNow;
