@@ -15,6 +15,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@radix-ui/react-collapsible": "1.1.12",
+        "@silk-hq/components": "0.10.1",
         "@tanstack/react-query": "5.99.0",
         "@tanstack/react-router": "1.168.19",
         "@theseus.run/core": "workspace:*",
@@ -330,6 +331,8 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.60.1", "", { "os": "win32", "cpu": "x64" }, "sha512-k+600V9Zl1CM7eZxJgMyTUzmrmhB/0XZnF4pRypKAlAgxmedUA+1v9R+XOFv56W4SlHEzfeMtzujLJD22Uz5zg=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.60.1", "", { "os": "win32", "cpu": "x64" }, "sha512-lWMnixq/QzxyhTV6NjQJ4SFo1J6PvOX8vUx5Wb4bBPsEb+8xZ89Bz6kOXpfXj9ak9AHTQVQzlgzBEc1SyM27xQ=="],
+
+    "@silk-hq/components": ["@silk-hq/components@0.10.1", "", { "peerDependencies": { "react": "^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc", "react-dom": "^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" } }, "sha512-Xtn3Vhn6mSOmM8haegor0g2W3Cm5QcKbPWsfk5kJzyXSTTpyRphmapmFz70mKtbe9VIalpbpkBZ84MDvGNoYfg=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

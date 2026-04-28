@@ -16,7 +16,51 @@ const indexRoute = createRoute({
   component: MissionListPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const missionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId",
+  component: MissionListPage,
+});
+
+const workNodeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/work/$workNodeId",
+  component: MissionListPage,
+});
+
+const dispatchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/dispatches/$dispatchId",
+  component: MissionListPage,
+});
+
+const eventRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/dispatches/$dispatchId/events/$eventIndex",
+  component: MissionListPage,
+});
+
+const cortexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration",
+  component: MissionListPage,
+});
+
+const signalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration/signals/$signalId",
+  component: MissionListPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  missionRoute,
+  workNodeRoute,
+  dispatchRoute,
+  eventRoute,
+  cortexRoute,
+  signalRoute,
+]);
 
 export const router = createRouter({ routeTree });
 

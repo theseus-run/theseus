@@ -1,3 +1,4 @@
+@import "@silk-hq/components/layered-styles";
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
@@ -194,7 +195,7 @@ body {
   align-items: start;
 }
 
-.workbench-grid {
+.workbench-route-grid {
   display: grid;
   gap: var(--panel-gap);
   grid-template-columns: minmax(0, 1fr);
@@ -202,12 +203,8 @@ body {
 }
 
 @media (min-width: 1120px) {
-  .workbench-grid {
-    grid-template-columns:
-      minmax(18rem, 0.78fr)
-      minmax(0, 1.22fr)
-      minmax(22rem, 1fr)
-      minmax(22rem, 1fr);
+  .workbench-route-grid {
+    grid-template-columns: minmax(19rem, 0.62fr) minmax(0, 1.38fr);
   }
 }
 
@@ -934,7 +931,17 @@ body {
   min-width: 0;
 }
 
-.sheet-root {
+.sheet-stack-root {
+  display: contents;
+}
+
+.sheet-stack-outlet {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sheet-view {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -958,13 +965,42 @@ body {
   flex-direction: column;
 }
 
+.sheet-depth-0 {
+  right: 1rem;
+}
+
+.sheet-depth-1 {
+  right: min(4rem, 7vw);
+  width: min(44rem, calc(100vw - 5rem));
+  box-shadow: -1rem 0 0 rgba(0, 0, 0, 0.18);
+}
+
+.sheet-depth-2 {
+  right: min(7rem, 12vw);
+  width: min(46rem, calc(100vw - 8rem));
+  box-shadow: -1rem 0 0 rgba(0, 0, 0, 0.22);
+}
+
+.sheet-bleeding-background {
+  border-radius: 0;
+  background: #0c0c0e;
+}
+
 .sheet-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--lh);
   border-bottom: var(--border) solid var(--color-border);
-  padding: calc(var(--lh) * 0.62) calc(1.7ch - var(--border));
+  padding: calc(var(--lh) * 0.62) calc(10ch - var(--border)) calc(var(--lh) * 0.62)
+    calc(1.7ch - var(--border));
+}
+
+.sheet-close-button {
+  position: absolute;
+  top: calc(var(--lh) * 0.62);
+  right: calc(1.7ch - var(--border));
+  z-index: 1;
 }
 
 .sheet-meta {
@@ -987,6 +1023,108 @@ body {
 .sheet-section:first-child {
   border-top: none;
   padding-top: 0;
+}
+
+.event-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lh) / 3) 1ch;
+}
+
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--lh) * 1.2);
+  border: none;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  padding: 0;
+  text-align: left;
+}
+
+.event-chip:hover,
+.event-chip:focus-visible {
+  color: var(--color-foreground);
+  outline: none;
+}
+
+.prompt-composition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1ch;
+  color: var(--color-muted-foreground);
+}
+
+.prompt-composition span {
+  border: var(--border) solid var(--color-border);
+  padding-inline: calc(1ch - var(--border));
+  background: #111113;
+}
+
+.runtime-transcript {
+  display: grid;
+  border: var(--border) solid var(--color-border);
+  background: #0c0c0e;
+}
+
+.runtime-transcript-row {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  gap: 1ch;
+  border: none;
+  border-bottom: var(--border) solid #232326;
+  background: transparent;
+  color: inherit;
+  padding: calc(var(--lh) * 0.42) calc(1.5ch - var(--border));
+  text-align: left;
+}
+
+.runtime-transcript-row:last-child {
+  border-bottom: none;
+}
+
+.runtime-transcript-row:hover,
+.runtime-transcript-row:focus-visible {
+  background: #111113;
+  outline: none;
+}
+
+.runtime-transcript-prefix {
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+
+.runtime-transcript-body {
+  min-width: 0;
+  display: grid;
+  gap: calc(var(--lh) / 5);
+}
+
+.runtime-transcript-meta {
+  color: var(--color-muted-foreground);
+}
+
+.runtime-transcript-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.runtime-transcript-row.row-ToolCalling .runtime-transcript-content,
+.runtime-transcript-row.row-CortexRendered .runtime-transcript-content {
+  color: var(--color-process);
+}
+
+.runtime-transcript-row.row-ToolResult .runtime-transcript-content {
+  color: var(--color-muted-foreground);
+}
+
+.runtime-transcript-row.row-Done .runtime-transcript-content {
+  color: var(--color-good);
+}
+
+.runtime-transcript-row.row-Failed .runtime-transcript-content,
+.runtime-transcript-row.row-ToolError .runtime-transcript-content {
+  color: #f87171;
 }
 
 .payload-block {
@@ -1021,6 +1159,13 @@ body {
     bottom: 0;
     width: 100%;
     max-height: min(80vh, 48rem);
+  }
+
+  .sheet-depth-1,
+  .sheet-depth-2 {
+    left: 1ch;
+    right: 0;
+    width: calc(100% - 1ch);
   }
 }
 
