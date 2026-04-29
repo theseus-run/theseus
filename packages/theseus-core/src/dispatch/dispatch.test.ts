@@ -10,6 +10,7 @@ import {
   toolCallParts,
 } from "../test-utils/mock-language-model.ts";
 import { Defaults, defineTool } from "../tool/index.ts";
+import { makeDispatchControlGate } from "./control.ts";
 import { Cortex, NoopCortex } from "./cortex.ts";
 import { DispatchDefaults } from "./defaults.ts";
 import { dispatch } from "./dispatch.ts";
@@ -233,6 +234,75 @@ describe("dispatch loop", () => {
       cortexMessageCount: 1,
       promptMessageCount: 3,
     });
+  });
+
+  test("pauses dispatches at model safe points and resumes", async () => {
+    const prompts: LanguageModel.ProviderOptions[] = [];
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 1,
+    };
+    const gate = await Effect.runPromise(
+      makeDispatchControlGate({ dispatchId: "controlled", name: "runner" }).pipe(
+        Effect.tap((gate) => gate.pause),
+      ),
+    );
+    const layer = Layer.merge(
+      Layer.provide(
+        LanguageModelGatewayFromLanguageModel,
+        makeMockLanguageModel([textParts("done")], {
+          onGenerateText: (options) => prompts.push(options),
+        }),
+      ),
+      DispatchDefaults,
+    );
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it", { controlGate: gate });
+        const resultFiber = yield* handle.result.pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const beforeResume = prompts.length;
+        yield* handle.resume;
+        const result = yield* Fiber.join(resultFiber);
+        return { beforeResume, result };
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(observed.beforeResume).toBe(0);
+    expect(observed.result.content).toBe("done");
+  });
+
+  test("stop interrupts a paused dispatch and closes the event stream", async () => {
+    const spec: DispatchSpec = {
+      name: "runner",
+      systemPrompt: "Return text.",
+      tools: [],
+      maxIterations: 1,
+    };
+    const gate = await Effect.runPromise(
+      makeDispatchControlGate({ dispatchId: "controlled", name: "runner" }).pipe(
+        Effect.tap((gate) => gate.pause),
+      ),
+    );
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const handle = yield* dispatch<never>(spec, "do it", { controlGate: gate });
+        const eventsFiber = yield* handle.events.pipe(Stream.runCollect, Effect.forkChild);
+        yield* handle.stop("operator stop");
+        const error = yield* Effect.flip(handle.result);
+        const events = yield* Fiber.join(eventsFiber);
+        return { error, events: Array.from(events) };
+      }).pipe(
+        Effect.provide(Layer.merge(modelGatewayLayer([textParts("unused")]), DispatchDefaults)),
+      ),
+    );
+
+    expect(observed.error._tag).toBe("DispatchInterrupted");
+    expect(observed.events.at(-1)?._tag).toBe("Failed");
   });
 
   test("executes tool calls sequentially in model order", async () => {

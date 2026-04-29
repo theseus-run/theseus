@@ -12,9 +12,12 @@ import type { TheseusRuntimeService } from "./runtime/types.ts";
 import {
   RuntimeDispatchFailed,
   RuntimeNotFound,
+  RuntimeProcessFailed,
+  RuntimeProjectionDecodeFailed,
   RuntimeToolNotFound,
   RuntimeWorkControlFailed,
   RuntimeWorkControlUnsupported,
+  WorkNodeId,
 } from "./runtime/types.ts";
 
 export type {
@@ -31,9 +34,7 @@ export type {
   RuntimeError,
   RuntimeQuery,
   RuntimeQueryResult,
-  RuntimeSnapshot,
   RuntimeSubmission,
-  StatusEntry,
   TheseusRuntimeService,
   WorkControlCapability,
   WorkControlCommand,
@@ -50,10 +51,13 @@ export {
   RuntimeDispatchFailed,
   RuntimeEvents,
   RuntimeNotFound,
+  RuntimeProcessFailed,
+  RuntimeProjectionDecodeFailed,
   RuntimeQueries,
   RuntimeToolNotFound,
   RuntimeWorkControlFailed,
   RuntimeWorkControlUnsupported,
+  WorkNodeId,
 };
 
 export class TheseusRuntime extends Context.Service<TheseusRuntime, TheseusRuntimeService>()(

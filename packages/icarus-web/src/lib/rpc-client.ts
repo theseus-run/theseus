@@ -5,7 +5,6 @@
  * schema codecs, and stream lifecycle are delegated to Effect RPC.
  */
 
-import type { CapsuleEvent } from "@theseus.run/core/Capsule";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import { Effect, Exit, Layer, Scope, Stream } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
@@ -122,15 +121,9 @@ export interface WorkNodeControlDescriptor {
   readonly injectGuidance: WorkControlCapability;
   readonly pause: WorkControlCapability;
   readonly resume: WorkControlCapability;
+  readonly stop: WorkControlCapability;
   readonly requestStatus: WorkControlCapability;
 }
-export type WorkControlCommand =
-  | { readonly _tag: "Interrupt"; readonly reason?: string | undefined }
-  | { readonly _tag: "InjectGuidance"; readonly text: string }
-  | { readonly _tag: "Pause"; readonly reason?: string | undefined }
-  | { readonly _tag: "Resume" }
-  | { readonly _tag: "RequestStatus" };
-
 export type ModelRequest =
   | {
       readonly provider: "openai";
@@ -161,6 +154,20 @@ export type RuntimeDispatchEvent =
       readonly missionId: string;
       readonly capsuleId: string;
       readonly event: DispatchEvent;
+    }
+  | {
+      readonly _tag: "WorkNodeStateChanged";
+      readonly workNodeId: string;
+      readonly missionId: string;
+      readonly state: WorkNodeState;
+      readonly reason?: string | null;
+    }
+  | {
+      readonly _tag: "RuntimeProcessFailed";
+      readonly workNodeId: string;
+      readonly missionId: string;
+      readonly process: string;
+      readonly reason: string;
     };
 
 export type ResearchPocEvent =
@@ -329,32 +336,6 @@ export class TheseusClient {
   // Public API
   // ---------------------------------------------------------------------------
 
-  async createMission(input: {
-    readonly slug?: string;
-    readonly goal: string;
-    readonly criteria: ReadonlyArray<string>;
-  }): Promise<MissionSession> {
-    return await this.run((client) => client.createMission(input));
-  }
-
-  async startMissionDispatch(
-    input: {
-      readonly missionId: string;
-      readonly spec: {
-        readonly name: string;
-        readonly systemPrompt: string;
-        readonly tools: ReadonlyArray<{ readonly name: string }>;
-        readonly maxIterations?: number;
-        readonly modelRequest?: ModelRequest;
-      };
-      readonly task: string;
-      readonly continueFrom?: string;
-    },
-    onEvent: (event: RuntimeDispatchEvent) => void,
-  ): Promise<void> {
-    return await this.runStream((client) => client.startMissionDispatch(input), onEvent);
-  }
-
   async listMissions(): Promise<ReadonlyArray<MissionSession>> {
     return await this.run((client) => client.listMissions(undefined));
   }
@@ -371,30 +352,6 @@ export class TheseusClient {
     return await this.run((client) => client.getMissionWorkTree({ missionId }));
   }
 
-  async inject(dispatchId: string, text: string): Promise<void> {
-    await this.run((client) => client.inject({ dispatchId, text }, { discard: true }));
-  }
-
-  async interrupt(dispatchId: string): Promise<void> {
-    await this.run((client) => client.interrupt({ dispatchId }, { discard: true }));
-  }
-
-  async controlWorkNode(workNodeId: string, command: WorkControlCommand): Promise<void> {
-    await this.run((client) => client.controlWorkNode({ workNodeId, command }, { discard: true }));
-  }
-
-  async getDispatchResult(dispatchId: string): Promise<DispatchEvent["result"] | null> {
-    return await this.run((client) => client.getResult({ dispatchId }));
-  }
-
-  async getCapsuleEvents(capsuleId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    return await this.run((client) => client.getCapsuleEvents({ capsuleId }));
-  }
-
-  async getDispatchCapsuleEvents(dispatchId: string): Promise<ReadonlyArray<CapsuleEvent>> {
-    return await this.run((client) => client.getDispatchCapsuleEvents({ dispatchId }));
-  }
-
   async getDispatchEvents(dispatchId: string): Promise<ReadonlyArray<DispatchEventEntry>> {
     return await this.run((client) => client.getDispatchEvents({ dispatchId }));
   }
@@ -404,13 +361,5 @@ export class TheseusClient {
     onEvent: (event: ResearchPocEvent) => void,
   ): Promise<void> {
     return await this.runStream((client) => client.startResearchPoc(input), onEvent);
-  }
-
-  async status(): Promise<ReadonlyArray<unknown>> {
-    try {
-      return await this.run((client) => client.status(undefined));
-    } catch {
-      return [];
-    }
   }
 }

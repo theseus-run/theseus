@@ -1,10 +1,6 @@
 import { Match } from "effect";
-import type { ReactNode } from "react";
 import { SheetStack } from "@/components/ui/sheet";
-import { CortexFrameSheet, CortexSignalSheet } from "./cortex-detail";
-import { DispatchSheet } from "./dispatch-detail";
-import { EventSheet } from "./event-detail";
-import { cortexEventsFromTranscript, transcriptForDispatch } from "./projection";
+import { MissionSheet } from "./mission-detail";
 import type { WorkbenchRoute } from "./route-state";
 import { WorkbenchSheet } from "./sheet-stack";
 import type { WorkbenchState } from "./types";
@@ -14,124 +10,41 @@ export function RouteSheets({
   route,
   state,
   onClose,
-  onOpenMission,
-  onOpenDispatch,
-  onOpenEvent,
-  onOpenCortex,
-  onOpenSignal,
+  onOpenWorkNode,
 }: {
   readonly route: WorkbenchRoute;
   readonly state: WorkbenchState;
   readonly onClose: () => void;
-  readonly onOpenMission: (missionId: string) => void;
-  readonly onOpenDispatch: (missionId: string, dispatchId: string) => void;
-  readonly onOpenEvent: (missionId: string, dispatchId: string, eventIndex: number) => void;
-  readonly onOpenCortex: (missionId: string, dispatchId: string, iteration: number) => void;
-  readonly onOpenSignal: (
-    missionId: string,
-    dispatchId: string,
-    iteration: number,
-    signalId: string,
-  ) => void;
+  readonly onOpenWorkNode: (missionId: string, workNodeId: string) => void;
 }) {
-  const dispatchSheet = (
-    target: { readonly missionId: string; readonly dispatchId: string },
-    children?: ReactNode,
-  ) => (
-    <WorkbenchSheet
-      key={`dispatch:${target.dispatchId}`}
-      open
-      depth={0}
-      onClose={() => onOpenMission(target.missionId)}
-    >
-      <DispatchSheet
-        missionId={target.missionId}
-        dispatch={state.dispatches.find((dispatch) => dispatch.dispatchId === target.dispatchId)}
-        transcript={transcriptForDispatch(target.dispatchId, state.transcripts)}
-        onOpenEvent={onOpenEvent}
-        onOpenCortex={onOpenCortex}
-      />
-      {children}
-    </WorkbenchSheet>
-  );
-
-  const eventSheet = (target: Extract<WorkbenchRoute, { readonly _tag: "DispatchEvent" }>) => (
-    <WorkbenchSheet
-      key={`event:${target.dispatchId}:${target.eventIndex}`}
-      open
-      depth={1}
-      onClose={() => onOpenDispatch(target.missionId, target.dispatchId)}
-    >
-      <EventSheet
-        target={target}
-        entry={
-          transcriptForDispatch(target.dispatchId, state.transcripts)?.events[target.eventIndex]
-        }
-        onOpenDispatch={onOpenDispatch}
-        onOpenCortex={onOpenCortex}
-      />
-    </WorkbenchSheet>
-  );
-
-  const cortexSheet = (
-    target: {
-      readonly missionId: string;
-      readonly dispatchId: string;
-      readonly iteration: number;
-    },
-    children?: ReactNode,
-  ) => (
-    <WorkbenchSheet
-      key={`cortex:${target.dispatchId}:${target.iteration}`}
-      open
-      depth={1}
-      onClose={() => onOpenDispatch(target.missionId, target.dispatchId)}
-    >
-      <CortexFrameSheet
-        target={target}
-        entry={cortexEventsFromTranscript(
-          transcriptForDispatch(target.dispatchId, state.transcripts),
-        ).find((entry) => entry.event.iteration === target.iteration)}
-        onOpenSignal={onOpenSignal}
-      />
-      {children}
-    </WorkbenchSheet>
-  );
-
-  const signalSheet = (target: Extract<WorkbenchRoute, { readonly _tag: "CortexSignal" }>) => (
-    <WorkbenchSheet
-      key={`signal:${target.dispatchId}:${target.iteration}:${target.signalId}`}
-      open
-      depth={2}
-      onClose={() => onOpenCortex(target.missionId, target.dispatchId, target.iteration)}
-    >
-      <CortexSignalSheet
-        target={target}
-        signal={cortexEventsFromTranscript(
-          transcriptForDispatch(target.dispatchId, state.transcripts),
-        )
-          .find((entry) => entry.event.iteration === target.iteration)
-          ?.event.signals?.find((signal) => signal.id === target.signalId)}
-      />
-    </WorkbenchSheet>
-  );
-
   const sheets = Match.value(route).pipe(
     Match.tag("MissionList", () => null),
     Match.tag("Mission", () => null),
-    Match.tag("WorkNode", (target) => (
-      <WorkbenchSheet key={`work:${target.workNodeId}`} open onClose={onClose}>
-        <WorkNodeSheet
-          node={state.nodes.find((node) => node.workNodeId === target.workNodeId)}
+    Match.tag("MissionInspect", () => (
+      <WorkbenchSheet
+        key={`mission:${state.mission?.missionId ?? "missing"}`}
+        open
+        onClose={onClose}
+      >
+        <MissionSheet
+          mission={state.mission}
+          nodes={state.nodes}
           dispatches={state.dispatches}
+          onOpenWorkNode={onOpenWorkNode}
         />
       </WorkbenchSheet>
     )),
-    Match.tag("Dispatch", (target) => <>{dispatchSheet(target)}</>),
-    Match.tag("DispatchEvent", (target) => <>{dispatchSheet(target, eventSheet(target))}</>),
-    Match.tag("CortexFrame", (target) => <>{dispatchSheet(target, cortexSheet(target))}</>),
-    Match.tag("CortexSignal", (target) => (
-      <>{dispatchSheet(target, cortexSheet(target, signalSheet(target)))}</>
+    Match.tag("WorkNode", (target) => (
+      <WorkbenchSheet key={`work:${target.workNodeId}`} open onClose={onClose}>
+        <WorkNodeSheet
+          mission={state.mission}
+          node={state.nodes.find((node) => node.workNodeId === target.workNodeId)}
+          nodes={state.nodes}
+          dispatches={state.dispatches}
+          transcripts={state.transcripts}
+          onOpenWorkNode={onOpenWorkNode}
+        />
+      </WorkbenchSheet>
     )),
     Match.exhaustive,
   );

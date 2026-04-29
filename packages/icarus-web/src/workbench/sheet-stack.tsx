@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
@@ -8,28 +8,55 @@ export function WorkbenchSheet({
   onClose,
   children,
   depth = 0,
+  frontmost = true,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly depth?: number;
+  readonly frontmost?: boolean;
 }) {
   const closing = useRef(false);
-  const closeOnce = useCallback(() => {
-    if (closing.current) return;
+  const [presented, setPresented] = useState(open);
+  const requestClose = useCallback(() => {
     closing.current = true;
-    onClose();
-  }, [onClose]);
+    setPresented(false);
+  }, []);
+  const onSafeToUnmountChange = useCallback(
+    (safeToUnmount: boolean) => {
+      if (safeToUnmount && closing.current) {
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
+  useEffect(() => {
+    if (open) {
+      closing.current = false;
+      setPresented(true);
+    } else {
+      requestClose();
+    }
+  }, [open, requestClose]);
+
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && closeOnce()}>
+    <Sheet
+      open={presented}
+      onOpenChange={(next) => (next ? setPresented(true) : requestClose())}
+      onSafeToUnmountChange={onSafeToUnmountChange}
+    >
       <SheetContent
         className={`sheet-depth-${depth}`}
-        showOverlay={depth === 0}
-        onDismissed={closeOnce}
+        dismissible={frontmost}
+        showOverlay={frontmost}
+        onDismissRequest={requestClose}
       >
-        <Button variant="ghost" size="sm" className="sheet-close-button" onClick={closeOnce}>
-          close
-        </Button>
+        {frontmost ? (
+          <Button variant="ghost" size="sm" className="sheet-close-button" onClick={requestClose}>
+            close
+          </Button>
+        ) : null}
         {children}
       </SheetContent>
     </Sheet>

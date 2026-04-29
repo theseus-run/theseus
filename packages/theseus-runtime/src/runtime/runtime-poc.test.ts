@@ -21,7 +21,9 @@ import { SqliteDispatchStore, TheseusDbLive } from "../store/index.ts";
 import { makeToolCatalog, ToolCatalog } from "../tool-catalog.ts";
 import { RuntimeCommands, RuntimeControls, RuntimeQueries } from "./client.ts";
 import { WorkNodeControllers, WorkNodeControllersLive } from "./controllers/work-node.ts";
+import { RuntimeEventBusLive } from "./event-bus.ts";
 import type { RuntimeDispatchEvent } from "./types.ts";
+import { WorkSupervisor, WorkSupervisorLive } from "./work-supervisor.ts";
 
 const probe = Tool.defineTool({
   name: "probe",
@@ -82,9 +84,14 @@ const runtimeLayer = (responses = pocResponses) => {
   const DbLive = TheseusDbLive(dbPath);
   const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
   const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+  const EventBusLive = RuntimeEventBusLive;
+  const SupervisorLive = Layer.provide(
+    Layer.effect(WorkSupervisor)(WorkSupervisorLive),
+    EventBusLive,
+  );
   const WorkNodeControlLive = Layer.provide(
     Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
-    RegistryLive,
+    SupervisorLive,
   );
   const CatalogLive = Layer.succeed(ToolCatalog)(
     makeToolCatalog([AgentComm.dispatchGruntTool, probe]),
@@ -112,6 +119,8 @@ const runtimeLayer = (responses = pocResponses) => {
     DbLive,
     StoreLive,
     RegistryLive,
+    EventBusLive,
+    SupervisorLive,
     WorkNodeControlLive,
     CatalogLive,
     BlueprintsLive,
@@ -189,7 +198,14 @@ describe("TheseusRuntime POC", () => {
     expect(observed.dispatches[0]?.missionId).toBe(observed.mission.missionId);
     expect(observed.dispatches[0]?.capsuleId).toBe(observed.mission.capsuleId);
     expect(observed.session.control.interrupt._tag).toBe("Supported");
-    expect(observed.session.control.pause._tag).toBe("Unsupported");
+    expect(observed.session.control.pause._tag).toBe("Supported");
+    expect(
+      observed.events.some(
+        (event) =>
+          event._tag === "DispatchSessionStarted" &&
+          event.session.parentWorkNodeId === observed.session.workNodeId,
+      ),
+    ).toBe(true);
     expect(observed.dispatches.map((session) => session.parentWorkNodeId)).toContain(
       observed.session.workNodeId,
     );
@@ -238,15 +254,22 @@ describe("TheseusRuntime POC", () => {
     const DbLive = TheseusDbLive(first.dbPath);
     const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
     const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+    const EventBusLive = RuntimeEventBusLive;
+    const SupervisorLive = Layer.provide(
+      Layer.effect(WorkSupervisor)(WorkSupervisorLive),
+      EventBusLive,
+    );
     const WorkNodeControlLive = Layer.provide(
       Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
-      RegistryLive,
+      SupervisorLive,
     );
     const CatalogLive = Layer.succeed(ToolCatalog)(makeToolCatalog([]));
     const Services = Layer.mergeAll(
       DbLive,
       StoreLive,
       RegistryLive,
+      EventBusLive,
+      SupervisorLive,
       WorkNodeControlLive,
       CatalogLive,
       Agent.BlueprintRegistryLive([]),
@@ -298,16 +321,16 @@ describe("TheseusRuntime POC", () => {
     expect(observed.result.content).toBe("controlled final");
   });
 
-  test("rejects unsupported dispatch work-node controls", async () => {
+  test("pauses and resumes active dispatches through work node identity", async () => {
     const { layer } = runtimeLayer([textParts("pause test final")]);
 
-    const error = await Effect.runPromise(
+    const observed = await Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* TheseusRuntime;
         const mission = yield* RuntimeCommands.createMission(runtime, {
           slug: "work-node-pause",
-          goal: "Reject unsupported pause",
-          criteria: ["pause rejected"],
+          goal: "Pause active work",
+          criteria: ["pause accepted"],
         });
         const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
           missionId: mission.missionId,
@@ -318,14 +341,21 @@ describe("TheseusRuntime POC", () => {
           },
           task: "finish",
         });
-        return yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
           _tag: "Pause",
           reason: "operator requested pause",
-        }).pipe(Effect.flip);
+        });
+        const paused = yield* RuntimeQueries.getMissionWorkTree(runtime, mission.missionId);
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "Resume",
+        });
+        const result = yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
+        return { paused, result };
       }).pipe(Effect.provide(layer)),
     );
 
-    expect(error._tag).toBe("RuntimeWorkControlUnsupported");
+    expect(observed.paused[0]?.state).toBe("paused");
+    expect(observed.result.content).toBe("pause test final");
   });
 
   test("root runtime import does not export live assembly", async () => {

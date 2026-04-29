@@ -25,6 +25,8 @@ Read:
 - [Runtime architecture](../runtime/architecture.md)
 - [Mission system](../runtime/mission-system.md)
 - [Isolation and workspaces](../runtime/isolation.md)
+- [Runtime truth map](runtime-truth-map.md)
+- [Not real yet](not-real-yet.md)
 
 Then inspect `packages/theseus-runtime`.
 

@@ -21,32 +21,39 @@ export const WorkControlDescriptors = {
     injectGuidance: unsupportedByNodeKind(kind),
     pause: unsupportedByNodeKind(kind),
     resume: unsupportedByNodeKind(kind),
+    stop: unsupportedByNodeKind(kind),
     requestStatus: unsupportedByNodeKind(kind),
   }),
 
   dispatch: (state: WorkNodeState): WorkNodeControlDescriptor => {
     const inactive = WorkControlCapabilities.unsupported("dispatch is not active");
-    const unsupportedPause = WorkControlCapabilities.unsupported(
-      "dispatch pause is not implemented",
-    );
-    const unsupportedResume = WorkControlCapabilities.unsupported(
-      "dispatch resume is not implemented",
-    );
+    const unsupportedPause = WorkControlCapabilities.unsupported("dispatch is already paused");
     return state === "running"
       ? {
           interrupt: WorkControlCapabilities.supported(),
           injectGuidance: WorkControlCapabilities.supported(),
-          pause: unsupportedPause,
-          resume: unsupportedResume,
+          pause: WorkControlCapabilities.supported(),
+          resume: WorkControlCapabilities.unsupported("dispatch is not paused"),
+          stop: WorkControlCapabilities.supported(),
           requestStatus: WorkControlCapabilities.supported(),
         }
-      : {
-          interrupt: inactive,
-          injectGuidance: inactive,
-          pause: unsupportedPause,
-          resume: unsupportedResume,
-          requestStatus: WorkControlCapabilities.supported(),
-        };
+      : state === "paused"
+        ? {
+            interrupt: WorkControlCapabilities.supported(),
+            injectGuidance: WorkControlCapabilities.unsupported("dispatch is paused"),
+            pause: unsupportedPause,
+            resume: WorkControlCapabilities.supported(),
+            stop: WorkControlCapabilities.supported(),
+            requestStatus: WorkControlCapabilities.supported(),
+          }
+        : {
+            interrupt: inactive,
+            injectGuidance: inactive,
+            pause: unsupportedPause,
+            resume: WorkControlCapabilities.unsupported("dispatch is not paused"),
+            stop: inactive,
+            requestStatus: WorkControlCapabilities.supported(),
+          };
   },
 };
 
@@ -60,5 +67,6 @@ export const capabilityForCommand = (
     Match.tag("Pause", () => descriptor.pause),
     Match.tag("Resume", () => descriptor.resume),
     Match.tag("RequestStatus", () => descriptor.requestStatus),
+    Match.tag("Stop", () => descriptor.stop),
     Match.exhaustive,
   );

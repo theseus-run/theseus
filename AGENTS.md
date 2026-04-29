@@ -114,6 +114,7 @@ Treat these as the conceptual base unless current code or docs prove otherwise:
 - IDs crossing package, persistence, tool, RPC, dispatch, or mission boundaries should be branded/schema-backed, not raw `string`.
 - If ordering matters, encode it in the API. Do not rely on incidental object key order, registration order, import order, or array order.
 - Logs, capsules, dispatch events, protocol events, and telemetry are append-only unless an explicit compaction/snapshot boundary says otherwise.
+- Define expected outcome, success criteria, allowed side effects, evidence rules, and stopping conditions before changing complex or high-risk code. Avoid step-by-step process scaffolding unless the exact path matters.
 
 ### Module Shape
 
@@ -170,6 +171,8 @@ Use `agent-self-check` before finishing code changes, after deterministic check 
 Use `code-review` when reviewing code changes for defects, regressions, missing tests, weak modeling, package-boundary risks, or stale agent leftovers.
 
 Use `cleanup-audit` after substantial edits, refactors, moves, generated changes, or long agent sessions to remove confirmed non-behavioral leftovers and report possible stale compatibility/runtime paths before changing them.
+
+Use `roadmap-management` when creating, updating, reviewing, or promoting roadmap items.
 
 </skills>
 

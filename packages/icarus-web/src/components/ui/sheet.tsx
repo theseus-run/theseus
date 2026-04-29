@@ -1,7 +1,9 @@
 import { Sheet as SilkSheet, SheetStack as SilkSheetStack } from "@silk-hq/components";
 import type { HTMLAttributes, ReactNode } from "react";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
+
+const ROUTE_DISMISS_PROGRESS = 0.86;
 
 export function SheetStack({ children }: { readonly children: ReactNode }) {
   return (
@@ -15,11 +17,13 @@ export function SheetStack({ children }: { readonly children: ReactNode }) {
 export function Sheet({
   open,
   onOpenChange,
+  onSafeToUnmountChange,
   children,
 }: {
-  open: boolean;
-  onOpenChange?: (open: boolean) => void;
-  children: ReactNode;
+  readonly open: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly onSafeToUnmountChange?: (safeToUnmount: boolean) => void;
+  readonly children: ReactNode;
 }) {
   return (
     <SilkSheet.Root
@@ -27,6 +31,7 @@ export function Sheet({
       forComponent="closest"
       presented={open}
       onPresentedChange={(presented) => onOpenChange?.(presented)}
+      onSafeToUnmountChange={onSafeToUnmountChange}
     >
       {children}
     </SilkSheet.Root>
@@ -40,20 +45,17 @@ export function SheetOverlay({ className, ...props }: HTMLAttributes<HTMLDivElem
 export function SheetContent({
   className,
   children,
+  dismissible = true,
   showOverlay = true,
-  onDismissed,
+  onDismissRequest = () => {},
   ...props
-}: HTMLAttributes<HTMLElement> & {
+}: HTMLAttributes<HTMLDivElement> & {
+  readonly dismissible?: boolean;
   readonly showOverlay?: boolean;
-  readonly onDismissed?: () => void;
+  readonly onDismissRequest?: () => void;
 }) {
-  const travelProgress = useRef(1);
-  const userTraveling = useRef(false);
-  const dismissFromTravel = () => {
-    if (!userTraveling.current) return;
-    userTraveling.current = false;
-    if (travelProgress.current < 0.96) onDismissed?.();
-  };
+  const userStepping = useRef(false);
+  const requestDismiss = useCallback(() => onDismissRequest(), [onDismissRequest]);
 
   return (
     <SilkSheet.Portal>
@@ -61,18 +63,25 @@ export function SheetContent({
         className="sheet-view"
         contentPlacement="right"
         tracks="right"
-        nativeEdgeSwipePrevention={true}
-        swipeDismissal={true}
-        onTravel={({ progress }) => {
-          travelProgress.current = progress;
+        nativeEdgeSwipePrevention={false}
+        onClickOutside={{ dismiss: dismissible, stopOverlayPropagation: true }}
+        onEscapeKeyDown={{
+          nativePreventDefault: true,
+          dismiss: dismissible,
+          stopOverlayPropagation: true,
         }}
-        onTravelEnd={dismissFromTravel}
+        swipe={dismissible}
+        swipeDismissal={dismissible}
         onTravelStatusChange={(status) => {
-          if (status === "stepping") userTraveling.current = true;
-          if (status === "exiting" || status === "idleOutside") onDismissed?.();
+          userStepping.current = status === "stepping";
+        }}
+        onTravel={({ progress }) => {
+          if (dismissible && userStepping.current && progress < ROUTE_DISMISS_PROGRESS) {
+            requestDismiss();
+          }
         }}
       >
-        {showOverlay && <SheetOverlay onClick={onDismissed} />}
+        {showOverlay ? <SheetOverlay onClick={dismissible ? requestDismiss : undefined} /> : null}
         <SilkSheet.Content className={cn("sheet-content", className)} {...props}>
           <SilkSheet.BleedingBackground className="sheet-bleeding-background" />
           {children}

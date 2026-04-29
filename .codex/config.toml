@@ -1,0 +1,2 @@
+project_root_markers = ["bun.lock", "package.json", "AGENTS.md"]
+project_doc_max_bytes = 65536

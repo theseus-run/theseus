@@ -18,14 +18,11 @@ export {
   GetMission,
   GetMissionWorkTree,
   GetResult,
-  Inject,
-  Interrupt,
   ListMissions,
   ListRuntimeDispatches,
   RpcError,
   StartMissionDispatch,
   StartResearchPoc,
-  Status,
   TheseusRpc,
 } from "./procedures.ts";
 

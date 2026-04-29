@@ -2,7 +2,7 @@
  * Root layout shell.
  */
 
-import { Outlet } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 import { useSyncExternalStore } from "react";
 import { connection } from "@/lib/queries";
 import type { ConnectionState } from "@/lib/rpc-client";
@@ -40,7 +40,10 @@ export function RootLayout() {
           <span className="text-foreground uppercase tracking-wider font-semibold">icarus</span>
           <ConnectionStatus />
         </div>
-        <span className="text-muted-foreground">runtime workbench</span>
+        <nav className="flex items-center gap-3 text-muted-foreground">
+          <Link to="/">workbench</Link>
+          <Link to="/primitives">primitives</Link>
+        </nav>
       </header>
 
       <div className="flex-1 overflow-hidden">

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DispatchEventSchema, RuntimeDispatchEventSchema } from "@theseus.run/core/Rpc";
+import { WorkNodeId } from "@theseus.run/runtime";
 import { Schema } from "effect";
 import { jsonSafe, serializeEvent, serializeRuntimeEvent } from "./serialize.ts";
 
@@ -36,7 +37,7 @@ describe("server serialization", () => {
     const encoded = Schema.encodeUnknownSync(Schema.toCodecJson(RuntimeDispatchEventSchema))(
       serializeRuntimeEvent({
         _tag: "DispatchEvent",
-        workNodeId: "work",
+        workNodeId: WorkNodeId.make("work"),
         dispatchId: "dispatch",
         missionId: "mission",
         capsuleId: "capsule",

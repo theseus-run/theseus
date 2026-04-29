@@ -8,11 +8,11 @@ import type {
   MissionStartDispatchInput,
   RuntimeDispatchEvent,
   RuntimeError,
-  StatusEntry,
   TheseusRuntimeService,
   WorkControlCommand,
   WorkNodeSession,
 } from "./types.ts";
+import { WorkNodeId } from "./types.ts";
 
 const unexpectedQueryResult = Effect.die("Runtime query returned unexpected result");
 
@@ -55,20 +55,7 @@ export const RuntimeControls = {
     workNodeId: string,
     command: WorkControlCommand,
   ): Effect.Effect<void, RuntimeError> =>
-    runtime.control({ _tag: "WorkNodeControl", workNodeId, command }),
-
-  inject: (
-    runtime: TheseusRuntimeService,
-    dispatchId: string,
-    text: string,
-  ): Effect.Effect<void, RuntimeError> =>
-    runtime.control({ _tag: "DispatchInject", dispatchId, text }),
-
-  interrupt: (
-    runtime: TheseusRuntimeService,
-    dispatchId: string,
-  ): Effect.Effect<void, RuntimeError> =>
-    runtime.control({ _tag: "DispatchInterrupt", dispatchId }),
+    runtime.control({ _tag: "WorkNodeControl", workNodeId: WorkNodeId.make(workNodeId), command }),
 };
 
 export const RuntimeQueries = {
@@ -172,18 +159,6 @@ export const RuntimeQueries = {
       Effect.flatMap((result) =>
         Match.value(result).pipe(
           Match.tag("DispatchEvents", ({ events }) => Effect.succeed(events)),
-          Match.orElse(() => unexpectedQueryResult),
-        ),
-      ),
-    ),
-
-  status: (
-    runtime: TheseusRuntimeService,
-  ): Effect.Effect<ReadonlyArray<StatusEntry>, RuntimeError> =>
-    runtime.query({ _tag: "ActiveStatus" }).pipe(
-      Effect.flatMap((result) =>
-        Match.value(result).pipe(
-          Match.tag("ActiveStatus", ({ status }) => Effect.succeed(status)),
           Match.orElse(() => unexpectedQueryResult),
         ),
       ),

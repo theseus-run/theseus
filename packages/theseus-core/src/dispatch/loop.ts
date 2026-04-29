@@ -2,6 +2,7 @@ import { Effect, Match, type Queue, Ref } from "effect";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SatelliteAbort, SatelliteScope } from "../satellite/types.ts";
+import type { DispatchControlGate } from "./control.ts";
 import type { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { drainInjections, injectionDetail } from "./injections.ts";
@@ -27,6 +28,7 @@ export interface DispatchLoopInput<R> {
   readonly store: (typeof DispatchStore)["Service"];
   readonly injectionQueue: Queue.Queue<Injection>;
   readonly messagesRef: Ref.Ref<ReadonlyArray<Prompt.MessageEncoded>>;
+  readonly controlGate: DispatchControlGate;
   readonly satelliteScope: SatelliteScope<R>;
   readonly emit: Emit;
 }
@@ -78,6 +80,7 @@ export const runDispatchLoop = <R>(
   Effect.withSpan("dispatch.iteration", { attributes: { "dispatch.iteration": iteration } })(
     Effect.gen(function* () {
       yield* Effect.yieldNow;
+      yield* input.controlGate.awaitOpen;
 
       const prepared = yield* prepareIterationMessages({
         dispatchId: input.dispatchId,
@@ -90,6 +93,7 @@ export const runDispatchLoop = <R>(
 
       yield* Ref.set(input.messagesRef, prepared);
       yield* input.store.snapshot(input.dispatchId, iteration, prepared, usage);
+      yield* input.controlGate.awaitOpen;
 
       const iterationResult = yield* runDispatchIteration<R>({
         dispatchId: input.dispatchId,
@@ -99,6 +103,7 @@ export const runDispatchLoop = <R>(
         messages: prepared,
         usage,
         iteration,
+        controlGate: input.controlGate,
         satelliteScope: input.satelliteScope,
         emit: input.emit,
       });

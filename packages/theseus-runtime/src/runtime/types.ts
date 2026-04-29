@@ -3,6 +3,13 @@ import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Data, type Effect, type Stream } from "effect";
 import type { SerializedDispatchSpec } from "../tool-catalog.ts";
 
+export type WorkNodeId = string & { readonly _brand: unique symbol };
+
+export const WorkNodeId = {
+  make: (value: string): WorkNodeId => value as WorkNodeId,
+  unbrand: (value: WorkNodeId): string => value,
+};
+
 export class RuntimeToolNotFound extends Data.TaggedError("RuntimeToolNotFound")<{
   readonly names: ReadonlyArray<string>;
 }> {}
@@ -33,12 +40,29 @@ export class RuntimeWorkControlFailed extends Data.TaggedError("RuntimeWorkContr
   readonly cause?: unknown;
 }> {}
 
+export class RuntimeProjectionDecodeFailed extends Data.TaggedError(
+  "RuntimeProjectionDecodeFailed",
+)<{
+  readonly source: string;
+  readonly reason: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RuntimeProcessFailed extends Data.TaggedError("RuntimeProcessFailed")<{
+  readonly workNodeId: string;
+  readonly process: string;
+  readonly reason: string;
+  readonly cause?: unknown;
+}> {}
+
 export type RuntimeError =
   | RuntimeToolNotFound
   | RuntimeNotFound
   | RuntimeDispatchFailed
   | RuntimeWorkControlUnsupported
-  | RuntimeWorkControlFailed;
+  | RuntimeWorkControlFailed
+  | RuntimeProjectionDecodeFailed
+  | RuntimeProcessFailed;
 
 export type MissionSessionState = "pending" | "running" | "done" | "failed";
 export type DispatchSessionState = WorkNodeState;
@@ -62,6 +86,7 @@ export interface WorkNodeControlDescriptor {
   readonly injectGuidance: WorkControlCapability;
   readonly pause: WorkControlCapability;
   readonly resume: WorkControlCapability;
+  readonly stop: WorkControlCapability;
   readonly requestStatus: WorkControlCapability;
 }
 
@@ -83,6 +108,10 @@ export type WorkControlCommand =
     }
   | {
       readonly _tag: "RequestStatus";
+    }
+  | {
+      readonly _tag: "Stop";
+      readonly reason?: string | undefined;
     };
 
 export interface MissionSession {
@@ -94,10 +123,10 @@ export interface MissionSession {
 }
 
 export interface WorkNodeSession {
-  readonly workNodeId: string;
+  readonly workNodeId: WorkNodeId;
   readonly missionId: string;
   readonly capsuleId: string;
-  readonly parentWorkNodeId?: string;
+  readonly parentWorkNodeId?: WorkNodeId;
   readonly kind: WorkNodeKind;
   readonly relation: WorkNodeRelation;
   readonly label: string;
@@ -116,8 +145,6 @@ export interface DispatchSession extends WorkNodeSession {
   readonly state: DispatchSessionState;
   readonly usage: Dispatch.Usage;
 }
-
-export type StatusEntry = DispatchSession;
 
 export interface MissionDispatchInput {
   readonly spec: SerializedDispatchSpec;
@@ -158,11 +185,25 @@ export type RuntimeDispatchEvent =
     }
   | {
       readonly _tag: "DispatchEvent";
-      readonly workNodeId: string;
+      readonly workNodeId: WorkNodeId;
       readonly dispatchId: string;
       readonly missionId: string;
       readonly capsuleId: string;
       readonly event: Dispatch.DispatchEvent;
+    }
+  | {
+      readonly _tag: "WorkNodeStateChanged";
+      readonly workNodeId: WorkNodeId;
+      readonly missionId: string;
+      readonly state: WorkNodeState;
+      readonly reason?: string;
+    }
+  | {
+      readonly _tag: "RuntimeProcessFailed";
+      readonly workNodeId: WorkNodeId;
+      readonly missionId: string;
+      readonly process: string;
+      readonly reason: string;
     };
 
 export type RuntimeSubmission =
@@ -176,21 +217,11 @@ export type RuntimeSubmission =
       readonly events: Stream.Stream<RuntimeDispatchEvent>;
     };
 
-export type RuntimeControl =
-  | {
-      readonly _tag: "WorkNodeControl";
-      readonly workNodeId: string;
-      readonly command: WorkControlCommand;
-    }
-  | {
-      readonly _tag: "DispatchInject";
-      readonly dispatchId: string;
-      readonly text: string;
-    }
-  | {
-      readonly _tag: "DispatchInterrupt";
-      readonly dispatchId: string;
-    };
+export type RuntimeControl = {
+  readonly _tag: "WorkNodeControl";
+  readonly workNodeId: WorkNodeId;
+  readonly command: WorkControlCommand;
+};
 
 export type RuntimeQuery =
   | {
@@ -223,9 +254,6 @@ export type RuntimeQuery =
   | {
       readonly _tag: "DispatchEvents";
       readonly dispatchId: string;
-    }
-  | {
-      readonly _tag: "ActiveStatus";
     };
 
 export type RuntimeQueryResult =
@@ -260,20 +288,10 @@ export type RuntimeQueryResult =
   | {
       readonly _tag: "DispatchEvents";
       readonly events: ReadonlyArray<Dispatch.DispatchEventEntry>;
-    }
-  | {
-      readonly _tag: "ActiveStatus";
-      readonly status: ReadonlyArray<StatusEntry>;
     };
-
-export interface RuntimeSnapshot {
-  readonly missions: ReadonlyArray<MissionSession>;
-  readonly active: ReadonlyArray<StatusEntry>;
-}
 
 export interface TheseusRuntimeService {
   readonly submit: (command: RuntimeCommand) => Effect.Effect<RuntimeSubmission, RuntimeError>;
   readonly control: (command: RuntimeControl) => Effect.Effect<void, RuntimeError>;
   readonly query: (query: RuntimeQuery) => Effect.Effect<RuntimeQueryResult, RuntimeError>;
-  readonly getSnapshot: () => Effect.Effect<RuntimeSnapshot>;
 }

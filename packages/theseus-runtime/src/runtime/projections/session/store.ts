@@ -1,72 +1,136 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
-import { Effect } from "effect";
-import { decodeJson } from "../../../json.ts";
+import { Effect, Schema } from "effect";
 import type { TheseusDb } from "../../../store/sqlite.ts";
-import type { MissionSession, MissionSessionState } from "../../types.ts";
+import {
+  type MissionSession,
+  type MissionSessionState,
+  RuntimeProjectionDecodeFailed,
+} from "../../types.ts";
 
-interface MissionCreateData {
-  readonly id?: string;
-  readonly goal?: string;
-  readonly criteria?: ReadonlyArray<string>;
-}
+const MissionCreateDataSchema = Schema.Struct({
+  id: Schema.String,
+  goal: Schema.String,
+  criteria: Schema.Array(Schema.String),
+});
 
-interface MissionTransitionData {
-  readonly to?: MissionSessionState;
-}
+const MissionTransitionDataSchema = Schema.Struct({
+  to: Schema.Literals(["pending", "running", "done", "failed"]),
+});
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const CapsuleEventRowSchema = Schema.Struct({
+  type: Schema.String,
+  at: Schema.String,
+  by: Schema.String,
+  data_json: Schema.String,
+});
 
-const missionCreateData = (data: unknown): MissionCreateData | undefined => {
-  if (!isRecord(data)) return undefined;
-  const id = typeof data["id"] === "string" ? data["id"] : undefined;
-  const goal = typeof data["goal"] === "string" ? data["goal"] : undefined;
-  const criteria = Array.isArray(data["criteria"])
-    ? data["criteria"].filter((item): item is string => typeof item === "string")
-    : undefined;
-  return {
-    ...(id !== undefined ? { id } : {}),
-    ...(goal !== undefined ? { goal } : {}),
-    ...(criteria !== undefined ? { criteria } : {}),
-  };
-};
+type CapsuleEventRow = Schema.Schema.Type<typeof CapsuleEventRowSchema>;
 
-const missionTransitionData = (data: unknown): MissionTransitionData | undefined => {
-  if (!isRecord(data)) return undefined;
-  const to = data["to"];
-  return to === "pending" || to === "running" || to === "done" || to === "failed"
-    ? { to }
-    : undefined;
-};
+const projectionDecodeError = (source: string, cause: unknown): RuntimeProjectionDecodeFailed =>
+  new RuntimeProjectionDecodeFailed({
+    source,
+    reason: String(cause),
+    cause,
+  });
+
+const decodeProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  value: unknown,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(schema)(value).pipe(
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
+
+const decodeJsonProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  json: string,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(json).pipe(
+    Effect.flatMap((value) => decodeProjection(source, schema, value)),
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
+
+const decodeCapsuleRows = (
+  rows: ReadonlyArray<unknown>,
+): Effect.Effect<ReadonlyArray<CapsuleEventRow>, RuntimeProjectionDecodeFailed> =>
+  Effect.forEach(rows, (row) =>
+    decodeProjection("capsule_events mission projection row", CapsuleEventRowSchema, row),
+  );
+
+const decodeCapsuleEvents = (
+  rows: ReadonlyArray<unknown>,
+): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const decodedRows = yield* decodeCapsuleRows(rows);
+    return yield* Effect.forEach(decodedRows, (row) =>
+      decodeJsonProjection("capsule_events.data_json", Schema.Unknown, row.data_json).pipe(
+        Effect.map((data) => ({
+          type: row.type,
+          at: row.at,
+          by: row.by,
+          data,
+        })),
+      ),
+    );
+  });
 
 const deriveMissionSession = (
   capsuleId: string,
   events: ReadonlyArray<CapsuleNs.CapsuleEvent>,
-): MissionSession | undefined => {
-  const create = events.find((event) => event.type === "mission.create");
-  if (create === undefined) return undefined;
-  const createData = missionCreateData(create.data);
-  if (
-    createData?.id === undefined ||
-    createData.goal === undefined ||
-    createData.criteria === undefined
-  ) {
-    return undefined;
-  }
+): Effect.Effect<MissionSession | undefined, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const create = events.find((event) => event.type === "mission.create");
+    if (create === undefined) return undefined;
 
-  const state = events.reduce<MissionSessionState>((current, event) => {
-    if (event.type !== "mission.transition") return current;
-    return missionTransitionData(event.data)?.to ?? current;
-  }, "pending");
+    const createData = yield* decodeProjection(
+      "mission.create capsule payload",
+      MissionCreateDataSchema,
+      create.data,
+    );
 
-  return {
-    missionId: createData.id,
-    capsuleId,
-    goal: createData.goal,
-    criteria: createData.criteria,
-    state,
-  };
-};
+    let state: MissionSessionState = "pending";
+    for (const event of events) {
+      if (event.type === "mission.transition") {
+        const transition = yield* decodeProjection(
+          "mission.transition capsule payload",
+          MissionTransitionDataSchema,
+          event.data,
+        );
+        state = transition.to;
+      }
+    }
+
+    return {
+      missionId: createData.id,
+      capsuleId,
+      goal: createData.goal,
+      criteria: createData.criteria,
+      state,
+    };
+  });
+
+const readCapsuleEventRows = (
+  db: (typeof TheseusDb)["Service"],
+  capsuleId: string,
+): Effect.Effect<ReadonlyArray<unknown>> =>
+  Effect.sync(() =>
+    db.db
+      .prepare(
+        "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
+      )
+      .all(capsuleId),
+  );
+
+const readSessionFromCapsule = (
+  db: (typeof TheseusDb)["Service"],
+  capsuleId: string,
+): Effect.Effect<MissionSession | undefined, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const rows = yield* readCapsuleEventRows(db, capsuleId);
+    return yield* deriveMissionSession(capsuleId, yield* decodeCapsuleEvents(rows));
+  });
 
 export const recordMissionCapsule = (
   db: (typeof TheseusDb)["Service"],
@@ -95,60 +159,32 @@ export const getMissionCapsuleId = (
 export const readMissionSession = (
   db: (typeof TheseusDb)["Service"],
   missionId: string,
-): Effect.Effect<MissionSession | undefined> =>
-  Effect.sync(() => {
-    const link = db.db
-      .prepare("SELECT capsule_id FROM runtime_mission_capsules WHERE mission_id = ?")
-      .get(missionId) as { capsule_id: string } | null;
-    if (!link) return undefined;
-    const rows = db.db
-      .prepare(
-        "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
-      )
-      .all(link.capsule_id) as Array<{
-      type: string;
-      at: string;
-      by: string;
-      data_json: string;
-    }>;
-    return deriveMissionSession(
-      link.capsule_id,
-      rows.map((row) => ({
-        type: row.type,
-        at: row.at,
-        by: row.by,
-        data: decodeJson(row.data_json),
-      })),
+): Effect.Effect<MissionSession | undefined, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const link = yield* Effect.sync(
+      () =>
+        db.db
+          .prepare("SELECT capsule_id FROM runtime_mission_capsules WHERE mission_id = ?")
+          .get(missionId) as { capsule_id: string } | null,
     );
+    return link === null ? undefined : yield* readSessionFromCapsule(db, link.capsule_id);
   });
 
 export const listMissionSessions = (
   db: (typeof TheseusDb)["Service"],
-): Effect.Effect<ReadonlyArray<MissionSession>> =>
-  Effect.sync(() => {
-    const links = db.db
-      .prepare("SELECT mission_id, capsule_id FROM runtime_mission_capsules")
-      .all() as Array<{ mission_id: string; capsule_id: string }>;
-    return links.flatMap((link) => {
-      const rows = db.db
-        .prepare(
-          "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
-        )
-        .all(link.capsule_id) as Array<{
-        type: string;
-        at: string;
-        by: string;
-        data_json: string;
-      }>;
-      const session = deriveMissionSession(
-        link.capsule_id,
-        rows.map((row) => ({
-          type: row.type,
-          at: row.at,
-          by: row.by,
-          data: decodeJson(row.data_json),
-        })),
-      );
-      return session ? [session] : [];
-    });
+): Effect.Effect<ReadonlyArray<MissionSession>, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const links = yield* Effect.sync(
+      () =>
+        db.db
+          .prepare("SELECT mission_id, capsule_id FROM runtime_mission_capsules")
+          .all() as Array<{
+          mission_id: string;
+          capsule_id: string;
+        }>,
+    );
+    const sessions = yield* Effect.forEach(links, (link) =>
+      readSessionFromCapsule(db, link.capsule_id),
+    );
+    return sessions.flatMap((session) => (session === undefined ? [] : [session]));
   });

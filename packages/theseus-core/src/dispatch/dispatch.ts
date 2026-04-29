@@ -16,6 +16,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import { SatelliteRing } from "../satellite/ring.ts";
 import type { SatelliteScope } from "../satellite/types.ts";
+import { makeDispatchControlGate } from "./control.ts";
 import type { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { normalizeLoopError, settleDispatchResult, zeroUsage } from "./lifecycle.ts";
@@ -61,6 +62,8 @@ export const dispatch = <R = never>(
     });
     const dispatchId = record.id;
     const currentDispatch = record;
+    const controlGate =
+      options?.controlGate ?? (yield* makeDispatchControlGate({ dispatchId, name: spec.name }));
 
     const eventQueue = yield* Queue.unbounded<DispatchEvent, Cause.Done>();
     const injectionQueue = yield* Queue.unbounded<Injection>();
@@ -123,6 +126,7 @@ export const dispatch = <R = never>(
             store,
             injectionQueue,
             messagesRef,
+            controlGate,
             satelliteScope,
             emit,
           },
@@ -161,6 +165,14 @@ export const dispatch = <R = never>(
       dispatchId,
       events: Stream.fromQueue(eventQueue).pipe(Stream.takeUntil(DispatchEvents.isTerminal)),
       inject: (i: Injection) => Queue.offer(injectionQueue, i).pipe(Effect.asVoid),
+      pause: controlGate.pause,
+      resume: controlGate.resume,
+      stop: (reason) =>
+        controlGate.stop(reason).pipe(
+          Effect.flatMap(() => Fiber.interrupt(loopFiber)),
+          Effect.asVoid,
+        ),
+      controlState: controlGate.state,
       interrupt: Fiber.interrupt(loopFiber).pipe(Effect.asVoid),
       result,
       messages: Ref.get(messagesRef),

@@ -16,6 +16,7 @@ import * as Dispatch from "@theseus.run/core/Dispatch";
 import { TheseusRpc } from "@theseus.run/core/Rpc";
 import * as Satellite from "@theseus.run/core/Satellite";
 import { TheseusRuntime } from "@theseus.run/runtime";
+import { RuntimeEventBusLive } from "@theseus.run/runtime/event-bus";
 import { TheseusRuntimeLive } from "@theseus.run/runtime/live";
 import { DispatchRegistry, DispatchRegistryLive } from "@theseus.run/runtime/registry";
 import { SqliteDispatchStore, TheseusDbLive } from "@theseus.run/runtime/store";
@@ -24,6 +25,7 @@ import {
   WorkNodeControllers,
   WorkNodeControllersLive,
 } from "@theseus.run/runtime/work-node-control";
+import { WorkSupervisor, WorkSupervisorLive } from "@theseus.run/runtime/work-supervisor";
 import { allTools } from "@theseus.run/tools";
 import { type Cause, Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -56,9 +58,14 @@ const ToolCatalogLive = Layer.succeed(ToolCatalog)(
 
 // Dispatch registry (in-memory active dispatch tracking)
 const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
+const RuntimeEventBusLiveLayer = RuntimeEventBusLive;
+const WorkSupervisorLiveLayer = Layer.provide(
+  Layer.effect(WorkSupervisor)(WorkSupervisorLive),
+  RuntimeEventBusLiveLayer,
+);
 const WorkNodeControlLive = Layer.provide(
   Layer.effect(WorkNodeControllers)(WorkNodeControllersLive),
-  RegistryLive,
+  WorkSupervisorLiveLayer,
 );
 const BlueprintRegistryLive = Agent.BlueprintRegistryLive([researchGruntBlueprint]);
 
@@ -106,6 +113,8 @@ const ServicesLayer = Layer.mergeAll(
   RingLive,
   ToolCatalogLive,
   RegistryLive,
+  RuntimeEventBusLiveLayer,
+  WorkSupervisorLiveLayer,
   WorkNodeControlLive,
   BlueprintRegistryLive,
   DbLive,

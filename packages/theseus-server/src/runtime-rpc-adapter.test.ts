@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { TheseusRuntime, type TheseusRuntimeService } from "@theseus.run/runtime";
+import { TheseusRuntime, type TheseusRuntimeService, WorkNodeId } from "@theseus.run/runtime";
 import { Effect, Layer, Stream } from "effect";
 import { RuntimeRpcAdapter, RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
 const session = {
-  workNodeId: "work-1",
+  workNodeId: WorkNodeId.make("work-1"),
   dispatchId: "dispatch-1",
   missionId: "mission-1",
   capsuleId: "capsule-1",
@@ -16,6 +16,7 @@ const session = {
     injectGuidance: { _tag: "Supported" },
     pause: { _tag: "Unsupported", reason: "dispatch pause is not implemented" },
     resume: { _tag: "Unsupported", reason: "dispatch resume is not implemented" },
+    stop: { _tag: "Supported" },
     requestStatus: { _tag: "Supported" },
   },
   name: "coordinator",
@@ -56,7 +57,6 @@ const fakeRuntime: TheseusRuntimeService = {
     }
     return Effect.die("unexpected query");
   },
-  getSnapshot: () => Effect.succeed({ missions: [mission], active: [session] }),
 };
 
 const TestLayer = Layer.provide(

@@ -6,7 +6,8 @@ import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
 import type { ToolCatalog } from "../tool-catalog.ts";
 import type { WorkNodeControllers } from "./controllers/work-node.ts";
-import { runRuntimeControl, runRuntimeQuery, snapshot } from "./operations.ts";
+import type { RuntimeEventBus } from "./event-bus.ts";
+import { runRuntimeControl, runRuntimeQuery } from "./operations.ts";
 import { startDispatch } from "./systems/dispatch/system.ts";
 import { createMission } from "./systems/mission/system.ts";
 import type {
@@ -15,10 +16,10 @@ import type {
   RuntimeError,
   RuntimeQuery,
   RuntimeQueryResult,
-  RuntimeSnapshot,
   RuntimeSubmission,
   TheseusRuntimeService,
 } from "./types.ts";
+import type { WorkSupervisor } from "./work-supervisor.ts";
 
 export interface RuntimeHostDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
@@ -29,6 +30,8 @@ export interface RuntimeHostDeps {
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
   readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];
   readonly workNodeControllers: (typeof WorkNodeControllers)["Service"];
+  readonly eventBus: (typeof RuntimeEventBus)["Service"];
+  readonly workSupervisor: (typeof WorkSupervisor)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
 }
 
@@ -60,7 +63,5 @@ export const makeRuntimeHost = (deps: RuntimeHostDeps): TheseusRuntimeService =>
   const query = (runtimeQuery: RuntimeQuery): Effect.Effect<RuntimeQueryResult, RuntimeError> =>
     runRuntimeQuery(deps, runtimeQuery);
 
-  const getSnapshot = (): Effect.Effect<RuntimeSnapshot> => snapshot(deps);
-
-  return { submit, control, query, getSnapshot };
+  return { submit, control, query };
 };

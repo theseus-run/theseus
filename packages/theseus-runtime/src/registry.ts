@@ -7,8 +7,7 @@
 
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import { Clock, Context, Effect, Ref } from "effect";
-import type { StatusEntry, WorkNodeState } from "./runtime/types.ts";
-import { WorkControlDescriptors } from "./runtime/work-control.ts";
+import type { DispatchSession, WorkNodeId, WorkNodeState } from "./runtime/types.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,13 +15,13 @@ import { WorkControlDescriptors } from "./runtime/work-control.ts";
 
 interface RegistryEntry {
   readonly handle: Dispatch.DispatchHandle;
-  readonly workNodeId: string;
+  readonly workNodeId: WorkNodeId;
   readonly missionId: string;
   readonly capsuleId: string;
-  readonly parentWorkNodeId?: string;
-  readonly relation: StatusEntry["relation"];
+  readonly parentWorkNodeId?: WorkNodeId;
+  readonly relation: DispatchSession["relation"];
   readonly name: string;
-  readonly modelRequest?: StatusEntry["modelRequest"];
+  readonly modelRequest?: DispatchSession["modelRequest"];
   readonly startedAt: number;
   iteration: number;
   usage: Dispatch.Usage;
@@ -39,7 +38,7 @@ export class DispatchRegistry extends Context.Service<
     readonly register: (
       handle: Dispatch.DispatchHandle,
       session: Pick<
-        StatusEntry,
+        DispatchSession,
         | "workNodeId"
         | "missionId"
         | "capsuleId"
@@ -55,7 +54,6 @@ export class DispatchRegistry extends Context.Service<
       dispatchId: string,
       update: Partial<Pick<RegistryEntry, "iteration" | "usage" | "state">>,
     ) => Effect.Effect<void>;
-    readonly list: () => Effect.Effect<ReadonlyArray<StatusEntry>>;
   }
 >()("DispatchRegistry") {}
 
@@ -70,7 +68,7 @@ export const DispatchRegistryLive = Effect.gen(function* () {
     register: (
       handle: Dispatch.DispatchHandle,
       session: Pick<
-        StatusEntry,
+        DispatchSession,
         | "workNodeId"
         | "missionId"
         | "capsuleId"
@@ -130,30 +128,5 @@ export const DispatchRegistryLive = Effect.gen(function* () {
         });
         return next;
       }),
-
-    list: () =>
-      Ref.get(ref).pipe(
-        Effect.map((m) =>
-          Array.from(m.values()).map(
-            (e): StatusEntry => ({
-              dispatchId: e.handle.dispatchId,
-              workNodeId: e.workNodeId,
-              missionId: e.missionId,
-              capsuleId: e.capsuleId,
-              ...(e.parentWorkNodeId !== undefined ? { parentWorkNodeId: e.parentWorkNodeId } : {}),
-              kind: "dispatch",
-              relation: e.relation,
-              label: e.name,
-              control: WorkControlDescriptors.dispatch(e.state),
-              name: e.name,
-              ...(e.modelRequest !== undefined ? { modelRequest: e.modelRequest } : {}),
-              iteration: e.iteration,
-              state: e.state,
-              usage: e.usage,
-              startedAt: e.startedAt,
-            }),
-          ),
-        ),
-      ),
   };
 });

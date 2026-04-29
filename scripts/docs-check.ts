@@ -14,6 +14,24 @@ const allowedTopFolders = new Set([
   "runtime",
 ]);
 const allowedStatuses = new Set(["current", "draft", "brainstorm", "archived", "active-rationale"]);
+const folderStatusRules = new Map<string, string>([
+  ["archive", "archived"],
+  ["brainstorms", "brainstorm"],
+  ["design-notes", "active-rationale"],
+  ["drafts", "draft"],
+]);
+const currentFolders = new Set(["clients", "direction", "maps", "primitives", "runtime"]);
+const allowedOwners = new Set([
+  "archive",
+  "brainstorms",
+  "clients",
+  "design-notes",
+  "direction",
+  "docs",
+  "drafts",
+  "primitives",
+  "runtime",
+]);
 const markdownFiles: string[] = [];
 const errors: string[] = [];
 
@@ -70,6 +88,29 @@ const checkFile = (file: string): void => {
   }
   if (frontmatter.status !== undefined && !allowedStatuses.has(frontmatter.status)) {
     errors.push(`${file}: invalid status ${frontmatter.status}`);
+  }
+  if (frontmatter.owner !== undefined && !allowedOwners.has(frontmatter.owner)) {
+    errors.push(`${file}: invalid owner ${frontmatter.owner}`);
+  }
+
+  const folder = file.split(path.sep)[1];
+  if (folder !== undefined) {
+    const expectedStatus = folderStatusRules.get(folder);
+    if (expectedStatus !== undefined && frontmatter.status !== expectedStatus) {
+      errors.push(`${file}: expected status ${expectedStatus} for ${folder}/`);
+    }
+    if (currentFolders.has(folder) && frontmatter.status === "archived") {
+      errors.push(`${file}: archived status does not belong in ${folder}/`);
+    }
+    if (
+      frontmatter.owner !== undefined &&
+      folder !== "maps" &&
+      file !== path.join(docsRoot, "README.md")
+    ) {
+      if (folder !== frontmatter.owner) {
+        errors.push(`${file}: expected owner ${folder}`);
+      }
+    }
   }
 
   checkRelativeMarkdownLinks(file, text);

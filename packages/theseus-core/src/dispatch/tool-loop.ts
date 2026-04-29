@@ -10,9 +10,11 @@ import type {
 } from "../satellite/types.ts";
 import { SatelliteAbort as SatelliteAbortError } from "../satellite/types.ts";
 import type { ToolAnyWith } from "../tool/index.ts";
+import type { DispatchControlGate } from "./control.ts";
 import * as DispatchEvents from "./events.ts";
 import { runToolCall, tryParseArgs } from "./step.ts";
 import {
+  type DispatchError,
   type DispatchEvent,
   DispatchToolFailed,
   type ToolCall,
@@ -139,11 +141,12 @@ export const runDispatchToolCalls = <R>(input: {
   readonly iteration: number;
   readonly tools: ReadonlyArray<ToolAnyWith<R>>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly controlGate: DispatchControlGate;
   readonly satelliteScope: SatelliteScope<R>;
   readonly satelliteContext: SatelliteContext;
   readonly onSatelliteAction: SatelliteActionCallback;
   readonly emit: Emit;
-}): Effect.Effect<ReadonlyArray<ToolCallResult>, DispatchToolFailed | SatelliteAbort, R> =>
+}): Effect.Effect<ReadonlyArray<ToolCallResult>, DispatchError | SatelliteAbort, R> =>
   Effect.gen(function* () {
     yield* Effect.forEach(
       input.toolCalls,
@@ -164,7 +167,9 @@ export const runDispatchToolCalls = <R>(input: {
     // Planning is explicit now so a future scheduler can parallelize only
     // parallel-safe batches after satellite hook ordering is hardened.
     for (const batch of batches) {
+      yield* input.controlGate.awaitOpen;
       for (const toolCall of batch.toolCalls) {
+        yield* input.controlGate.awaitOpen;
         const beforeAction = yield* input.satelliteScope.beforeTool(
           { tool: toolCall },
           input.satelliteContext,

@@ -5,6 +5,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { RootLayout } from "./routes/__root";
 import { MissionListPage } from "./routes/index";
+import { PrimitivesPage } from "./routes/primitives";
 
 export const rootRoute = createRootRoute({
   component: RootLayout,
@@ -16,9 +17,21 @@ const indexRoute = createRoute({
   component: MissionListPage,
 });
 
+const primitivesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/primitives",
+  component: PrimitivesPage,
+});
+
 const missionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/missions/$missionId",
+  component: MissionListPage,
+});
+
+const missionInspectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missions/$missionId/inspect",
   component: MissionListPage,
 });
 
@@ -28,38 +41,12 @@ const workNodeRoute = createRoute({
   component: MissionListPage,
 });
 
-const dispatchRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/missions/$missionId/dispatches/$dispatchId",
-  component: MissionListPage,
-});
-
-const eventRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/missions/$missionId/dispatches/$dispatchId/events/$eventIndex",
-  component: MissionListPage,
-});
-
-const cortexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration",
-  component: MissionListPage,
-});
-
-const signalRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration/signals/$signalId",
-  component: MissionListPage,
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  primitivesRoute,
   missionRoute,
+  missionInspectRoute,
   workNodeRoute,
-  dispatchRoute,
-  eventRoute,
-  cortexRoute,
-  signalRoute,
 ]);
 
 export const router = createRouter({ routeTree });

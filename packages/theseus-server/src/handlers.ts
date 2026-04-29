@@ -16,6 +16,8 @@ import {
 import type {
   RuntimeDispatchFailed,
   RuntimeNotFound,
+  RuntimeProcessFailed,
+  RuntimeProjectionDecodeFailed,
   RuntimeToolNotFound,
   RuntimeWorkControlFailed,
   RuntimeWorkControlUnsupported,
@@ -38,7 +40,9 @@ const toRpcError = (
     | RuntimeNotFound
     | RuntimeDispatchFailed
     | RuntimeWorkControlUnsupported
-    | RuntimeWorkControlFailed,
+    | RuntimeWorkControlFailed
+    | RuntimeProjectionDecodeFailed
+    | RuntimeProcessFailed,
 ) =>
   Match.value(error).pipe(
     Match.tag(
@@ -61,6 +65,14 @@ const toRpcError = (
     Match.tag(
       "RuntimeWorkControlFailed",
       ({ reason }) => new RpcError({ code: "CONTROL_FAILED", message: reason }),
+    ),
+    Match.tag(
+      "RuntimeProjectionDecodeFailed",
+      ({ source, reason }) => new RpcError({ code: "INTERNAL", message: `${source}: ${reason}` }),
+    ),
+    Match.tag(
+      "RuntimeProcessFailed",
+      ({ process, reason }) => new RpcError({ code: "INTERNAL", message: `${process}: ${reason}` }),
     ),
     Match.exhaustive,
   );
@@ -143,6 +155,10 @@ const normalizeControlCommand = (
     })),
     Match.tag("Resume", () => ({ _tag: "Resume" as const })),
     Match.tag("RequestStatus", () => ({ _tag: "RequestStatus" as const })),
+    Match.tag("Stop", ({ reason }) => ({
+      _tag: "Stop" as const,
+      ...(optionalString(reason) !== undefined ? { reason: optionalString(reason) } : {}),
+    })),
     Match.exhaustive,
   );
 
@@ -163,18 +179,6 @@ type DispatchEventEntryWire = Schema.Schema.Type<typeof DispatchEventEntrySchema
 // ---------------------------------------------------------------------------
 
 export const HandlersLive = TheseusRpc.toLayer({
-  inject: ({ dispatchId, text }) =>
-    Effect.gen(function* () {
-      const adapter = yield* RuntimeRpcAdapter;
-      yield* adapter.inject(dispatchId, text).pipe(Effect.mapError(toRpcError));
-    }),
-
-  interrupt: ({ dispatchId }) =>
-    Effect.gen(function* () {
-      const adapter = yield* RuntimeRpcAdapter;
-      yield* adapter.interrupt(dispatchId).pipe(Effect.mapError(toRpcError));
-    }),
-
   controlWorkNode: ({ workNodeId, command }) =>
     Effect.gen(function* () {
       const adapter = yield* RuntimeRpcAdapter;
@@ -193,12 +197,6 @@ export const HandlersLive = TheseusRpc.toLayer({
     Effect.gen(function* () {
       const adapter = yield* RuntimeRpcAdapter;
       return yield* adapter.getCapsuleEvents(capsuleId).pipe(Effect.mapError(toRpcError));
-    }),
-
-  status: () =>
-    Effect.gen(function* () {
-      const adapter = yield* RuntimeRpcAdapter;
-      return yield* adapter.status().pipe(Effect.mapError(toRpcError));
     }),
 
   createMission: ({ slug, goal, criteria }) =>

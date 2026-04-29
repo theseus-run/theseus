@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./live": "./src/live.ts",
+    "./event-bus": "./src/runtime/event-bus.ts",
     "./registry": "./src/registry.ts",
+    "./work-supervisor": "./src/runtime/work-supervisor.ts",
     "./work-node-control": "./src/runtime/controllers/work-node.ts",
     "./tool-catalog": "./src/tool-catalog.ts",
     "./store": "./src/store/index.ts"

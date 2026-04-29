@@ -16,6 +16,7 @@ import type {
   ToolOutcome,
   ToolOutputError,
 } from "../tool/index.ts";
+import type { DispatchControlGate, DispatchControlState } from "./control.ts";
 import type { CortexSignal } from "./cortex.ts";
 import type { ModelRequest } from "./model-gateway.ts";
 
@@ -263,6 +264,8 @@ export interface DispatchOptions {
   readonly iteration?: number;
   /** Resume usage accumulation. */
   readonly usage?: Usage;
+  /** Optional cooperative control gate for runtime-owned dispatches. */
+  readonly controlGate?: DispatchControlGate;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +276,10 @@ export interface DispatchHandle {
   readonly dispatchId: string;
   readonly events: Stream.Stream<DispatchEvent>;
   readonly inject: (i: Injection) => Effect.Effect<void>;
+  readonly pause: Effect.Effect<void>;
+  readonly resume: Effect.Effect<void>;
+  readonly stop: (reason?: string) => Effect.Effect<void>;
+  readonly controlState: Effect.Effect<DispatchControlState>;
   readonly interrupt: Effect.Effect<void>;
   readonly result: Effect.Effect<DispatchOutput, DispatchError>;
   /** Snapshot current message history. */

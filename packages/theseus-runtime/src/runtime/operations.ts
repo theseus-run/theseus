@@ -11,17 +11,18 @@ import {
   getWorkNode,
   listDispatchSessions,
   listWorkNodes,
+  updateWorkNodeDispatchStatus,
 } from "./projections/work-tree/store.ts";
 import {
-  type MissionSession,
+  type DispatchSession,
   type RuntimeControl,
   RuntimeDispatchFailed,
   RuntimeNotFound,
+  type RuntimeProjectionDecodeFailed,
   type RuntimeQuery,
   type RuntimeQueryResult,
   type RuntimeWorkControlFailed,
   type RuntimeWorkControlUnsupported,
-  type StatusEntry,
 } from "./types.ts";
 
 export interface RuntimeOperationsDeps {
@@ -33,6 +34,27 @@ export interface RuntimeOperationsDeps {
 
 const dispatchFailureReason = (cause: Dispatch.DispatchError): string =>
   typeof cause === "object" && cause !== null && "_tag" in cause ? String(cause._tag) : "unknown";
+
+const dispatchIdFor = (node: unknown): string | undefined =>
+  typeof node === "object" &&
+  node !== null &&
+  "kind" in node &&
+  node.kind === "dispatch" &&
+  "dispatchId" in node &&
+  typeof node.dispatchId === "string"
+    ? node.dispatchId
+    : undefined;
+
+const updateDispatchStatusFor = (
+  db: (typeof TheseusDb)["Service"],
+  node: unknown,
+  state: "running" | "paused" | "aborted",
+) => {
+  const dispatchId = dispatchIdFor(node);
+  return dispatchId === undefined
+    ? Effect.void
+    : updateWorkNodeDispatchStatus(db, { dispatchId, state });
+};
 
 const persistedDispatchResult = (
   store: (typeof Dispatch.DispatchStore)["Service"],
@@ -92,7 +114,10 @@ const capsuleEvents = (
 const dispatchCapsuleEvents = (
   deps: RuntimeOperationsDeps,
   dispatchId: string,
-): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeNotFound> =>
+): Effect.Effect<
+  ReadonlyArray<CapsuleNs.CapsuleEvent>,
+  RuntimeNotFound | RuntimeProjectionDecodeFailed
+> =>
   getDispatchWorkNode(deps.db, dispatchId).pipe(
     Effect.flatMap((session) =>
       session
@@ -118,40 +143,38 @@ const dispatchEvents = (
 const dispatchList = (
   deps: RuntimeOperationsDeps,
   options?: { readonly limit?: number },
-): Effect.Effect<ReadonlyArray<StatusEntry>> => listDispatchSessions(deps.db, options);
+): Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeProjectionDecodeFailed> =>
+  listDispatchSessions(deps.db, options);
 
 export const runRuntimeControl = (
   deps: RuntimeOperationsDeps,
   command: RuntimeControl,
 ): Effect.Effect<
   void,
-  RuntimeNotFound | RuntimeWorkControlUnsupported | RuntimeWorkControlFailed
+  | RuntimeNotFound
+  | RuntimeWorkControlUnsupported
+  | RuntimeWorkControlFailed
+  | RuntimeProjectionDecodeFailed
 > =>
   Match.value(command).pipe(
     Match.tag("WorkNodeControl", ({ workNodeId, command: workCommand }) =>
       getWorkNode(deps.db, workNodeId).pipe(
         Effect.flatMap((node) =>
           node
-            ? deps.workNodeControllers.control(node, workCommand)
+            ? deps.workNodeControllers.control(node, workCommand).pipe(
+                Effect.flatMap(() =>
+                  Match.value(workCommand).pipe(
+                    Match.tag("Pause", () => updateDispatchStatusFor(deps.db, node, "paused")),
+                    Match.tag("Resume", () => updateDispatchStatusFor(deps.db, node, "running")),
+                    Match.tag("Stop", () => updateDispatchStatusFor(deps.db, node, "aborted")),
+                    Match.tag("Interrupt", () => Effect.void),
+                    Match.tag("InjectGuidance", () => Effect.void),
+                    Match.tag("RequestStatus", () => Effect.void),
+                    Match.exhaustive,
+                  ),
+                ),
+              )
             : Effect.fail(new RuntimeNotFound({ kind: "workNode", id: workNodeId })),
-        ),
-      ),
-    ),
-    Match.tag("DispatchInject", ({ dispatchId, text }) =>
-      getDispatchWorkNode(deps.db, dispatchId).pipe(
-        Effect.flatMap((node) =>
-          node
-            ? deps.workNodeControllers.control(node, { _tag: "InjectGuidance", text })
-            : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
-        ),
-      ),
-    ),
-    Match.tag("DispatchInterrupt", ({ dispatchId }) =>
-      getDispatchWorkNode(deps.db, dispatchId).pipe(
-        Effect.flatMap((node) =>
-          node
-            ? deps.workNodeControllers.control(node, { _tag: "Interrupt" })
-            : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
         ),
       ),
     ),
@@ -161,7 +184,10 @@ export const runRuntimeControl = (
 export const runRuntimeQuery = (
   deps: RuntimeOperationsDeps,
   query: RuntimeQuery,
-): Effect.Effect<RuntimeQueryResult, RuntimeNotFound | RuntimeDispatchFailed> =>
+): Effect.Effect<
+  RuntimeQueryResult,
+  RuntimeNotFound | RuntimeDispatchFailed | RuntimeProjectionDecodeFailed
+> =>
   Match.value(query).pipe(
     Match.tag("MissionList", () =>
       listMissionSessions(deps.db).pipe(
@@ -207,22 +233,5 @@ export const runRuntimeQuery = (
         Effect.map((events): RuntimeQueryResult => ({ _tag: "DispatchEvents", events })),
       ),
     ),
-    Match.tag("ActiveStatus", () =>
-      deps.registry
-        .list()
-        .pipe(Effect.map((status): RuntimeQueryResult => ({ _tag: "ActiveStatus", status }))),
-    ),
     Match.exhaustive,
   );
-
-export const snapshot = (
-  deps: RuntimeOperationsDeps,
-): Effect.Effect<{
-  readonly missions: ReadonlyArray<MissionSession>;
-  readonly active: ReadonlyArray<StatusEntry>;
-}> =>
-  Effect.gen(function* () {
-    const missions = yield* listMissionSessions(deps.db);
-    const active = yield* deps.registry.list();
-    return { missions, active };
-  });

@@ -1,5 +1,10 @@
 import type * as Dispatch from "@theseus.run/core/Dispatch";
-import type { DispatchSession, RuntimeDispatchEvent, WorkNodeSession } from "./types.ts";
+import type {
+  DispatchSession,
+  RuntimeDispatchEvent,
+  WorkNodeSession,
+  WorkNodeState,
+} from "./types.ts";
 
 export const RuntimeEvents = {
   workNodeStarted: (node: WorkNodeSession): RuntimeDispatchEvent => ({
@@ -22,5 +27,29 @@ export const RuntimeEvents = {
     missionId: session.missionId,
     capsuleId: session.capsuleId,
     event,
+  }),
+
+  workNodeStateChanged: (
+    session: Pick<WorkNodeSession, "workNodeId" | "missionId">,
+    state: WorkNodeState,
+    reason?: string,
+  ): RuntimeDispatchEvent => ({
+    _tag: "WorkNodeStateChanged",
+    workNodeId: session.workNodeId,
+    missionId: session.missionId,
+    state,
+    ...(reason !== undefined ? { reason } : {}),
+  }),
+
+  runtimeProcessFailed: (
+    session: Pick<WorkNodeSession, "workNodeId" | "missionId">,
+    process: string,
+    reason: string,
+  ): RuntimeDispatchEvent => ({
+    _tag: "RuntimeProcessFailed",
+    workNodeId: session.workNodeId,
+    missionId: session.missionId,
+    process,
+    reason,
   }),
 };

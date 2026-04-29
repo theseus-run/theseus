@@ -45,6 +45,13 @@ export function MissionListPage() {
     [navigate],
   );
 
+  const inspectMission = useCallback(
+    (missionId: string) => {
+      void navigate({ to: "/missions/$missionId/inspect", params: { missionId } });
+    },
+    [navigate],
+  );
+
   const goWorkNode = useCallback(
     (missionId: string, workNodeId: string) => {
       void navigate({
@@ -55,63 +62,16 @@ export function MissionListPage() {
     [navigate],
   );
 
-  const goDispatch = useCallback(
-    (missionId: string, dispatchId: string) => {
-      void navigate({
-        to: "/missions/$missionId/dispatches/$dispatchId",
-        params: { missionId, dispatchId },
-      });
-    },
-    [navigate],
-  );
-
-  const goEvent = useCallback(
-    (missionId: string, dispatchId: string, eventIndex: number) => {
-      void navigate({
-        to: "/missions/$missionId/dispatches/$dispatchId/events/$eventIndex",
-        params: { missionId, dispatchId, eventIndex: String(eventIndex) },
-      });
-    },
-    [navigate],
-  );
-
-  const goCortex = useCallback(
-    (missionId: string, dispatchId: string, iteration: number) => {
-      void navigate({
-        to: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration",
-        params: { missionId, dispatchId, iteration: String(iteration) },
-      });
-    },
-    [navigate],
-  );
-
-  const goSignal = useCallback(
-    (missionId: string, dispatchId: string, iteration: number, signalId: string) => {
-      void navigate({
-        to: "/missions/$missionId/dispatches/$dispatchId/cortex/$iteration/signals/$signalId",
-        params: { missionId, dispatchId, iteration: String(iteration), signalId },
-      });
-    },
-    [navigate],
-  );
-
   const closeRoute = useCallback(
     () =>
       Match.value(route).pipe(
         Match.tag("MissionList", goHome),
         Match.tag("Mission", ({ missionId }) => goMission(missionId)),
+        Match.tag("MissionInspect", ({ missionId }) => goMission(missionId)),
         Match.tag("WorkNode", ({ missionId }) => goMission(missionId)),
-        Match.tag("Dispatch", ({ missionId }) => goMission(missionId)),
-        Match.tag("DispatchEvent", ({ missionId, dispatchId }) =>
-          goDispatch(missionId, dispatchId),
-        ),
-        Match.tag("CortexFrame", ({ missionId, dispatchId }) => goDispatch(missionId, dispatchId)),
-        Match.tag("CortexSignal", ({ missionId, dispatchId, iteration }) =>
-          goCortex(missionId, dispatchId, iteration),
-        ),
         Match.exhaustive,
       ),
-    [goCortex, goDispatch, goHome, goMission, route],
+    [goHome, goMission, route],
   );
 
   const loadWorkbench = useCallback(async (missionId?: string) => {
@@ -189,8 +149,8 @@ export function MissionListPage() {
   }, [goMission, goal, loadWorkbench, route, running]);
 
   return (
-    <div className="dashboard-shell h-full overflow-hidden">
-      <div className="dashboard-frame h-full flex flex-col gap-[var(--panel-gap)]">
+    <div className="workbench-shell h-full overflow-hidden">
+      <div className="workbench-frame h-full flex flex-col gap-[var(--panel-gap)]">
         <WorkbenchHeader
           mission={state.mission}
           running={running}
@@ -213,21 +173,11 @@ export function MissionListPage() {
             dispatches={state.dispatches}
             route={route}
             initializing={initializing}
-            onOpenMission={goMission}
+            onInspectMission={inspectMission}
             onOpenWorkNode={goWorkNode}
-            onOpenDispatch={goDispatch}
           />
         </div>
-        <RouteSheets
-          route={route}
-          state={state}
-          onClose={closeRoute}
-          onOpenMission={goMission}
-          onOpenDispatch={goDispatch}
-          onOpenEvent={goEvent}
-          onOpenCortex={goCortex}
-          onOpenSignal={goSignal}
-        />
+        <RouteSheets route={route} state={state} onClose={closeRoute} onOpenWorkNode={goWorkNode} />
       </div>
     </div>
   );

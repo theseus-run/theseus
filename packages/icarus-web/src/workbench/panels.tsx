@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { StackList, StackRow } from "@/components/ui/stack-list";
 import { Token } from "@/components/ui/token";
+import { type TreeNodeModel, TreeView } from "@/components/ui/tree-view";
 import type { DispatchSession, MissionSession, WorkNodeSession } from "@/lib/rpc-client";
 import { dispatchForNode, modelLabel, stateSymbol, stateTone } from "./projection";
 import type { WorkbenchRoute } from "./route-state";
-import { RuntimeItem } from "./runtime-item";
 
 export function WorkbenchHeader({
   mission,
@@ -31,7 +32,7 @@ export function WorkbenchHeader({
           <h1 className="heading-1">Mission tree.</h1>
           <p className="lede">Route-backed topology with sheet inspection for runtime work.</p>
         </div>
-        <div className="dashboard-kpis">
+        <div className="workbench-stats">
           <div>
             <span className="eyebrow">mission</span>
             <p>{mission?.missionId ?? (initializing ? "loading" : "--")}</p>
@@ -79,20 +80,20 @@ export function MissionRail({
           <PanelTitle>Missions</PanelTitle>
         </PanelHeader>
         <PanelBody>
-          <div className="grid gap-0">
+          <StackList>
             {missions.length === 0 ? (
               <div className="field text-muted-foreground">
                 {initializing ? "-- loading missions --" : "-- no missions --"}
               </div>
             ) : (
               missions.map((mission) => (
-                <RuntimeItem
+                <StackRow
                   key={mission.missionId}
-                  symbol={stateSymbol(mission.state)}
+                  marker={stateSymbol(mission.state)}
                   title={mission.goal}
                   summary={mission.missionId}
                   meta={mission.state}
-                  active={selectedMissionId === mission.missionId}
+                  selected={selectedMissionId === mission.missionId}
                   tags={
                     <Token variant="plain" tone={stateTone(mission.state)}>
                       capsule {mission.capsuleId}
@@ -102,7 +103,7 @@ export function MissionRail({
                 />
               ))
             )}
-          </div>
+          </StackList>
         </PanelBody>
       </Panel>
     </aside>
@@ -115,20 +116,30 @@ export function WorkTreePanel({
   dispatches,
   route,
   initializing,
-  onOpenMission,
+  onInspectMission,
   onOpenWorkNode,
-  onOpenDispatch,
 }: {
   readonly mission: MissionSession | null;
   readonly nodes: ReadonlyArray<WorkNodeSession>;
   readonly dispatches: ReadonlyArray<DispatchSession>;
   readonly route: WorkbenchRoute;
   readonly initializing: boolean;
-  readonly onOpenMission: (missionId: string) => void;
+  readonly onInspectMission: (missionId: string) => void;
   readonly onOpenWorkNode: (missionId: string, workNodeId: string) => void;
-  readonly onOpenDispatch: (missionId: string, dispatchId: string) => void;
 }) {
-  const roots = nodes.filter((node) => node.parentWorkNodeId == null);
+  const treeNodes =
+    mission === null
+      ? []
+      : [
+          missionTreeNode({
+            mission,
+            nodes,
+            dispatches,
+            route,
+            onInspectMission,
+            onOpenWorkNode,
+          }),
+        ];
   return (
     <main className="min-h-0 overflow-auto">
       <Panel className="min-h-full">
@@ -141,34 +152,8 @@ export function WorkTreePanel({
               {initializing ? "-- loading work tree --" : "-- select a mission --"}
             </div>
           ) : (
-            <div className="field workbench-tree">
-              <RuntimeItem
-                symbol={stateSymbol(mission.state)}
-                title="Mission"
-                summary={mission.goal}
-                meta={mission.state}
-                active={route._tag === "Mission"}
-                tags={
-                  <Token variant="plain" tone={stateTone(mission.state)}>
-                    capsule {mission.capsuleId}
-                  </Token>
-                }
-                onClick={() => onOpenMission(mission.missionId)}
-              />
-              <ul className="workbench-tree-list">
-                {roots.map((node) => (
-                  <WorkTreeNode
-                    key={node.workNodeId}
-                    missionId={mission.missionId}
-                    node={node}
-                    nodes={nodes}
-                    dispatches={dispatches}
-                    route={route}
-                    onOpenWorkNode={onOpenWorkNode}
-                    onOpenDispatch={onOpenDispatch}
-                  />
-                ))}
-              </ul>
+            <div className="field">
+              <TreeView nodes={treeNodes} />
             </div>
           )}
         </PanelBody>
@@ -177,14 +162,56 @@ export function WorkTreePanel({
   );
 }
 
-function WorkTreeNode({
+function missionTreeNode({
+  mission,
+  nodes,
+  dispatches,
+  route,
+  onInspectMission,
+  onOpenWorkNode,
+}: {
+  readonly mission: MissionSession;
+  readonly nodes: ReadonlyArray<WorkNodeSession>;
+  readonly dispatches: ReadonlyArray<DispatchSession>;
+  readonly route: WorkbenchRoute;
+  readonly onInspectMission: (missionId: string) => void;
+  readonly onOpenWorkNode: (missionId: string, workNodeId: string) => void;
+}): TreeNodeModel {
+  return {
+    id: mission.missionId,
+    marker: stateSymbol(mission.state),
+    title: "Mission",
+    summary: mission.goal,
+    meta: mission.state,
+    selected: route._tag === "Mission" || route._tag === "MissionInspect",
+    tags: (
+      <Token variant="plain" tone={stateTone(mission.state)}>
+        capsule {mission.capsuleId}
+      </Token>
+    ),
+    onClick: () => onInspectMission(mission.missionId),
+    children: nodes
+      .filter((node) => node.parentWorkNodeId == null)
+      .map((node) =>
+        workTreeNode({
+          missionId: mission.missionId,
+          node,
+          nodes,
+          dispatches,
+          route,
+          onOpenWorkNode,
+        }),
+      ),
+  };
+}
+
+function workTreeNode({
   missionId,
   node,
   nodes,
   dispatches,
   route,
   onOpenWorkNode,
-  onOpenDispatch,
 }: {
   readonly missionId: string;
   readonly node: WorkNodeSession;
@@ -192,52 +219,34 @@ function WorkTreeNode({
   readonly dispatches: ReadonlyArray<DispatchSession>;
   readonly route: WorkbenchRoute;
   readonly onOpenWorkNode: (missionId: string, workNodeId: string) => void;
-  readonly onOpenDispatch: (missionId: string, dispatchId: string) => void;
-}) {
-  const children = nodes.filter((candidate) => candidate.parentWorkNodeId === node.workNodeId);
+}): TreeNodeModel {
   const dispatch = dispatchForNode(node, dispatches);
-  const active =
-    route._tag === "WorkNode"
-      ? route.workNodeId === node.workNodeId
-      : route._tag !== "MissionList" &&
-        route._tag !== "Mission" &&
-        dispatch?.dispatchId === route.dispatchId;
-  const open = () =>
-    dispatch === undefined
-      ? onOpenWorkNode(missionId, node.workNodeId)
-      : onOpenDispatch(missionId, dispatch.dispatchId);
-  return (
-    <li className="workbench-tree-entry">
-      <RuntimeItem
-        symbol={stateSymbol(node.state)}
-        title={node.label}
-        summary={node.kind}
-        meta={node.state}
-        tags={
-          <>
-            <Token variant="plain">{node.relation}</Token>
-            {dispatch && <Token variant="plain">{modelLabel(dispatch)}</Token>}
-          </>
-        }
-        active={active}
-        onClick={open}
-      />
-      {children.length > 0 && (
-        <ul className="workbench-tree-list">
-          {children.map((child) => (
-            <WorkTreeNode
-              key={child.workNodeId}
-              missionId={missionId}
-              node={child}
-              nodes={nodes}
-              dispatches={dispatches}
-              route={route}
-              onOpenWorkNode={onOpenWorkNode}
-              onOpenDispatch={onOpenDispatch}
-            />
-          ))}
-        </ul>
-      )}
-    </li>
-  );
+  const active = route._tag === "WorkNode" && route.workNodeId === node.workNodeId;
+  return {
+    id: node.workNodeId,
+    marker: stateSymbol(node.state),
+    title: node.label,
+    summary: node.kind,
+    meta: node.state,
+    selected: active,
+    tags: (
+      <>
+        <Token variant="plain">{node.relation}</Token>
+        {dispatch && <Token variant="plain">{modelLabel(dispatch)}</Token>}
+      </>
+    ),
+    onClick: () => onOpenWorkNode(missionId, node.workNodeId),
+    children: nodes
+      .filter((candidate) => candidate.parentWorkNodeId === node.workNodeId)
+      .map((child) =>
+        workTreeNode({
+          missionId,
+          node: child,
+          nodes,
+          dispatches,
+          route,
+          onOpenWorkNode,
+        }),
+      ),
+  };
 }

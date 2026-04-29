@@ -3,11 +3,12 @@ import * as AgentComm from "@theseus.run/core/AgentComm";
 import * as CapsuleNs from "@theseus.run/core/Capsule";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
-import { Cause, Clock, Effect, Exit, Layer, Stream } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Match, Stream } from "effect";
 import type { DispatchRegistry } from "../../../registry.ts";
 import { TheseusDb } from "../../../store/sqlite.ts";
 import { SqliteCurrentCapsuleByIdLive } from "../../../store/sqlite-capsule.ts";
 import type { ToolCatalog } from "../../../tool-catalog.ts";
+import type { RuntimeEventBus } from "../../event-bus.ts";
 import { RuntimeEvents } from "../../events.ts";
 import { getMissionCapsuleId } from "../../projections/session/store.ts";
 import { recordWorkNode, updateWorkNodeDispatchStatus } from "../../projections/work-tree/store.ts";
@@ -18,10 +19,12 @@ import {
   type RuntimeDispatchEvent,
   RuntimeNotFound,
   RuntimeToolNotFound,
+  WorkNodeId,
   type WorkNodeRelation,
 } from "../../types.ts";
 import { CurrentWorkNode, type CurrentWorkNodeValue } from "../../work-context.ts";
 import { WorkControlDescriptors } from "../../work-control.ts";
+import type { WorkSupervisor } from "../../work-supervisor.ts";
 
 const SKIP_EVENT_TAGS = new Set(["Thinking"]);
 
@@ -47,6 +50,8 @@ export interface DispatchRunnerDeps {
   readonly satelliteRing: (typeof Satellite.SatelliteRing)["Service"];
   readonly dispatchStore: (typeof Dispatch.DispatchStore)["Service"];
   readonly blueprintRegistry: (typeof Agent.BlueprintRegistry)["Service"];
+  readonly eventBus: (typeof RuntimeEventBus)["Service"];
+  readonly workSupervisor: (typeof WorkSupervisor)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
 }
 
@@ -112,10 +117,12 @@ const makeDispatchDepsLayer = (
 
 const watchDispatchCompletion = (input: {
   readonly handle: Dispatch.DispatchHandle;
+  readonly workNodeId: WorkNodeId;
   readonly capsule: CapsuleNs.CapsuleRecord;
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly store: (typeof Dispatch.DispatchStore)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
+  readonly workSupervisor: (typeof WorkSupervisor)["Service"];
   readonly completesMission: boolean;
 }): Effect.Effect<void> =>
   input.handle.result.pipe(
@@ -142,6 +149,7 @@ const watchDispatchCompletion = (input: {
               state: "done",
               usage: result.usage,
             });
+            yield* input.workSupervisor.updateState(input.workNodeId, "done");
           }),
         onFailure: (cause) =>
           Effect.gen(function* () {
@@ -159,39 +167,53 @@ const watchDispatchCompletion = (input: {
               completedAt: yield* Clock.currentTimeMillis,
             });
             yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
+            yield* input.workSupervisor.updateState(input.workNodeId, "failed", reason);
           }),
       }),
     ),
   );
 
-const observableEvents = (
+const publishDispatchEvents = (
   session: DispatchSession,
   handle: Dispatch.DispatchHandle,
   registry: (typeof DispatchRegistry)["Service"],
   db: (typeof TheseusDb)["Service"],
-): Stream.Stream<RuntimeDispatchEvent> =>
-  Stream.make(
-    RuntimeEvents.workNodeStarted(session),
-    RuntimeEvents.dispatchSessionStarted(session),
-  ).pipe(
-    Stream.concat(
-      handle.events.pipe(
-        Stream.filter((event) => !SKIP_EVENT_TAGS.has(event._tag)),
-        Stream.tap((event) =>
-          event._tag === "Calling"
-            ? Effect.gen(function* () {
-                yield* registry.updateStatus(handle.dispatchId, { iteration: event.iteration });
-                yield* updateWorkNodeDispatchStatus(db, {
-                  dispatchId: handle.dispatchId,
-                  iteration: event.iteration,
-                });
-              })
-            : Effect.void,
-        ),
-        Stream.map((event): RuntimeDispatchEvent => RuntimeEvents.dispatchObserved(session, event)),
-      ),
+  eventBus: (typeof RuntimeEventBus)["Service"],
+): Effect.Effect<void> =>
+  handle.events.pipe(
+    Stream.filter((event) => !SKIP_EVENT_TAGS.has(event._tag)),
+    Stream.runForEach((event) =>
+      Effect.gen(function* () {
+        yield* Match.value(event).pipe(
+          Match.tag("Calling", ({ iteration }) =>
+            Effect.gen(function* () {
+              yield* registry.updateStatus(handle.dispatchId, { iteration });
+              yield* updateWorkNodeDispatchStatus(db, {
+                dispatchId: handle.dispatchId,
+                iteration,
+              });
+            }),
+          ),
+          Match.orElse(() => Effect.void),
+        );
+        yield* eventBus.publish(RuntimeEvents.dispatchObserved(session, event));
+      }),
     ),
   );
+
+const forkRegisteredProcess = (
+  deps: DispatchRunnerDeps,
+  workNodeId: WorkNodeId,
+  process: string,
+  effect: Effect.Effect<void>,
+): Effect.Effect<void> =>
+  deps.workSupervisor
+    .forkProcess(workNodeId, process, effect)
+    .pipe(
+      Effect.catchTag("RuntimeNotFound", (error) =>
+        Effect.die(`registered work node disappeared before ${process}: ${error.id}`),
+      ),
+    );
 
 interface ConcreteDispatchInput {
   readonly missionId: string;
@@ -200,7 +222,7 @@ interface ConcreteDispatchInput {
   readonly spec: Dispatch.DispatchSpec<RuntimeToolRequirements>;
   readonly task: string;
   readonly options?: Dispatch.DispatchOptions;
-  readonly parentWorkNodeId?: string;
+  readonly parentWorkNodeId?: WorkNodeId;
   readonly relation: WorkNodeRelation;
 }
 
@@ -211,7 +233,6 @@ const startConcreteDispatch = (
   {
     readonly handle: Dispatch.DispatchHandle;
     readonly session: DispatchSession;
-    readonly events: Stream.Stream<RuntimeDispatchEvent>;
   },
   never
 > =>
@@ -221,7 +242,7 @@ const startConcreteDispatch = (
       yield* CapsuleSink.missionTransition(input.currentCapsule, "pending", "running");
     }
 
-    const workNodeId = yield* Dispatch.makeDispatchId(`work-${input.spec.name}`);
+    const workNodeId = WorkNodeId.make(yield* Dispatch.makeDispatchId(`work-${input.spec.name}`));
     const currentWorkNode: CurrentWorkNodeValue = {
       workNodeId,
       missionId: input.missionId,
@@ -270,19 +291,33 @@ const startConcreteDispatch = (
       missionId: input.missionId,
     });
     yield* deps.registry.register(handle, session);
+    yield* deps.workSupervisor.registerDispatch(session, handle);
+    yield* deps.eventBus.publish(RuntimeEvents.workNodeStarted(session));
+    yield* deps.eventBus.publish(RuntimeEvents.dispatchSessionStarted(session));
+    yield* forkRegisteredProcess(
+      deps,
+      workNodeId,
+      "dispatch-events",
+      publishDispatchEvents(session, handle, deps.registry, deps.db, deps.eventBus),
+    );
 
-    yield* Effect.forkDetach({ startImmediately: true })(
+    yield* forkRegisteredProcess(
+      deps,
+      workNodeId,
+      "dispatch-completion",
       watchDispatchCompletion({
         handle,
+        workNodeId,
         capsule: input.currentCapsule,
         registry: deps.registry,
         store: deps.dispatchStore,
         db: deps.db,
+        workSupervisor: deps.workSupervisor,
         completesMission,
       }),
     );
 
-    return { handle, session, events: observableEvents(session, handle, deps.registry, deps.db) };
+    return { handle, session };
   });
 
 const makeDispatchGruntLauncher = (
@@ -357,9 +392,23 @@ export const startDispatch = (
       spec,
       task,
       ...(options !== undefined ? { options } : {}),
-      ...(parentWorkNodeId !== undefined ? { parentWorkNodeId } : {}),
+      ...(parentWorkNodeId !== undefined
+        ? { parentWorkNodeId: WorkNodeId.make(parentWorkNodeId) }
+        : {}),
       relation: relation ?? (continueFrom === undefined ? "root" : "continued"),
     });
 
-    return { session: started.session, events: started.events };
+    return {
+      session: started.session,
+      events: deps.eventBus
+        .streamMission(missionId)
+        .pipe(
+          Stream.takeUntil(
+            (event) =>
+              event._tag === "DispatchEvent" &&
+              event.dispatchId === started.session.dispatchId &&
+              (event.event._tag === "Done" || event.event._tag === "Failed"),
+          ),
+        ),
+    };
   });

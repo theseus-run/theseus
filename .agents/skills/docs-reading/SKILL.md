@@ -40,7 +40,8 @@ the conflict if it affects the task.
 - Core primitives: `docs/primitives/primitives.md`, plus the specific note
   such as `tool.md` or `agent-comm.md`.
 - Runtime: `docs/runtime/architecture.md`,
-  `docs/runtime/mission-system.md`, and `docs/runtime/isolation.md`.
+  `docs/runtime/mission-system.md`, `docs/runtime/isolation.md`,
+  `docs/maps/runtime-truth-map.md`, and `docs/maps/not-real-yet.md`.
 - Server: read runtime docs first, then server package code; server is a host
   adapter, not runtime owner.
 - Client/operator surfaces: `docs/clients/README.md` and runtime command,

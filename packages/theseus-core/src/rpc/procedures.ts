@@ -39,25 +39,6 @@ export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
 // Procedures
 // ---------------------------------------------------------------------------
 
-/** Inject a user message into a running dispatch. */
-export const Inject = Rpc.make("inject", {
-  payload: Schema.Struct({
-    dispatchId: Schema.String,
-    text: Schema.String,
-  }),
-  success: Schema.Void,
-  error: RpcError,
-});
-
-/** Interrupt a running dispatch. */
-export const Interrupt = Rpc.make("interrupt", {
-  payload: Schema.Struct({
-    dispatchId: Schema.String,
-  }),
-  success: Schema.Void,
-  error: RpcError,
-});
-
 /** Control an active work node through its node-kind controller. */
 export const ControlWorkNode = Rpc.make("controlWorkNode", {
   payload: Schema.Struct({
@@ -83,13 +64,6 @@ export const GetCapsuleEvents = Rpc.make("getCapsuleEvents", {
     capsuleId: Schema.String,
   }),
   success: Schema.Array(CapsuleEventSchema),
-  error: RpcError,
-});
-
-/** Get active dispatch status. */
-export const Status = Rpc.make("status", {
-  payload: Schema.Void,
-  success: Schema.Array(DispatchSessionSchema),
   error: RpcError,
 });
 
@@ -184,12 +158,9 @@ export const StartResearchPoc = Rpc.make("startResearchPoc", {
 // ---------------------------------------------------------------------------
 
 export const TheseusRpc = RpcGroup.make(
-  Inject,
-  Interrupt,
   ControlWorkNode,
   GetResult,
   GetCapsuleEvents,
-  Status,
   CreateMission,
   StartMissionDispatch,
   ListMissions,

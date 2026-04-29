@@ -1,6 +1,6 @@
-import type * as Dispatch from "@theseus.run/core/Dispatch";
-import { Effect } from "effect";
-import { decodeJson, encodeJson } from "../../../json.ts";
+import * as Dispatch from "@theseus.run/core/Dispatch";
+import { Effect, Schema } from "effect";
+import { encodeJson } from "../../../json.ts";
 import type { TheseusDb } from "../../../store/sqlite.ts";
 import type {
   DispatchSession,
@@ -9,15 +9,89 @@ import type {
   WorkNodeSession,
   WorkNodeState,
 } from "../../types.ts";
+import { RuntimeProjectionDecodeFailed, WorkNodeId } from "../../types.ts";
 import { WorkControlDescriptors } from "../../work-control.ts";
 
 const emptyUsage: Dispatch.Usage = { inputTokens: 0, outputTokens: 0 };
+const undefinedEffect = Effect.void as Effect.Effect<undefined>;
+
+const nullable = <S extends Schema.Top>(schema: S) => Schema.NullOr(schema);
+
+const WorkNodeKindSchema = Schema.Literals(["dispatch", "task", "external"]);
+const WorkNodeRelationSchema = Schema.Literals(["root", "delegated", "continued", "branched"]);
+const WorkNodeStateSchema = Schema.Literals([
+  "pending",
+  "running",
+  "paused",
+  "blocked",
+  "done",
+  "failed",
+  "aborted",
+]);
+
+const ModelRequestSchema = Schema.Union([
+  Schema.Struct({
+    provider: Schema.Literal("openai"),
+    model: Schema.String,
+    maxOutputTokens: Schema.optional(nullable(Schema.Number)),
+    reasoningEffort: Schema.optional(nullable(Schema.Literals(["low", "medium", "high", "xhigh"]))),
+    textVerbosity: Schema.optional(nullable(Schema.Literals(["low", "medium", "high"]))),
+  }),
+  Schema.Struct({
+    provider: Schema.Literal("copilot"),
+    model: Schema.String,
+    maxTokens: Schema.optional(nullable(Schema.Number)),
+  }),
+]);
+
+const WorkNodeRowSchema = Schema.Struct({
+  work_node_id: Schema.String,
+  mission_id: Schema.String,
+  capsule_id: Schema.String,
+  parent_work_node_id: nullable(Schema.String),
+  kind: WorkNodeKindSchema,
+  relation: WorkNodeRelationSchema,
+  label: Schema.String,
+  state: WorkNodeStateSchema,
+  started_at: nullable(Schema.Number),
+  completed_at: nullable(Schema.Number),
+  dispatch_id: nullable(Schema.String),
+  model_request_json: nullable(Schema.String),
+  iteration: Schema.Number,
+  usage_json: Schema.String,
+});
+
+const projectionDecodeError = (source: string, cause: unknown): RuntimeProjectionDecodeFailed =>
+  new RuntimeProjectionDecodeFailed({
+    source,
+    reason: String(cause),
+    cause,
+  });
+
+const decodeProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  value: unknown,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(schema)(value).pipe(
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
+
+const decodeJsonProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  json: string,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(json).pipe(
+    Effect.flatMap((value) => decodeProjection(source, schema, value)),
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
 
 export interface WorkNodeCreate {
-  readonly workNodeId: string;
+  readonly workNodeId: WorkNodeId;
   readonly missionId: string;
   readonly capsuleId: string;
-  readonly parentWorkNodeId?: string;
+  readonly parentWorkNodeId?: WorkNodeId;
   readonly kind: WorkNodeKind;
   readonly relation: WorkNodeRelation;
   readonly label: string;
@@ -26,33 +100,50 @@ export interface WorkNodeCreate {
   readonly startedAt?: number;
 }
 
-interface WorkNodeRow {
-  readonly work_node_id: string;
-  readonly mission_id: string;
-  readonly capsule_id: string;
-  readonly parent_work_node_id: string | null;
-  readonly kind: WorkNodeKind;
-  readonly relation: WorkNodeRelation;
-  readonly label: string;
-  readonly state: WorkNodeState;
-  readonly started_at: number | null;
-  readonly completed_at: number | null;
-  readonly dispatch_id: string | null;
-  readonly model_request_json: string | null;
-  readonly iteration: number;
-  readonly usage_json: string;
-}
+type WorkNodeRow = Schema.Schema.Type<typeof WorkNodeRowSchema>;
+type ModelRequestWire = Schema.Schema.Type<typeof ModelRequestSchema>;
 
-const decodeModelRequest = (json: string | null): Dispatch.ModelRequest | undefined =>
-  json === null ? undefined : (decodeJson(json) as Dispatch.ModelRequest);
+const decodeRow = (value: unknown): Effect.Effect<WorkNodeRow, RuntimeProjectionDecodeFailed> =>
+  decodeProjection("runtime_work_nodes row", WorkNodeRowSchema, value);
 
-const decodeUsage = (json: string): Dispatch.Usage => decodeJson(json) as Dispatch.Usage;
+const normalizeModelRequest = (request: ModelRequestWire): Dispatch.ModelRequest => {
+  switch (request.provider) {
+    case "openai":
+      return {
+        provider: "openai",
+        model: request.model,
+        ...(request.maxOutputTokens != null ? { maxOutputTokens: request.maxOutputTokens } : {}),
+        ...(request.reasoningEffort != null ? { reasoningEffort: request.reasoningEffort } : {}),
+        ...(request.textVerbosity != null ? { textVerbosity: request.textVerbosity } : {}),
+      };
+    case "copilot":
+      return {
+        provider: "copilot",
+        model: request.model,
+        ...(request.maxTokens != null ? { maxTokens: request.maxTokens } : {}),
+      };
+  }
+};
+
+const decodeModelRequest = (
+  json: string | null,
+): Effect.Effect<Dispatch.ModelRequest | undefined, RuntimeProjectionDecodeFailed> =>
+  json === null
+    ? undefinedEffect
+    : decodeJsonProjection("runtime_work_nodes.model_request_json", ModelRequestSchema, json).pipe(
+        Effect.map(normalizeModelRequest),
+      );
+
+const decodeUsage = (json: string): Effect.Effect<Dispatch.Usage, RuntimeProjectionDecodeFailed> =>
+  decodeJsonProjection("runtime_work_nodes.usage_json", Dispatch.UsageSchema, json);
 
 const toWorkNodeSession = (row: WorkNodeRow): WorkNodeSession => ({
-  workNodeId: row.work_node_id,
+  workNodeId: WorkNodeId.make(row.work_node_id),
   missionId: row.mission_id,
   capsuleId: row.capsule_id,
-  ...(row.parent_work_node_id !== null ? { parentWorkNodeId: row.parent_work_node_id } : {}),
+  ...(row.parent_work_node_id !== null
+    ? { parentWorkNodeId: WorkNodeId.make(row.parent_work_node_id) }
+    : {}),
   kind: row.kind,
   relation: row.relation,
   label: row.label,
@@ -65,19 +156,24 @@ const toWorkNodeSession = (row: WorkNodeRow): WorkNodeSession => ({
   ...(row.completed_at !== null ? { completedAt: row.completed_at } : {}),
 });
 
-export const toDispatchSession = (row: WorkNodeRow): DispatchSession | undefined => {
-  if (row.kind !== "dispatch" || row.dispatch_id === null) return undefined;
-  const modelRequest = decodeModelRequest(row.model_request_json);
-  return {
-    ...toWorkNodeSession(row),
-    kind: "dispatch",
-    dispatchId: row.dispatch_id,
-    name: row.label,
-    ...(modelRequest !== undefined ? { modelRequest } : {}),
-    iteration: row.iteration,
-    state: row.state === "pending" ? "running" : row.state,
-    usage: decodeUsage(row.usage_json),
-  };
+export const toDispatchSession = (
+  row: WorkNodeRow,
+): Effect.Effect<DispatchSession | undefined, RuntimeProjectionDecodeFailed> => {
+  if (row.kind !== "dispatch" || row.dispatch_id === null) return undefinedEffect;
+  const dispatchId = row.dispatch_id;
+  return Effect.gen(function* () {
+    const modelRequest = yield* decodeModelRequest(row.model_request_json);
+    return {
+      ...toWorkNodeSession(row),
+      kind: "dispatch",
+      dispatchId,
+      name: row.label,
+      ...(modelRequest !== undefined ? { modelRequest } : {}),
+      iteration: row.iteration,
+      state: row.state === "pending" ? "running" : row.state,
+      usage: yield* decodeUsage(row.usage_json),
+    };
+  });
 };
 
 export const recordWorkNode = (
@@ -169,57 +265,63 @@ export const updateWorkNodeDispatchStatus = (
 export const getDispatchWorkNode = (
   db: (typeof TheseusDb)["Service"],
   dispatchId: string,
-): Effect.Effect<DispatchSession | undefined> =>
-  Effect.sync(() => {
-    const row = db.db
-      .prepare("SELECT * FROM runtime_work_nodes WHERE dispatch_id = ?")
-      .get(dispatchId) as WorkNodeRow | null;
-    return row === null ? undefined : toDispatchSession(row);
+): Effect.Effect<DispatchSession | undefined, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.sync(() =>
+      db.db.prepare("SELECT * FROM runtime_work_nodes WHERE dispatch_id = ?").get(dispatchId),
+    );
+    if (raw === null) return undefined;
+    const row = yield* decodeRow(raw);
+    return yield* toDispatchSession(row);
   });
 
 export const getWorkNode = (
   db: (typeof TheseusDb)["Service"],
   workNodeId: string,
-): Effect.Effect<WorkNodeSession | undefined> =>
-  Effect.sync(() => {
-    const row = db.db
-      .prepare("SELECT * FROM runtime_work_nodes WHERE work_node_id = ?")
-      .get(workNodeId) as WorkNodeRow | null;
-    if (row === null) return undefined;
-    return toDispatchSession(row) ?? toWorkNodeSession(row);
+): Effect.Effect<WorkNodeSession | undefined, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.sync(() =>
+      db.db.prepare("SELECT * FROM runtime_work_nodes WHERE work_node_id = ?").get(workNodeId),
+    );
+    if (raw === null) return undefined;
+    const row = yield* decodeRow(raw);
+    return (yield* toDispatchSession(row)) ?? toWorkNodeSession(row);
   });
 
 export const listWorkNodes = (
   db: (typeof TheseusDb)["Service"],
   options?: { readonly missionId?: string; readonly limit?: number },
-): Effect.Effect<ReadonlyArray<WorkNodeSession>> =>
-  Effect.sync(() => {
+): Effect.Effect<ReadonlyArray<WorkNodeSession>, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
     const limit = options?.limit ?? 100;
-    const rows =
+    const rows = yield* Effect.sync(() =>
       options?.missionId === undefined
-        ? (db.db
+        ? db.db
             .prepare("SELECT * FROM runtime_work_nodes ORDER BY started_at DESC LIMIT ?")
-            .all(limit) as WorkNodeRow[])
-        : (db.db
+            .all(limit)
+        : db.db
             .prepare(
               "SELECT * FROM runtime_work_nodes WHERE mission_id = ? ORDER BY started_at ASC LIMIT ?",
             )
-            .all(options.missionId, limit) as WorkNodeRow[]);
-    return rows.map(toWorkNodeSession);
+            .all(options.missionId, limit),
+    );
+    const decoded = yield* Effect.forEach(rows, decodeRow);
+    return decoded.map(toWorkNodeSession);
   });
 
 export const listDispatchSessions = (
   db: (typeof TheseusDb)["Service"],
   options?: { readonly limit?: number },
-): Effect.Effect<ReadonlyArray<DispatchSession>> =>
-  Effect.sync(() => {
-    const rows = db.db
-      .prepare(
-        "SELECT * FROM runtime_work_nodes WHERE kind = 'dispatch' ORDER BY started_at DESC LIMIT ?",
-      )
-      .all(options?.limit ?? 100) as WorkNodeRow[];
-    return rows.flatMap((row) => {
-      const session = toDispatchSession(row);
-      return session === undefined ? [] : [session];
-    });
+): Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.sync(() =>
+      db.db
+        .prepare(
+          "SELECT * FROM runtime_work_nodes WHERE kind = 'dispatch' ORDER BY started_at DESC LIMIT ?",
+        )
+        .all(options?.limit ?? 100),
+    );
+    const decoded = yield* Effect.forEach(rows, decodeRow);
+    const sessions = yield* Effect.forEach(decoded, toDispatchSession);
+    return sessions.flatMap((session) => (session === undefined ? [] : [session]));
   });

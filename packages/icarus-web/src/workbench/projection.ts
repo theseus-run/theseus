@@ -146,24 +146,19 @@ export const eventLine = (event: DispatchEvent): string =>
     Match.orElse((value) => value._tag),
   );
 
-export const eventDetailLine = (event: DispatchEvent): string =>
+export const eventMarker = (event: DispatchEvent): string =>
   Match.value(event).pipe(
-    Match.when({ _tag: "Text" }, (value) => value.content ?? ""),
-    Match.when({ _tag: "Done" }, (value) => value.result?.content ?? ""),
-    Match.when({ _tag: "Failed" }, (value) => value.reason ?? "unknown reason"),
-    Match.orElse(eventLine),
-  );
-
-export const eventGlyph = (event: DispatchEvent): string =>
-  Match.value(event).pipe(
-    Match.when({ _tag: "ToolCalling" }, () => ">>"),
-    Match.when({ _tag: "ToolResult" }, () => "<<"),
-    Match.when({ _tag: "CortexRendered" }, () => "cx"),
-    Match.when({ _tag: "Text" }, () => "tx"),
-    Match.when({ _tag: "Thinking" }, () => ".."),
-    Match.when({ _tag: "Done" }, () => "ok"),
-    Match.when({ _tag: "Failed" }, () => "!"),
-    Match.orElse(() => "·"),
+    Match.when({ _tag: "ToolCalling" }, () => "call"),
+    Match.when({ _tag: "ToolResult" }, () => "result"),
+    Match.when({ _tag: "ToolError" }, () => "error"),
+    Match.when({ _tag: "CortexRendered" }, () => "context"),
+    Match.when({ _tag: "Text" }, () => "text"),
+    Match.when({ _tag: "Thinking" }, () => "think"),
+    Match.when({ _tag: "Done" }, () => "done"),
+    Match.when({ _tag: "Failed" }, () => "failed"),
+    Match.when({ _tag: "Injected" }, () => "inject"),
+    Match.when({ _tag: "SatelliteAction" }, () => "policy"),
+    Match.orElse(() => "event"),
   );
 
 export const reportFromEvents = (
@@ -193,8 +188,3 @@ export const transcriptForDispatch = (
   transcripts: ReadonlyArray<DispatchTranscript>,
 ): DispatchTranscript | undefined =>
   transcripts.find((candidate) => candidate.dispatchId === dispatchId);
-
-export const cortexEventsFromTranscript = (
-  transcript: DispatchTranscript | undefined,
-): ReadonlyArray<DispatchEventEntry> =>
-  transcript?.events.filter((entry) => entry.event._tag === "CortexRendered") ?? [];

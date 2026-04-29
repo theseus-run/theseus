@@ -49,13 +49,10 @@ export interface RuntimeRpcAdapterService {
   readonly getDispatchEvents: (
     dispatchId: string,
   ) => Effect.Effect<ReadonlyArray<Dispatch.DispatchEventEntry>, RuntimeError>;
-  readonly status: () => Effect.Effect<ReadonlyArray<DispatchSession>, RuntimeError>;
   readonly controlWorkNode: (
     workNodeId: string,
     command: WorkControlCommand,
   ) => Effect.Effect<void, RuntimeError>;
-  readonly inject: (dispatchId: string, text: string) => Effect.Effect<void, RuntimeError>;
-  readonly interrupt: (dispatchId: string) => Effect.Effect<void, RuntimeError>;
   readonly startResearchPoc: (
     goal: string,
   ) => Effect.Effect<Stream.Stream<ResearchPocEvent>, RuntimeError>;
@@ -81,11 +78,8 @@ export const RuntimeRpcAdapterLive = Layer.effect(RuntimeRpcAdapter)(
       getDispatchCapsuleEvents: (dispatchId) =>
         RuntimeQueries.getDispatchCapsuleEvents(runtime, dispatchId),
       getDispatchEvents: (dispatchId) => RuntimeQueries.getDispatchEvents(runtime, dispatchId),
-      status: () => RuntimeQueries.status(runtime),
       controlWorkNode: (workNodeId, command) =>
         RuntimeControls.controlWorkNode(runtime, workNodeId, command),
-      inject: (dispatchId, text) => runtime.control({ _tag: "DispatchInject", dispatchId, text }),
-      interrupt: (dispatchId) => runtime.control({ _tag: "DispatchInterrupt", dispatchId }),
       startResearchPoc: (goal) =>
         Effect.gen(function* () {
           const mission = yield* RuntimeCommands.createMission(runtime, {

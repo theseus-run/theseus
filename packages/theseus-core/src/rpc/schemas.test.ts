@@ -11,6 +11,7 @@ const dispatchControl = {
   injectGuidance: { _tag: "Supported" },
   pause: { _tag: "Unsupported", reason: "dispatch pause is not implemented" },
   resume: { _tag: "Unsupported", reason: "dispatch resume is not implemented" },
+  stop: { _tag: "Supported" },
   requestStatus: { _tag: "Supported" },
 } as const;
 

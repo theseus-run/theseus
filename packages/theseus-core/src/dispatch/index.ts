@@ -8,6 +8,8 @@
  * Uses LanguageModel from effect/unstable/ai.
  */
 
+export type { DispatchControlGate, DispatchControlState } from "./control.ts";
+export { makeDispatchControlGate, NoopDispatchControlGate } from "./control.ts";
 export type {
   CortexAuthority,
   CortexDiff,

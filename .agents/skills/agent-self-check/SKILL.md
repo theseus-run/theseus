@@ -29,6 +29,8 @@ These checks have higher authority than "tests passed." Passing tests do not mak
 
 Fix these directly when they are in your changed code. If fixing one would change public behavior, package exports, persisted data handling, or compatibility, stop and report it as a deferred concern instead of silently preserving or deleting it.
 
+For each issue you find, name the mechanism before fixing it. Do not patch symptoms by adding local conditionals, broad fallbacks, or compatibility wrappers unless that is the intended design.
+
 ### Modeling
 
 - closed protocol/domain/state handling written as if/else return soup instead of exhaustive `Match` or `switch` with a `never` check

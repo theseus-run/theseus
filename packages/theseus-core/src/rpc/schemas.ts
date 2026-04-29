@@ -190,6 +190,10 @@ export const WorkNodeSessionSchema = Schema.Struct({
       Schema.TaggedStruct("Supported", {}),
       Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
     ]),
+    stop: Schema.Union([
+      Schema.TaggedStruct("Supported", {}),
+      Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
+    ]),
     requestStatus: Schema.Union([
       Schema.TaggedStruct("Supported", {}),
       Schema.TaggedStruct("Unsupported", { reason: Schema.String }),
@@ -237,6 +241,9 @@ export const WorkControlCommandSchema = Schema.Union([
   }),
   Schema.TaggedStruct("Resume", {}),
   Schema.TaggedStruct("RequestStatus", {}),
+  Schema.TaggedStruct("Stop", {
+    reason: OptionalNullable(Schema.String),
+  }),
 ]);
 
 export const RuntimeDispatchEventSchema = Schema.Union([
@@ -252,6 +259,26 @@ export const RuntimeDispatchEventSchema = Schema.Union([
     missionId: Schema.String,
     capsuleId: Schema.String,
     event: DispatchEventSchema,
+  }),
+  Schema.TaggedStruct("WorkNodeStateChanged", {
+    workNodeId: Schema.String,
+    missionId: Schema.String,
+    state: Schema.Literals([
+      "pending",
+      "running",
+      "paused",
+      "blocked",
+      "done",
+      "failed",
+      "aborted",
+    ]),
+    reason: OptionalNullable(Schema.String),
+  }),
+  Schema.TaggedStruct("RuntimeProcessFailed", {
+    workNodeId: Schema.String,
+    missionId: Schema.String,
+    process: Schema.String,
+    reason: Schema.String,
   }),
 ]);
 

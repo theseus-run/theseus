@@ -10,6 +10,7 @@ import type {
   SatelliteContext,
   SatelliteScope,
 } from "../satellite/types.ts";
+import type { DispatchControlGate } from "./control.ts";
 import { Cortex } from "./cortex.ts";
 import * as DispatchEvents from "./events.ts";
 import { assistantToolMessage, finalAssistantMessages, toolResultMessages } from "./messages.ts";
@@ -36,6 +37,7 @@ export interface IterationInput<R> {
   readonly messages: ReadonlyArray<Prompt.MessageEncoded>;
   readonly usage: Usage;
   readonly iteration: number;
+  readonly controlGate: DispatchControlGate;
   readonly satelliteScope: SatelliteScope<R>;
   readonly emit: Emit;
 }
@@ -176,6 +178,7 @@ export const runDispatchIteration = <R>({
   messages,
   usage,
   iteration,
+  controlGate,
   satelliteScope,
   emit,
 }: IterationInput<R>): Effect.Effect<
@@ -202,6 +205,7 @@ export const runDispatchIteration = <R>({
       onSatelliteAction,
     );
     const afterCheckpoint = checkpointMessages(messages, iterationStartDecision);
+    yield* controlGate.awaitOpen;
 
     const cortex = yield* Cortex;
     const frame = yield* cortex.render({
@@ -223,6 +227,7 @@ export const runDispatchIteration = <R>({
     const callMessages = beforeCallMessages(frame.messages, beforeCallDecision);
 
     yield* emit(DispatchEvents.calling(spec.name, iteration));
+    yield* controlGate.awaitOpen;
 
     const rawResult = yield* step(callMessages, spec.tools, dispatchId, spec.name).pipe(
       Effect.withSpan("llm-call", {
@@ -258,6 +263,7 @@ export const runDispatchIteration = <R>({
           iteration,
           tools: spec.tools,
           toolCalls: result.toolCalls,
+          controlGate,
           satelliteScope,
           satelliteContext,
           onSatelliteAction,

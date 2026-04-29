@@ -41,3 +41,5 @@ This `docs/` directory is the Theseus Obsidian vault.
 - Move superseded designs to `archive/` instead of deleting them.
 - Keep stable doctrine in the concept note; put time-bound reasoning in `design-notes/`.
 - Run `bun run docs:check` after docs moves or link edits.
+- Use [runtime-truth-map](maps/runtime-truth-map.md) and [not-real-yet](maps/not-real-yet.md) before changing runtime docs.
+- Use [roadmap](direction/roadmap.md) and [roadmap-status-map](maps/roadmap-status-map.md) for planning work.

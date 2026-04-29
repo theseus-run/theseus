@@ -13,3 +13,6 @@ that should be read before changing code or design.
 ## Notes
 
 - [coding-agent-reading-map](coding-agent-reading-map.md)
+- [runtime-truth-map](runtime-truth-map.md)
+- [not-real-yet](not-real-yet.md)
+- [roadmap-status-map](roadmap-status-map.md)

@@ -22,6 +22,15 @@ Do not rewrite code during a review unless the user asks for fixes. If you find 
 
 Treat the checklist below as review gates, not taste notes. If changed code violates one, either file a finding or explicitly explain why the local context makes it acceptable.
 
+Review diagnosis must identify the mechanism, not just the symptom. Prefer:
+
+- observation: what the diff/code/test shows
+- inference: what mechanism likely produced it
+- prescription: what change removes the mechanism
+- measurement: what check proves the fix
+
+For recurring problems, use the frame: signal, loop, constraint, intervention, measurement.
+
 ## Finding Format
 
 For each finding, include:
@@ -29,8 +38,10 @@ For each finding, include:
 - priority: `P0`, `P1`, `P2`, or `P3`
 - confidence: `C0`, `C1`, `C2`, or `C3`
 - tight file/line reference
-- why it matters
-- what should change
+- observation: the concrete evidence
+- mechanism: why it creates risk
+- prescription: what should change
+- measurement: what would verify the fix
 
 Order findings by severity. Keep summaries secondary.
 

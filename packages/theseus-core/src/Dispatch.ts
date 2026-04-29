@@ -41,6 +41,8 @@ export type {
   CortexSignal,
   CortexSignalId,
   CortexSlot,
+  DispatchControlGate,
+  DispatchControlState,
   DispatchCreate,
   DispatchError,
   DispatchEvent,
@@ -74,8 +76,10 @@ export {
   LanguageModelGateway,
   LanguageModelGatewayFromLanguageModel,
   ModelUnavailable,
+  makeDispatchControlGate,
   makeDispatchId,
   NoopCortex,
+  NoopDispatchControlGate,
 } from "./dispatch/index.ts";
 
 // ---------------------------------------------------------------------------
