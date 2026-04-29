@@ -1,5 +1,6 @@
 import { Data, Match } from "effect";
 import * as AiError from "effect/unstable/ai/AiError";
+import { mapProviderHttpError } from "../http-error-mapping.ts";
 
 export class CopilotAuthError extends Data.TaggedError("CopilotAuthError")<{
   readonly cause?: unknown;
@@ -48,12 +49,10 @@ export const mapCopilotError = (e: CopilotError): AiError.AiError =>
       }),
     ),
     Match.tag("CopilotHttpError", (error) =>
-      AiError.make({
+      mapProviderHttpError({
         module: "CopilotProvider",
-        method: "http",
-        reason: new AiError.UnknownError({
-          description: `HTTP ${error.status}: ${error.body}`,
-        }),
+        status: error.status,
+        body: error.body,
       }),
     ),
     Match.exhaustive,

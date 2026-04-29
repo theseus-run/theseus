@@ -9,7 +9,9 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { parseLanguageModelProvider, ServerConfig, ServerConfigError } from "../config.ts";
 import { CopilotConfig, CopilotConfigDefaults } from "./copilot/config.ts";
 import { ServerLanguageModelGatewayLive } from "./language-model.ts";
+import { LanguageModelProviderRegistryLive } from "./language-model-provider-registry.ts";
 import { ModelConcurrencyLive } from "./model-concurrency.ts";
+import { ModelResilienceLive } from "./model-resilience.ts";
 import { OpenAIConfig, OpenAIConfigDefaults } from "./openai/config.ts";
 
 const prompt = {
@@ -65,6 +67,25 @@ describe("ServerLanguageModelGatewayLive", () => {
       );
     });
 
+    const ProviderRegistryTestLive = Layer.provide(
+      LanguageModelProviderRegistryLive,
+      Layer.mergeAll(
+        Layer.succeed(HttpClient.HttpClient)(http),
+        TestClock.layer(),
+        Layer.succeed(CopilotConfig)({
+          ...CopilotConfigDefaults,
+        }),
+        Layer.succeed(OpenAIConfig)({
+          apiKey: Redacted.make("test-key"),
+          apiUrl: OpenAIConfigDefaults.apiUrl,
+          model: "gpt-default",
+          maxOutputTokens: OpenAIConfigDefaults.maxOutputTokens,
+          reasoningEffort: undefined,
+          textVerbosity: undefined,
+        }),
+      ),
+    );
+
     await Effect.runPromise(
       Effect.gen(function* () {
         const gateway = yield* Dispatch.LanguageModelGateway;
@@ -80,23 +101,12 @@ describe("ServerLanguageModelGatewayLive", () => {
           Layer.provide(
             ServerLanguageModelGatewayLive,
             Layer.mergeAll(
-              Layer.succeed(HttpClient.HttpClient)(http),
-              TestClock.layer(),
+              ProviderRegistryTestLive,
               ModelConcurrencyLive,
+              ModelResilienceLive,
               Layer.succeed(ServerConfig)({
                 port: 4800,
                 languageModelProvider: "copilot",
-              }),
-              Layer.succeed(CopilotConfig)({
-                ...CopilotConfigDefaults,
-              }),
-              Layer.succeed(OpenAIConfig)({
-                apiKey: Redacted.make("test-key"),
-                apiUrl: OpenAIConfigDefaults.apiUrl,
-                model: "gpt-default",
-                maxOutputTokens: OpenAIConfigDefaults.maxOutputTokens,
-                reasoningEffort: undefined,
-                textVerbosity: undefined,
               }),
             ),
           ),

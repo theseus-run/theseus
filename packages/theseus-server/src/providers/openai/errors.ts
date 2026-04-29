@@ -1,5 +1,6 @@
 import { Data, Match } from "effect";
 import * as AiError from "effect/unstable/ai/AiError";
+import { mapProviderHttpError } from "../http-error-mapping.ts";
 
 export class OpenAIAuthError extends Data.TaggedError("OpenAIAuthError")<{
   readonly cause?: unknown;
@@ -47,12 +48,10 @@ export const mapOpenAIError = (e: OpenAIError): AiError.AiError =>
       }),
     ),
     Match.tag("OpenAIHttpError", (error) =>
-      AiError.make({
+      mapProviderHttpError({
         module: "OpenAIProvider",
-        method: "http",
-        reason: new AiError.UnknownError({
-          description: `HTTP ${error.status}: ${error.body}`,
-        }),
+        status: error.status,
+        body: error.body,
       }),
     ),
     Match.exhaustive,

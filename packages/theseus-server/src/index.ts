@@ -34,10 +34,13 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { ServerConfig, ServerConfigLive } from "./config.ts";
 import { RootAgentsMdCortexNode } from "./cortex/agents-md.ts";
 import { HandlersLive } from "./handlers.ts";
+import { ServerObservabilityLive } from "./observability.ts";
 import { researchGruntBlueprint } from "./poc/research.ts";
 import { CopilotConfigLive } from "./providers/copilot/config.ts";
 import { ServerLanguageModelGatewayLive } from "./providers/language-model.ts";
+import { LanguageModelProviderRegistryLive } from "./providers/language-model-provider-registry.ts";
 import { ModelConcurrencyLive } from "./providers/model-concurrency.ts";
+import { ModelResilienceLive } from "./providers/model-resilience.ts";
 import { OpenAIConfigLive } from "./providers/openai/config.ts";
 import { RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
@@ -99,9 +102,13 @@ const HttpLive = Layer.provide(
 // Services layer — all business logic dependencies
 const ConfigLive = ServerConfigLive;
 const ProviderConfigLive = Layer.mergeAll(CopilotConfigLive, OpenAIConfigLive);
+const LanguageModelProvidersLive = Layer.provide(
+  LanguageModelProviderRegistryLive,
+  Layer.mergeAll(ProviderConfigLive, BunHttpClient.layer),
+);
 const LanguageModelGatewayLive = Layer.provide(
   ServerLanguageModelGatewayLive,
-  Layer.mergeAll(ConfigLive, ProviderConfigLive, ModelConcurrencyLive, BunHttpClient.layer),
+  Layer.mergeAll(ConfigLive, LanguageModelProvidersLive, ModelConcurrencyLive, ModelResilienceLive),
 );
 
 const ServicesLayer = Layer.mergeAll(
@@ -135,7 +142,9 @@ const RouterAppLayer = Layer.provideMerge(RpcRoutesLayer, HttpRouter.layer);
 
 const program = Effect.gen(function* () {
   const config = yield* ServerConfig;
-  console.log(`[theseus-server] starting on port ${config.port} (workspace: ${workspace})`);
+  yield* Effect.logInfo(`[theseus-server] starting on port ${config.port}`).pipe(
+    Effect.annotateLogs({ workspace }),
+  );
 
   // Build the router app to get the HTTP handler
   const httpEffect = yield* HttpRouter.toHttpEffect(RouterAppLayer);
@@ -144,14 +153,14 @@ const program = Effect.gen(function* () {
   const serveFn = yield* HttpServer.HttpServer;
   yield* serveFn.serve(httpEffect);
 
-  console.log(`[theseus-server] listening on port ${config.port}`);
+  yield* Effect.logInfo(`[theseus-server] listening on port ${config.port}`);
 
   // Keep the server alive
   return yield* Effect.never;
 });
 
 const main = program.pipe(
-  Effect.provide(Layer.mergeAll(HttpLive, ConfigLive)),
+  Effect.provide(Layer.mergeAll(HttpLive, ConfigLive, ServerObservabilityLive)),
   Effect.scoped,
   Effect.catchCause((cause: Cause.Cause<unknown>) =>
     Effect.logError("[theseus-server] fatal", cause),
@@ -161,7 +170,7 @@ const main = program.pipe(
 Effect.runFork(main);
 
 const shutdown = () => {
-  console.log("[theseus-server] shutting down...");
+  Effect.runFork(Effect.logInfo("[theseus-server] shutting down..."));
   process.exit(0);
 };
 process.on("SIGINT", shutdown);

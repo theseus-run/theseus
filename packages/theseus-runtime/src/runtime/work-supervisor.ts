@@ -1,5 +1,5 @@
 import type * as Dispatch from "@theseus.run/core/Dispatch";
-import { Cause, Context, Effect, Exit, type Fiber, Match, Ref, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Match, Ref, Scope } from "effect";
 import { RuntimeEventBus } from "./event-bus.ts";
 import { RuntimeEvents } from "./events.ts";
 import {
@@ -17,7 +17,6 @@ interface WorkEntry {
   readonly handle: Dispatch.DispatchHandle;
   readonly scope: Scope.Closeable;
   readonly children: ReadonlySet<WorkNodeId>;
-  readonly processes: ReadonlySet<Fiber.Fiber<unknown, never>>;
   readonly state: WorkNodeState;
 }
 
@@ -197,7 +196,7 @@ export const WorkSupervisorLive = Effect.gen(function* () {
   const forkProcess = (workNodeId: WorkNodeId, process: string, effect: Effect.Effect<void>) =>
     Effect.gen(function* () {
       const entry = yield* getEntry(workNodeId);
-      const fiber = yield* Effect.forkIn(
+      yield* Effect.forkIn(
         effect.pipe(
           Effect.catchCause((cause) => {
             if (Cause.hasInterruptsOnly(cause)) {
@@ -205,6 +204,14 @@ export const WorkSupervisorLive = Effect.gen(function* () {
             }
             const reason = causeReason(cause);
             return Effect.gen(function* () {
+              yield* Effect.logWarning("runtime process failed").pipe(
+                Effect.annotateLogs({
+                  process,
+                  reason,
+                  "mission.id": entry.node.missionId,
+                  "work_node.id": entry.node.workNodeId,
+                }),
+              );
               yield* bus.publish(RuntimeEvents.runtimeProcessFailed(entry.node, process, reason));
               const current = yield* Ref.get(entriesRef).pipe(
                 Effect.map((entries) => entries.get(workNodeId)),
@@ -214,17 +221,18 @@ export const WorkSupervisorLive = Effect.gen(function* () {
               }
             });
           }),
+          Effect.withSpan("runtime.work.process", {
+            attributes: {
+              "runtime.process": process,
+              "mission.id": entry.node.missionId,
+              "capsule.id": entry.node.capsuleId,
+              "work_node.id": entry.node.workNodeId,
+            },
+          }),
         ),
         entry.scope,
         { startImmediately: true },
       );
-      yield* Ref.update(entriesRef, (entries) => {
-        const current = entries.get(workNodeId);
-        if (current === undefined) return entries;
-        const next = new Map(entries);
-        next.set(workNodeId, { ...current, processes: new Set([...current.processes, fiber]) });
-        return next;
-      });
     });
 
   return WorkSupervisor.of({
@@ -238,7 +246,6 @@ export const WorkSupervisorLive = Effect.gen(function* () {
             handle,
             scope,
             children: new Set(),
-            processes: new Set(),
             state: node.state,
           });
           if (node.parentWorkNodeId !== undefined) {

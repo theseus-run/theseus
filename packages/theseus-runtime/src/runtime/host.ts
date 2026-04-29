@@ -66,13 +66,26 @@ export const makeRuntimeHost = (deps: RuntimeHostDeps): TheseusRuntimeService =>
         ),
       ),
       Match.exhaustive,
+      Effect.withSpan("runtime.command", { attributes: { "runtime.command": command._tag } }),
     );
 
   const control = (command: RuntimeControl): Effect.Effect<void, RuntimeError> =>
-    runRuntimeControl(deps, command);
+    runRuntimeControl(deps, command).pipe(
+      Effect.withSpan("runtime.control", {
+        attributes: {
+          "runtime.control": command._tag,
+          "work_node.id": command.workNodeId,
+          "work_control.command": command.command._tag,
+        },
+      }),
+    );
 
   const query = (runtimeQuery: RuntimeQuery): Effect.Effect<RuntimeQueryResult, RuntimeError> =>
-    runRuntimeQuery(deps, runtimeQuery);
+    runRuntimeQuery(deps, runtimeQuery).pipe(
+      Effect.withSpan("runtime.query", {
+        attributes: { "runtime.query": runtimeQuery._tag },
+      }),
+    );
 
   return { submit, control, query };
 };
