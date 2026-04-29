@@ -11,7 +11,8 @@ const researchPocModel: Dispatch.CopilotModelRequest = {
   model: "gpt-5.4",
 };
 
-export const researchGruntBlueprint: Agent.Blueprint = {
+// biome-ignore lint/suspicious/noExplicitAny: POC blueprint composes heterogeneous tool requirements.
+export const researchGruntBlueprint: Agent.Blueprint<any> = {
   name: researchGruntTarget,
   systemPrompt: [
     "You are a research grunt for a Theseus mission.",

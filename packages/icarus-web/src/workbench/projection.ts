@@ -66,8 +66,14 @@ export const eventTitle = (event: DispatchEvent): string =>
     Match.when({ _tag: "ToolCalling" }, (value) => value.tool ?? "tool"),
     Match.when({ _tag: "ToolResult" }, (value) => value.tool ?? "tool result"),
     Match.when({ _tag: "ToolError" }, (value) => value.tool ?? "tool error"),
-    Match.orElse((value) => value._tag),
+    Match.orElse(() => "event"),
   );
+
+const toolResultStructured = (event: DispatchEvent): unknown =>
+  event._tag === "ToolResult" ? event.structured : undefined;
+
+const doneContent = (event: DispatchEvent | undefined): string | undefined =>
+  event?._tag === "Done" ? event.result.content : undefined;
 
 const compactLimit = 160;
 
@@ -143,7 +149,7 @@ export const eventLine = (event: DispatchEvent): string =>
       { _tag: "SatelliteAction" },
       (value) => `satellite ${value.satellite ?? ""} ${value.phase ?? ""}: ${value.action ?? ""}`,
     ),
-    Match.orElse((value) => value._tag),
+    Match.orElse(() => "event"),
   );
 
 export const eventMarker = (event: DispatchEvent): string =>
@@ -166,16 +172,15 @@ export const reportFromEvents = (
 ): ReportPacket | undefined => {
   const entry = [...events]
     .reverse()
-    .find((candidate) => isReportPacket(candidate.event.structured));
-  return entry !== undefined && isReportPacket(entry.event.structured)
-    ? entry.event.structured
-    : undefined;
+    .find((candidate) => isReportPacket(toolResultStructured(candidate.event)));
+  const structured = entry === undefined ? undefined : toolResultStructured(entry.event);
+  return isReportPacket(structured) ? structured : undefined;
 };
 
 export const finalTextFromEvents = (
   events: ReadonlyArray<DispatchEventEntry>,
 ): string | undefined =>
-  [...events].reverse().find((entry) => entry.event._tag === "Done")?.event.result?.content;
+  doneContent([...events].reverse().find((entry) => entry.event._tag === "Done")?.event);
 
 export const dispatchForNode = (
   node: WorkNodeSession | undefined,

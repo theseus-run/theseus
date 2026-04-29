@@ -8,6 +8,7 @@ import type {
   WorkNodeRelation,
   WorkNodeSession,
   WorkNodeState,
+  WorkTreeNodeSession,
 } from "../../types.ts";
 import { RuntimeProjectionDecodeFailed, WorkNodeId } from "../../types.ts";
 import { WorkControlDescriptors } from "../../work-control.ts";
@@ -291,7 +292,7 @@ export const getWorkNode = (
 export const listWorkNodes = (
   db: (typeof TheseusDb)["Service"],
   options?: { readonly missionId?: string; readonly limit?: number },
-): Effect.Effect<ReadonlyArray<WorkNodeSession>, RuntimeProjectionDecodeFailed> =>
+): Effect.Effect<ReadonlyArray<WorkTreeNodeSession>, RuntimeProjectionDecodeFailed> =>
   Effect.gen(function* () {
     const limit = options?.limit ?? 100;
     const rows = yield* Effect.sync(() =>
@@ -306,7 +307,9 @@ export const listWorkNodes = (
             .all(options.missionId, limit),
     );
     const decoded = yield* Effect.forEach(rows, decodeRow);
-    return decoded.map(toWorkNodeSession);
+    return yield* Effect.forEach(decoded, (row) =>
+      toDispatchSession(row).pipe(Effect.map((session) => session ?? toWorkNodeSession(row))),
+    );
   });
 
 export const listDispatchSessions = (

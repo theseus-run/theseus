@@ -23,7 +23,7 @@ import {
   ResearchPocEventSchema,
   RuntimeDispatchEventSchema,
   WorkControlCommandSchema,
-  WorkNodeSessionSchema,
+  WorkTreeNodeSessionSchema,
 } from "./schemas.ts";
 
 // ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ export const GetMissionWorkTree = Rpc.make("getMissionWorkTree", {
   payload: Schema.Struct({
     missionId: Schema.String,
   }),
-  success: Schema.Array(WorkNodeSessionSchema),
+  success: Schema.Array(WorkTreeNodeSessionSchema),
   error: RpcError,
 });
 

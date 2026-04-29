@@ -24,6 +24,14 @@ interface WorkEntry {
 const causeReason = (cause: Cause.Cause<unknown>): string =>
   Cause.hasInterruptsOnly(cause) ? "Fiber interrupted" : String(Cause.squash(cause));
 
+const isTerminal = (state: WorkNodeState): boolean =>
+  Match.value(state).pipe(
+    Match.when("done", () => true),
+    Match.when("failed", () => true),
+    Match.when("aborted", () => true),
+    Match.orElse(() => false),
+  );
+
 const unsupported = (
   node: WorkNodeSession,
   command: WorkControlCommand,
@@ -105,26 +113,35 @@ export const WorkSupervisorLive = Effect.gen(function* () {
     Effect.gen(function* () {
       const entry = yield* getEntry(workNodeId);
       const childIds = [...entry.children];
+      const controlChild = (childId: WorkNodeId) =>
+        controlNode(childId, command).pipe(
+          Effect.catchTag("RuntimeWorkControlUnsupported", () => Effect.void),
+        );
 
       return yield* Match.value(command).pipe(
         Match.tag("Stop", ({ reason }) =>
           Effect.gen(function* () {
-            yield* Effect.forEach(childIds, (childId) => controlNode(childId, command), {
-              discard: true,
-            });
-            if (isActive(entry.state)) {
-              yield* entry.handle.stop(reason ?? "Stopped by runtime work control").pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new RuntimeWorkControlFailed({
-                      workNodeId,
-                      command: command._tag,
-                      reason: "dispatch stop failed",
-                      cause,
-                    }),
-                ),
+            yield* Effect.forEach(childIds, controlChild, { discard: true });
+            if (!isActive(entry.state)) {
+              return yield* unsupported(
+                entry.node,
+                command,
+                isTerminal(entry.state)
+                  ? "work node is already terminal"
+                  : "work node is not active",
               );
             }
+            yield* entry.handle.stop(reason ?? "Stopped by runtime work control").pipe(
+              Effect.mapError(
+                (cause) =>
+                  new RuntimeWorkControlFailed({
+                    workNodeId,
+                    command: command._tag,
+                    reason: "dispatch stop failed",
+                    cause,
+                  }),
+              ),
+            );
             yield* updateState(workNodeId, "aborted", reason);
             yield* Scope.close(entry.scope, Exit.void);
           }),
@@ -134,9 +151,7 @@ export const WorkSupervisorLive = Effect.gen(function* () {
             if (!isActive(entry.state)) {
               return yield* unsupported(entry.node, command, "work node is not active");
             }
-            yield* Effect.forEach(childIds, (childId) => controlNode(childId, command), {
-              discard: true,
-            });
+            yield* Effect.forEach(childIds, controlChild, { discard: true });
             yield* entry.handle.pause;
             yield* updateState(workNodeId, "paused");
           }),
@@ -148,9 +163,7 @@ export const WorkSupervisorLive = Effect.gen(function* () {
             }
             yield* entry.handle.resume;
             yield* updateState(workNodeId, "running");
-            yield* Effect.forEach(childIds, (childId) => controlNode(childId, command), {
-              discard: true,
-            });
+            yield* Effect.forEach(childIds, controlChild, { discard: true });
           }),
         ),
         Match.tag("InjectGuidance", ({ text }) =>
@@ -186,11 +199,21 @@ export const WorkSupervisorLive = Effect.gen(function* () {
       const entry = yield* getEntry(workNodeId);
       const fiber = yield* Effect.forkIn(
         effect.pipe(
-          Effect.catchCause((cause) =>
-            bus
-              .publish(RuntimeEvents.runtimeProcessFailed(entry.node, process, causeReason(cause)))
-              .pipe(Effect.asVoid),
-          ),
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterruptsOnly(cause)) {
+              return Effect.void;
+            }
+            const reason = causeReason(cause);
+            return Effect.gen(function* () {
+              yield* bus.publish(RuntimeEvents.runtimeProcessFailed(entry.node, process, reason));
+              const current = yield* Ref.get(entriesRef).pipe(
+                Effect.map((entries) => entries.get(workNodeId)),
+              );
+              if (current !== undefined && !isTerminal(current.state)) {
+                yield* updateState(workNodeId, "failed", `${process}: ${reason}`);
+              }
+            });
+          }),
         ),
         entry.scope,
         { startImmediately: true },

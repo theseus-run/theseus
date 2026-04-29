@@ -19,25 +19,25 @@ import { TheseusRuntime } from "@theseus.run/runtime";
 import { RuntimeEventBusLive } from "@theseus.run/runtime/event-bus";
 import { TheseusRuntimeLive } from "@theseus.run/runtime/live";
 import { DispatchRegistry, DispatchRegistryLive } from "@theseus.run/runtime/registry";
-import { SqliteDispatchStore, TheseusDbLive } from "@theseus.run/runtime/store";
+import { SqliteDispatchStore, TheseusDbLive, TheseusSqliteLive } from "@theseus.run/runtime/store";
 import { makeToolCatalog, ToolCatalog } from "@theseus.run/runtime/tool-catalog";
 import {
   WorkNodeControllers,
   WorkNodeControllersLive,
 } from "@theseus.run/runtime/work-node-control";
 import { WorkSupervisor, WorkSupervisorLive } from "@theseus.run/runtime/work-supervisor";
-import { allTools } from "@theseus.run/tools";
+import { allTools, ToolPlatformBunLive } from "@theseus.run/tools";
 import { type Cause, Effect, Layer } from "effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { ServerConfig, ServerConfigLive } from "./config.ts";
 import { RootAgentsMdCortexNode } from "./cortex/agents-md.ts";
-import { ServerEnvLive } from "./env.ts";
 import { HandlersLive } from "./handlers.ts";
 import { researchGruntBlueprint } from "./poc/research.ts";
 import { CopilotConfigLive } from "./providers/copilot/config.ts";
 import { ServerLanguageModelGatewayLive } from "./providers/language-model.ts";
+import { ModelConcurrencyLive } from "./providers/model-concurrency.ts";
 import { OpenAIConfigLive } from "./providers/openai/config.ts";
 import { RuntimeRpcAdapterLive } from "./runtime-rpc-adapter.ts";
 
@@ -71,6 +71,7 @@ const BlueprintRegistryLive = Agent.BlueprintRegistryLive([researchGruntBlueprin
 
 // SQLite persistence
 const DbLive = TheseusDbLive(join(workspace, ".theseus", "theseus.db"));
+const SqlLive = TheseusSqliteLive(join(workspace, ".theseus", "theseus.db"));
 const PersistentDispatchStore = Layer.provide(SqliteDispatchStore, DbLive);
 
 // Satellite middleware
@@ -92,18 +93,15 @@ const HttpLive = Layer.provide(
       return BunHttpServer.layer({ port: config.port });
     }),
   ),
-  Layer.provide(ServerConfigLive, ServerEnvLive),
+  ServerConfigLive,
 );
 
 // Services layer — all business logic dependencies
-const ConfigLive = Layer.provide(ServerConfigLive, ServerEnvLive);
-const ProviderConfigLive = Layer.mergeAll(
-  Layer.provide(CopilotConfigLive, ServerEnvLive),
-  Layer.provide(OpenAIConfigLive, ServerEnvLive),
-);
+const ConfigLive = ServerConfigLive;
+const ProviderConfigLive = Layer.mergeAll(CopilotConfigLive, OpenAIConfigLive);
 const LanguageModelGatewayLive = Layer.provide(
   ServerLanguageModelGatewayLive,
-  Layer.mergeAll(ConfigLive, ProviderConfigLive, BunHttpClient.layer),
+  Layer.mergeAll(ConfigLive, ProviderConfigLive, ModelConcurrencyLive, BunHttpClient.layer),
 );
 
 const ServicesLayer = Layer.mergeAll(
@@ -112,12 +110,14 @@ const ServicesLayer = Layer.mergeAll(
   PersistentDispatchStore,
   RingLive,
   ToolCatalogLive,
+  ToolPlatformBunLive,
   RegistryLive,
   RuntimeEventBusLiveLayer,
   WorkSupervisorLiveLayer,
   WorkNodeControlLive,
   BlueprintRegistryLive,
   DbLive,
+  SqlLive,
 );
 
 const RuntimeLive = Layer.provide(Layer.effect(TheseusRuntime)(TheseusRuntimeLive), ServicesLayer);

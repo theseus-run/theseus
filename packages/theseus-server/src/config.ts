@@ -1,5 +1,4 @@
-import { Context, Data, Effect, Layer } from "effect";
-import { getEnvInt, ServerEnv } from "./env.ts";
+import { Config, ConfigProvider, Context, Data, Effect, Layer } from "effect";
 
 export const languageModelProviders = ["copilot", "openai"] as const;
 
@@ -45,12 +44,14 @@ export const parseLanguageModelProvider = (
 
 export const ServerConfigLive = Layer.effect(ServerConfig)(
   Effect.gen(function* () {
-    const env = yield* ServerEnv;
-    const languageModelProvider = yield* parseLanguageModelProvider(env.get("THESEUS_PROVIDER"));
-
-    return ServerConfig.of({
-      port: getEnvInt(env, "THESEUS_PORT", 4800),
-      languageModelProvider,
-    });
+    const provider = yield* ConfigProvider.ConfigProvider;
+    const port = yield* Config.number("THESEUS_PORT")
+      .pipe(Config.withDefault(4800))
+      .parse(provider);
+    const value = yield* Config.string("THESEUS_PROVIDER")
+      .pipe(Config.withDefault("copilot"))
+      .parse(provider);
+    const languageModelProvider = yield* parseLanguageModelProvider(value);
+    return ServerConfig.of({ port, languageModelProvider });
   }),
 );

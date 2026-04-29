@@ -1,5 +1,7 @@
+import type { SqliteClient } from "@effect/sql-sqlite-bun";
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import { Effect, Schema } from "effect";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { TheseusDb } from "../../../store/sqlite.ts";
 import {
   type MissionSession,
@@ -133,17 +135,15 @@ const readSessionFromCapsule = (
   });
 
 export const recordMissionCapsule = (
-  db: (typeof TheseusDb)["Service"],
+  sql: (typeof SqliteClient.SqliteClient)["Service"],
   missionId: string,
   capsuleId: string,
-): Effect.Effect<void> =>
-  Effect.sync(() => {
-    db.db
-      .prepare(
-        "INSERT INTO runtime_mission_capsules (mission_id, capsule_id) VALUES (?, ?) ON CONFLICT(mission_id) DO UPDATE SET capsule_id = excluded.capsule_id",
-      )
-      .run(missionId, capsuleId);
-  });
+): Effect.Effect<void, SqlError> =>
+  sql`
+    INSERT INTO runtime_mission_capsules (mission_id, capsule_id)
+    VALUES (${missionId}, ${capsuleId})
+    ON CONFLICT(mission_id) DO UPDATE SET capsule_id = excluded.capsule_id
+  `.pipe(Effect.asVoid);
 
 export const getMissionCapsuleId = (
   db: (typeof TheseusDb)["Service"],

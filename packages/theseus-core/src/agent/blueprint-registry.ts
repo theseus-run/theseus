@@ -1,6 +1,9 @@
 import { Context, Data, Effect, Layer } from "effect";
 import type { Blueprint } from "./index.ts";
 
+// biome-ignore lint/suspicious/noExplicitAny: blueprint registries carry heterogeneous tool environments.
+type BlueprintAny = Blueprint<any>;
+
 export class BlueprintNotFound extends Data.TaggedError("BlueprintNotFound")<{
   readonly name: string;
 }> {}
@@ -13,13 +16,13 @@ export interface BlueprintSummary {
 export class BlueprintRegistry extends Context.Service<
   BlueprintRegistry,
   {
-    readonly get: (name: string) => Effect.Effect<Blueprint, BlueprintNotFound>;
+    readonly get: (name: string) => Effect.Effect<BlueprintAny, BlueprintNotFound>;
     readonly list: Effect.Effect<ReadonlyArray<BlueprintSummary>>;
   }
 >()("BlueprintRegistry") {}
 
 export const BlueprintRegistryLive = (
-  blueprints: ReadonlyArray<Blueprint>,
+  blueprints: ReadonlyArray<BlueprintAny>,
 ): Layer.Layer<BlueprintRegistry> => {
   const byName = new Map(blueprints.map((blueprint) => [blueprint.name, blueprint]));
   return Layer.succeed(BlueprintRegistry)({

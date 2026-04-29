@@ -1,7 +1,6 @@
 import type * as CapsuleNs from "@theseus.run/core/Capsule";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
-import { Effect, Match } from "effect";
-import { decodeJson } from "../json.ts";
+import { Effect, Match, Schema } from "effect";
 import type { DispatchRegistry } from "../registry.ts";
 import type { TheseusDb } from "../store/sqlite.ts";
 import type { WorkNodeControllers } from "./controllers/work-node.ts";
@@ -18,7 +17,7 @@ import {
   type RuntimeControl,
   RuntimeDispatchFailed,
   RuntimeNotFound,
-  type RuntimeProjectionDecodeFailed,
+  RuntimeProjectionDecodeFailed,
   type RuntimeQuery,
   type RuntimeQueryResult,
   type RuntimeWorkControlFailed,
@@ -34,6 +33,15 @@ export interface RuntimeOperationsDeps {
 
 const dispatchFailureReason = (cause: Dispatch.DispatchError): string =>
   typeof cause === "object" && cause !== null && "_tag" in cause ? String(cause._tag) : "unknown";
+
+const dispatchStoreDecodeFailure = (
+  error: Dispatch.DispatchStoreDecodeFailed,
+): RuntimeProjectionDecodeFailed =>
+  new RuntimeProjectionDecodeFailed({
+    source: error.source,
+    reason: error.reason,
+    cause: error,
+  });
 
 const dispatchIdFor = (node: unknown): string | undefined =>
   typeof node === "object" &&
@@ -56,12 +64,52 @@ const updateDispatchStatusFor = (
     : updateWorkNodeDispatchStatus(db, { dispatchId, state });
 };
 
+const CapsuleEventRowSchema = Schema.Struct({
+  type: Schema.String,
+  at: Schema.String,
+  by: Schema.String,
+  data_json: Schema.String,
+});
+
+type CapsuleEventRow = Schema.Schema.Type<typeof CapsuleEventRowSchema>;
+
+const projectionDecodeError = (source: string, cause: unknown): RuntimeProjectionDecodeFailed =>
+  new RuntimeProjectionDecodeFailed({
+    source,
+    reason: String(cause),
+    cause,
+  });
+
+const decodeProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  value: unknown,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(schema)(value).pipe(
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
+
+const decodeJsonProjection = <S extends Schema.Top>(
+  source: string,
+  schema: S,
+  json: string,
+): Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed> =>
+  Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(json).pipe(
+    Effect.flatMap((value) => decodeProjection(source, schema, value)),
+    Effect.mapError((cause) => projectionDecodeError(source, cause)),
+  ) as Effect.Effect<Schema.Schema.Type<S>, RuntimeProjectionDecodeFailed>;
+
 const persistedDispatchResult = (
   store: (typeof Dispatch.DispatchStore)["Service"],
   dispatchId: string,
-): Effect.Effect<Dispatch.DispatchOutput, RuntimeNotFound | RuntimeDispatchFailed> =>
+): Effect.Effect<
+  Dispatch.DispatchOutput,
+  RuntimeNotFound | RuntimeDispatchFailed | RuntimeProjectionDecodeFailed
+> =>
   Effect.gen(function* () {
-    const entries = yield* store.events(dispatchId);
+    const entries = yield* store
+      .events(dispatchId)
+      .pipe(Effect.mapError(dispatchStoreDecodeFailure));
     const terminal = [...entries]
       .reverse()
       .find((entry) => entry.event._tag === "Done" || entry.event._tag === "Failed");
@@ -75,7 +123,10 @@ const persistedDispatchResult = (
 const dispatchResult = (
   deps: RuntimeOperationsDeps,
   dispatchId: string,
-): Effect.Effect<Dispatch.DispatchOutput, RuntimeNotFound | RuntimeDispatchFailed> =>
+): Effect.Effect<
+  Dispatch.DispatchOutput,
+  RuntimeNotFound | RuntimeDispatchFailed | RuntimeProjectionDecodeFailed
+> =>
   deps.registry.get(dispatchId).pipe(
     Effect.flatMap((handle) =>
       handle
@@ -96,19 +147,28 @@ const dispatchResult = (
 const capsuleEvents = (
   db: (typeof TheseusDb)["Service"],
   capsuleId: string,
-): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>> =>
-  Effect.sync(() => {
-    const rows = db.db
-      .prepare(
-        "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
-      )
-      .all(capsuleId) as Array<{ type: string; at: string; by: string; data_json: string }>;
-    return rows.map((row) => ({
-      type: row.type,
-      at: row.at,
-      by: row.by,
-      data: decodeJson(row.data_json),
-    }));
+): Effect.Effect<ReadonlyArray<CapsuleNs.CapsuleEvent>, RuntimeProjectionDecodeFailed> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.sync(() =>
+      db.db
+        .prepare(
+          "SELECT type, at, by, data_json FROM capsule_events WHERE capsule_id = ? ORDER BY id",
+        )
+        .all(capsuleId),
+    );
+    const decodedRows = yield* Effect.forEach(rows, (row) =>
+      decodeProjection("capsule_events row", CapsuleEventRowSchema, row),
+    );
+    return yield* Effect.forEach(decodedRows, (row: CapsuleEventRow) =>
+      decodeJsonProjection("capsule_events.data_json", Schema.Unknown, row.data_json).pipe(
+        Effect.map((data) => ({
+          type: row.type,
+          at: row.at,
+          by: row.by,
+          data,
+        })),
+      ),
+    );
   });
 
 const dispatchCapsuleEvents = (
@@ -118,27 +178,29 @@ const dispatchCapsuleEvents = (
   ReadonlyArray<CapsuleNs.CapsuleEvent>,
   RuntimeNotFound | RuntimeProjectionDecodeFailed
 > =>
-  getDispatchWorkNode(deps.db, dispatchId).pipe(
-    Effect.flatMap((session) =>
-      session
-        ? capsuleEvents(deps.db, session.capsuleId)
-        : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
-    ),
-  );
+  Effect.gen(function* () {
+    const session = yield* getDispatchWorkNode(deps.db, dispatchId);
+    if (session === undefined) {
+      return yield* new RuntimeNotFound({ kind: "dispatch", id: dispatchId });
+    }
+    return yield* capsuleEvents(deps.db, session.capsuleId);
+  });
 
 const dispatchEvents = (
   deps: RuntimeOperationsDeps,
   dispatchId: string,
-): Effect.Effect<ReadonlyArray<Dispatch.DispatchEventEntry>, RuntimeNotFound> =>
-  deps.dispatchStore
-    .events(dispatchId)
-    .pipe(
-      Effect.flatMap((events) =>
-        events.length > 0
-          ? Effect.succeed(events)
-          : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
-      ),
-    );
+): Effect.Effect<
+  ReadonlyArray<Dispatch.DispatchEventEntry>,
+  RuntimeNotFound | RuntimeProjectionDecodeFailed
+> =>
+  deps.dispatchStore.events(dispatchId).pipe(
+    Effect.mapError(dispatchStoreDecodeFailure),
+    Effect.flatMap((events) =>
+      events.length > 0
+        ? Effect.succeed(events)
+        : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: dispatchId })),
+    ),
+  );
 
 const dispatchList = (
   deps: RuntimeOperationsDeps,
@@ -167,7 +229,7 @@ export const runRuntimeControl = (
                     Match.tag("Pause", () => updateDispatchStatusFor(deps.db, node, "paused")),
                     Match.tag("Resume", () => updateDispatchStatusFor(deps.db, node, "running")),
                     Match.tag("Stop", () => updateDispatchStatusFor(deps.db, node, "aborted")),
-                    Match.tag("Interrupt", () => Effect.void),
+                    Match.tag("Interrupt", () => updateDispatchStatusFor(deps.db, node, "aborted")),
                     Match.tag("InjectGuidance", () => Effect.void),
                     Match.tag("RequestStatus", () => Effect.void),
                     Match.exhaustive,

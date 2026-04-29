@@ -211,13 +211,14 @@ const applyResearchPocEvent = (
       }));
     }),
     Match.tag("DispatchEvent", ({ dispatchId, event }) => {
+      const name = "name" in event ? event.name : dispatchId;
       setState((current) => ({
         ...current,
         transcripts: mergeBy(
           current.transcripts,
           {
             dispatchId,
-            name: event.name ?? dispatchId,
+            name,
             events: [
               ...(current.transcripts.find((transcript) => transcript.dispatchId === dispatchId)
                 ?.events ?? []),
@@ -228,5 +229,7 @@ const applyResearchPocEvent = (
         ),
       }));
     }),
+    Match.tag("WorkNodeStateChanged", () => undefined),
+    Match.tag("RuntimeProcessFailed", () => undefined),
     Match.exhaustive,
   );

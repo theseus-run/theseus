@@ -4,6 +4,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { type LanguageModelProvider, ServerConfig } from "../config.ts";
 import { CopilotConfig } from "./copilot/config.ts";
 import { makeCopilotLanguageModel } from "./copilot-lm.ts";
+import { limitLanguageModel, ModelConcurrency } from "./model-concurrency.ts";
 import { OpenAIConfig } from "./openai/config.ts";
 import { makeOpenAILanguageModel } from "./openai-lm.ts";
 
@@ -43,6 +44,7 @@ export const ServerLanguageModelGatewayLive = Layer.effect(Dispatch.LanguageMode
     const serverConfig = yield* ServerConfig;
     const copilotConfig = yield* CopilotConfig;
     const openAIConfig = yield* OpenAIConfig;
+    const concurrency = yield* ModelConcurrency;
 
     return Dispatch.LanguageModelGateway.of({
       resolve: (request) =>
@@ -55,7 +57,7 @@ export const ServerLanguageModelGatewayLive = Layer.effect(Dispatch.LanguageMode
               ),
               http,
               clock,
-            ),
+            ).pipe(Effect.map((model) => limitLanguageModel(model, concurrency))),
           ),
           Match.when("openai", () =>
             makeOpenAILanguageModel(
@@ -65,7 +67,7 @@ export const ServerLanguageModelGatewayLive = Layer.effect(Dispatch.LanguageMode
               ),
               http,
               clock,
-            ),
+            ).pipe(Effect.map((model) => limitLanguageModel(model, concurrency))),
           ),
           Match.exhaustive,
         ),

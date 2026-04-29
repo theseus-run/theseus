@@ -18,7 +18,7 @@
     "@theseus.run/tools": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "effect": "4.0.0-beta.50",
+    "effect": "catalog:effect",
     "lucide-react": "^0.513.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

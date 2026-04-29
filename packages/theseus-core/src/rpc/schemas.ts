@@ -229,6 +229,11 @@ export const DispatchSessionSchema = Schema.Struct({
   usage: UsageSchema,
 });
 
+export const WorkTreeNodeSessionSchema = Schema.Union([
+  DispatchSessionSchema,
+  WorkNodeSessionSchema,
+]);
+
 export const WorkControlCommandSchema = Schema.Union([
   Schema.TaggedStruct("Interrupt", {
     reason: OptionalNullable(Schema.String),

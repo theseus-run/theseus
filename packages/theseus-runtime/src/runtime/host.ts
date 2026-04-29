@@ -1,3 +1,4 @@
+import type { SqliteClient } from "@effect/sql-sqlite-bun";
 import type * as Agent from "@theseus.run/core/Agent";
 import type * as Dispatch from "@theseus.run/core/Dispatch";
 import type * as Satellite from "@theseus.run/core/Satellite";
@@ -19,6 +20,7 @@ import type {
   RuntimeSubmission,
   TheseusRuntimeService,
 } from "./types.ts";
+import { RuntimeProjectionDecodeFailed } from "./types.ts";
 import type { WorkSupervisor } from "./work-supervisor.ts";
 
 export interface RuntimeHostDeps {
@@ -33,13 +35,22 @@ export interface RuntimeHostDeps {
   readonly eventBus: (typeof RuntimeEventBus)["Service"];
   readonly workSupervisor: (typeof WorkSupervisor)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
+  readonly sql: (typeof SqliteClient.SqliteClient)["Service"];
 }
 
 export const makeRuntimeHost = (deps: RuntimeHostDeps): TheseusRuntimeService => {
   const submit = (command: RuntimeCommand): Effect.Effect<RuntimeSubmission, RuntimeError> =>
     Match.value(command).pipe(
       Match.tag("MissionCreate", ({ input }) =>
-        createMission(deps.db, input).pipe(
+        createMission(deps.db, deps.sql, input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RuntimeProjectionDecodeFailed({
+                source: "runtime_mission_capsules write",
+                reason: String(cause),
+                cause,
+              }),
+          ),
           Effect.map((mission): RuntimeSubmission => ({ _tag: "MissionCreated", mission })),
         ),
       ),

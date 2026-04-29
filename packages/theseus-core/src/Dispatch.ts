@@ -91,6 +91,7 @@ export {
   DispatchInterrupted,
   DispatchModelFailed,
   DispatchOutputSchema,
+  DispatchStoreDecodeFailed,
   DispatchToolFailed,
   ToolCallBadArgs,
   ToolCallFailed,

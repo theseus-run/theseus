@@ -50,6 +50,7 @@ export type {
 export {
   CurrentDispatch,
   DispatchStore,
+  DispatchStoreDecodeFailed,
   InMemoryDispatchStore,
   makeDispatchId,
 } from "./store.ts";

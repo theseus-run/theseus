@@ -18,6 +18,7 @@ import {
   type MissionStartDispatchInput,
   type RuntimeDispatchEvent,
   RuntimeNotFound,
+  RuntimeProjectionDecodeFailed,
   RuntimeToolNotFound,
   WorkNodeId,
   type WorkNodeRelation,
@@ -26,7 +27,10 @@ import { CurrentWorkNode, type CurrentWorkNodeValue } from "../../work-context.t
 import { WorkControlDescriptors } from "../../work-control.ts";
 import type { WorkSupervisor } from "../../work-supervisor.ts";
 
-const SKIP_EVENT_TAGS = new Set(["Thinking"]);
+const SKIP_EVENT_TAGS = new Set(["Thinking", "Done", "Failed"]);
+
+const isTerminalWorkState = (state: string): boolean =>
+  state === "done" || state === "failed" || state === "aborted";
 
 const dispatchOptionsFromParent = (
   restored: Dispatch.DispatchOptions,
@@ -41,6 +45,15 @@ const dispatchOptionsFromParent = (
 
 const reasonFromCause = (cause: Cause.Cause<unknown>): string =>
   Cause.hasInterruptsOnly(cause) ? "Fiber interrupted" : String(Cause.squash(cause));
+
+const dispatchStoreDecodeFailure = (
+  error: Dispatch.DispatchStoreDecodeFailed,
+): RuntimeProjectionDecodeFailed =>
+  new RuntimeProjectionDecodeFailed({
+    source: error.source,
+    reason: error.reason,
+    cause: error,
+  });
 
 export interface DispatchRunnerDeps {
   readonly registry: (typeof DispatchRegistry)["Service"];
@@ -71,18 +84,20 @@ const restoreOptions = (
   store: (typeof Dispatch.DispatchStore)["Service"],
   continueFrom: string | undefined,
   task: string,
-): Effect.Effect<Dispatch.DispatchOptions | undefined, RuntimeNotFound> =>
+): Effect.Effect<
+  Dispatch.DispatchOptions | undefined,
+  RuntimeNotFound | RuntimeProjectionDecodeFailed
+> =>
   continueFrom === undefined
     ? Effect.as(Effect.void, undefined)
-    : store
-        .restore(continueFrom)
-        .pipe(
-          Effect.flatMap((restored) =>
-            restored
-              ? Effect.succeed(dispatchOptionsFromParent(restored, continueFrom, task))
-              : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: continueFrom })),
-          ),
-        );
+    : store.restore(continueFrom).pipe(
+        Effect.mapError(dispatchStoreDecodeFailure),
+        Effect.flatMap((restored) =>
+          restored
+            ? Effect.succeed(dispatchOptionsFromParent(restored, continueFrom, task))
+            : Effect.fail(new RuntimeNotFound({ kind: "dispatch", id: continueFrom })),
+        ),
+      );
 
 const makeCurrentCapsule = (
   db: (typeof TheseusDb)["Service"],
@@ -115,62 +130,134 @@ const makeDispatchDepsLayer = (
     Agent.AgentIdentityLive(specName),
   );
 
-const watchDispatchCompletion = (input: {
+interface DispatchCompletionInput {
   readonly handle: Dispatch.DispatchHandle;
   readonly workNodeId: WorkNodeId;
   readonly capsule: CapsuleNs.CapsuleRecord;
+  readonly session: DispatchSession;
   readonly registry: (typeof DispatchRegistry)["Service"];
   readonly store: (typeof Dispatch.DispatchStore)["Service"];
   readonly db: (typeof TheseusDb)["Service"];
+  readonly eventBus: (typeof RuntimeEventBus)["Service"];
   readonly workSupervisor: (typeof WorkSupervisor)["Service"];
   readonly completesMission: boolean;
-}): Effect.Effect<void> =>
+}
+
+const completeSuccessfulDispatch = (
+  input: DispatchCompletionInput,
+  result: Dispatch.DispatchOutput,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    yield* input.store.snapshot(input.handle.dispatchId, -1, result.messages, result.usage);
+    yield* CapsuleSink.dispatchDone(input.capsule, {
+      dispatchId: input.handle.dispatchId,
+      result,
+    });
+    if (input.completesMission) {
+      yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
+    }
+    yield* input.eventBus.publish(
+      RuntimeEvents.dispatchObserved(input.session, {
+        _tag: "Done",
+        name: input.session.name,
+        result,
+      }),
+    );
+    yield* updateWorkNodeDispatchStatus(input.db, {
+      dispatchId: input.handle.dispatchId,
+      state: "done",
+      usage: result.usage,
+      completedAt: yield* Clock.currentTimeMillis,
+    });
+    yield* input.registry.updateStatus(input.handle.dispatchId, {
+      state: "done",
+      usage: result.usage,
+    });
+    yield* input.workSupervisor.updateState(input.workNodeId, "done");
+  });
+
+const completeFailedDispatch = (
+  input: DispatchCompletionInput,
+  cause: Cause.Cause<Dispatch.DispatchError>,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const reason = reasonFromCause(cause);
+    yield* CapsuleSink.dispatchFailed(input.capsule, {
+      dispatchId: input.handle.dispatchId,
+      reason,
+    });
+    if (input.completesMission) {
+      yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
+    }
+    yield* input.eventBus.publish(
+      RuntimeEvents.dispatchObserved(input.session, {
+        _tag: "Failed",
+        name: input.session.name,
+        reason,
+      }),
+    );
+    yield* updateWorkNodeDispatchStatus(input.db, {
+      dispatchId: input.handle.dispatchId,
+      state: "failed",
+      completedAt: yield* Clock.currentTimeMillis,
+    });
+    yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
+    yield* input.workSupervisor.updateState(input.workNodeId, "failed", reason);
+  });
+
+const publishCompletionProcessFailure = (
+  input: DispatchCompletionInput,
+  processReason: string,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    yield* input.eventBus.publish(
+      RuntimeEvents.runtimeProcessFailed(input.session, "dispatch-completion", processReason),
+    );
+    yield* input.workSupervisor.updateState(
+      input.workNodeId,
+      "failed",
+      `dispatch-completion: ${processReason}`,
+    );
+  });
+
+const reconcileDispatchCompletionFailure = (
+  input: DispatchCompletionInput,
+  cause: Cause.Cause<unknown>,
+): Effect.Effect<void> => {
+  if (Cause.hasInterruptsOnly(cause)) {
+    return Effect.void;
+  }
+  const reason = reasonFromCause(cause);
+  return Effect.gen(function* () {
+    yield* updateWorkNodeDispatchStatus(input.db, {
+      dispatchId: input.handle.dispatchId,
+      state: "failed",
+      completedAt: yield* Clock.currentTimeMillis,
+    });
+    yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
+  }).pipe(
+    Effect.exit,
+    Effect.flatMap((reconcileExit) =>
+      publishCompletionProcessFailure(
+        input,
+        Exit.isSuccess(reconcileExit)
+          ? reason
+          : `${reason}; reconciliation failed: ${reasonFromCause(reconcileExit.cause)}`,
+      ),
+    ),
+  );
+};
+
+const watchDispatchCompletion = (input: DispatchCompletionInput): Effect.Effect<void> =>
   input.handle.result.pipe(
     Effect.exit,
-    Effect.flatMap((exit) =>
-      Exit.match(exit, {
-        onSuccess: (result) =>
-          Effect.gen(function* () {
-            yield* input.store.snapshot(input.handle.dispatchId, -1, result.messages, result.usage);
-            yield* CapsuleSink.dispatchDone(input.capsule, {
-              dispatchId: input.handle.dispatchId,
-              result,
-            });
-            if (input.completesMission) {
-              yield* CapsuleSink.missionTransition(input.capsule, "running", "done");
-            }
-            yield* updateWorkNodeDispatchStatus(input.db, {
-              dispatchId: input.handle.dispatchId,
-              state: "done",
-              usage: result.usage,
-              completedAt: yield* Clock.currentTimeMillis,
-            });
-            yield* input.registry.updateStatus(input.handle.dispatchId, {
-              state: "done",
-              usage: result.usage,
-            });
-            yield* input.workSupervisor.updateState(input.workNodeId, "done");
-          }),
-        onFailure: (cause) =>
-          Effect.gen(function* () {
-            const reason = reasonFromCause(cause);
-            yield* CapsuleSink.dispatchFailed(input.capsule, {
-              dispatchId: input.handle.dispatchId,
-              reason,
-            });
-            if (input.completesMission) {
-              yield* CapsuleSink.missionTransition(input.capsule, "running", "failed");
-            }
-            yield* updateWorkNodeDispatchStatus(input.db, {
-              dispatchId: input.handle.dispatchId,
-              state: "failed",
-              completedAt: yield* Clock.currentTimeMillis,
-            });
-            yield* input.registry.updateStatus(input.handle.dispatchId, { state: "failed" });
-            yield* input.workSupervisor.updateState(input.workNodeId, "failed", reason);
-          }),
-      }),
-    ),
+    Effect.flatMap((exit) => {
+      if (Exit.isSuccess(exit)) {
+        return completeSuccessfulDispatch(input, exit.value);
+      }
+      return completeFailedDispatch(input, exit.cause);
+    }),
+    Effect.catchCause((cause) => reconcileDispatchCompletionFailure(input, cause)),
   );
 
 const publishDispatchEvents = (
@@ -312,6 +399,8 @@ const startConcreteDispatch = (
         registry: deps.registry,
         store: deps.dispatchStore,
         db: deps.db,
+        session,
+        eventBus: deps.eventBus,
         workSupervisor: deps.workSupervisor,
         completesMission,
       }),
@@ -367,7 +456,7 @@ export const startDispatch = (
   }: MissionStartDispatchInput,
 ): Effect.Effect<
   { readonly session: DispatchSession; readonly events: Stream.Stream<RuntimeDispatchEvent> },
-  RuntimeNotFound | RuntimeToolNotFound
+  RuntimeNotFound | RuntimeToolNotFound | RuntimeProjectionDecodeFailed
 > =>
   Effect.gen(function* () {
     const hydratedSpec = yield* deps.toolCatalog
@@ -405,9 +494,9 @@ export const startDispatch = (
         .pipe(
           Stream.takeUntil(
             (event) =>
-              event._tag === "DispatchEvent" &&
-              event.dispatchId === started.session.dispatchId &&
-              (event.event._tag === "Done" || event.event._tag === "Failed"),
+              event._tag === "WorkNodeStateChanged" &&
+              event.workNodeId === started.session.workNodeId &&
+              isTerminalWorkState(event.state),
           ),
         ),
     };

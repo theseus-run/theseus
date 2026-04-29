@@ -17,12 +17,23 @@ import {
 import { TheseusRuntime } from "../index.ts";
 import { TheseusRuntimeLive } from "../live.ts";
 import { DispatchRegistry, DispatchRegistryLive } from "../registry.ts";
-import { SqliteDispatchStore, TheseusDbLive } from "../store/index.ts";
+import {
+  SqliteDispatchStore,
+  TheseusDb,
+  TheseusDbLive,
+  TheseusSqliteLive,
+} from "../store/index.ts";
 import { makeToolCatalog, ToolCatalog } from "../tool-catalog.ts";
 import { RuntimeCommands, RuntimeControls, RuntimeQueries } from "./client.ts";
 import { WorkNodeControllers, WorkNodeControllersLive } from "./controllers/work-node.ts";
-import { RuntimeEventBusLive } from "./event-bus.ts";
-import type { RuntimeDispatchEvent } from "./types.ts";
+import { RuntimeEventBus, RuntimeEventBusLive } from "./event-bus.ts";
+import {
+  type DispatchSession,
+  type RuntimeDispatchEvent,
+  RuntimeProjectionDecodeFailed,
+  WorkNodeId,
+} from "./types.ts";
+import { WorkControlDescriptors } from "./work-control.ts";
 import { WorkSupervisor, WorkSupervisorLive } from "./work-supervisor.ts";
 
 const probe = Tool.defineTool({
@@ -79,10 +90,41 @@ const pocResponses = [
   textParts("coordinator final"),
 ];
 
-const runtimeLayer = (responses = pocResponses) => {
+const failingSnapshotStore = Layer.succeed(Dispatch.DispatchStore)(
+  Dispatch.DispatchStore.of({
+    create: (input) =>
+      Effect.gen(function* () {
+        const id =
+          input.requestedId !== undefined
+            ? (input.requestedId as Dispatch.DispatchId)
+            : yield* Dispatch.makeDispatchId(input.name);
+        return {
+          id,
+          name: input.name,
+          task: input.task,
+          ...(input.parentDispatchId !== undefined
+            ? { parentDispatchId: input.parentDispatchId }
+            : {}),
+          ...(input.modelRequest !== undefined ? { modelRequest: input.modelRequest } : {}),
+        };
+      }),
+    record: () => Effect.void,
+    snapshot: (_dispatchId, iteration) =>
+      iteration === -1 ? Effect.die("snapshot failed") : Effect.void,
+    events: () => Effect.succeed([]),
+    restore: () => Effect.as(Effect.void, undefined),
+    list: () => Effect.succeed([]),
+  }),
+);
+
+const runtimeLayer = (
+  responses = pocResponses,
+  storeLive?: Layer.Layer<Dispatch.DispatchStore>,
+) => {
   const dbPath = join(mkdtempSync(join(tmpdir(), "theseus-runtime-")), "theseus.db");
   const DbLive = TheseusDbLive(dbPath);
-  const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
+  const SqlLive = TheseusSqliteLive(dbPath);
+  const StoreLive = storeLive ?? Layer.provide(SqliteDispatchStore, DbLive);
   const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
   const EventBusLive = RuntimeEventBusLive;
   const SupervisorLive = Layer.provide(
@@ -127,6 +169,7 @@ const runtimeLayer = (responses = pocResponses) => {
     Dispatch.NoopCortex,
     LanguageModelGatewayLive,
     Satellite.DefaultSatelliteRing,
+    SqlLive,
   );
   return {
     dbPath,
@@ -206,6 +249,14 @@ describe("TheseusRuntime POC", () => {
           event.session.parentWorkNodeId === observed.session.workNodeId,
       ),
     ).toBe(true);
+    expect(
+      observed.events.some(
+        (event) =>
+          event._tag === "WorkNodeStateChanged" &&
+          event.workNodeId === observed.session.workNodeId &&
+          event.state === "done",
+      ),
+    ).toBe(true);
     expect(observed.dispatches.map((session) => session.parentWorkNodeId)).toContain(
       observed.session.workNodeId,
     );
@@ -222,6 +273,30 @@ describe("TheseusRuntime POC", () => {
     expect(
       observed.capsuleEvents.filter((event) => event.type === "mission.transition"),
     ).toHaveLength(2);
+
+    const rootDoneIndex = observed.events.findIndex(
+      (event) =>
+        event._tag === "DispatchEvent" &&
+        event.workNodeId === observed.session.workNodeId &&
+        event.event._tag === "Done",
+    );
+    const rootTerminalIndex = observed.events.findIndex(
+      (event) =>
+        event._tag === "WorkNodeStateChanged" &&
+        event.workNodeId === observed.session.workNodeId &&
+        event.state === "done",
+    );
+    expect(rootDoneIndex).toBeGreaterThanOrEqual(0);
+    expect(rootTerminalIndex).toBeGreaterThan(rootDoneIndex);
+
+    const coordinatorNode = observed.workTree.find(
+      (node) => node.workNodeId === observed.session.workNodeId,
+    ) as DispatchSession | undefined;
+    expect(coordinatorNode?.kind).toBe("dispatch");
+    expect(coordinatorNode?.dispatchId).toBe(observed.session.dispatchId);
+    expect(coordinatorNode?.modelRequest?.model).toBe("gpt-5.5");
+    expect(coordinatorNode?.iteration).toBeGreaterThanOrEqual(0);
+    expect(coordinatorNode?.usage.inputTokens).toBeGreaterThanOrEqual(0);
   });
 
   test("falls back to persisted terminal dispatch result without an active handle", async () => {
@@ -252,6 +327,7 @@ describe("TheseusRuntime POC", () => {
     );
 
     const DbLive = TheseusDbLive(first.dbPath);
+    const SqlLive = TheseusSqliteLive(first.dbPath);
     const StoreLive = Layer.provide(SqliteDispatchStore, DbLive);
     const RegistryLive = Layer.effect(DispatchRegistry)(DispatchRegistryLive);
     const EventBusLive = RuntimeEventBusLive;
@@ -276,6 +352,7 @@ describe("TheseusRuntime POC", () => {
       Dispatch.NoopCortex,
       Layer.provide(Dispatch.LanguageModelGatewayFromLanguageModel, makeMockLanguageModel([])),
       Satellite.DefaultSatelliteRing,
+      SqlLive,
     );
     const secondLayer = Layer.provide(Layer.effect(TheseusRuntime)(TheseusRuntimeLive), Services);
 
@@ -356,6 +433,394 @@ describe("TheseusRuntime POC", () => {
 
     expect(observed.paused[0]?.state).toBe("paused");
     expect(observed.result.content).toBe("pause test final");
+  });
+
+  test("interrupt persists active work as aborted", async () => {
+    const { layer } = runtimeLayer([textParts("interrupted final")]);
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "work-node-interrupt",
+          goal: "Interrupt active work",
+          criteria: ["interrupt persisted"],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "Pause",
+        });
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "Interrupt",
+          reason: "operator interrupt",
+        });
+        return yield* RuntimeQueries.getMissionWorkTree(runtime, mission.missionId);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(observed[0]?.state).toBe("aborted");
+  });
+
+  test("stop does not rewrite completed work state", async () => {
+    const { layer } = runtimeLayer([textParts("completed before stop")]);
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "work-node-stop-completed",
+          goal: "Stop completed work",
+          criteria: ["done remains done"],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        const eventsFiber = yield* collectRuntimeEvents(started.events).pipe(Effect.forkChild);
+        yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
+        yield* Fiber.join(eventsFiber);
+        yield* RuntimeControls.controlWorkNode(runtime, started.session.workNodeId, {
+          _tag: "Stop",
+          reason: "late stop",
+        }).pipe(Effect.catchTag("RuntimeWorkControlUnsupported", () => Effect.void));
+        return yield* RuntimeQueries.getMissionWorkTree(runtime, mission.missionId);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(observed[0]?.state).toBe("done");
+  });
+
+  test("supervised process failures are published and reconcile active work state", async () => {
+    const EventBusLive = RuntimeEventBusLive;
+    const SupervisorLive = Layer.provide(
+      Layer.effect(WorkSupervisor)(WorkSupervisorLive),
+      EventBusLive,
+    );
+    const layer = Layer.mergeAll(EventBusLive, SupervisorLive);
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const supervisor = yield* WorkSupervisor;
+        const bus = yield* RuntimeEventBus;
+        const workNodeId = WorkNodeId.make("work-process-failure");
+        const handle: Dispatch.DispatchHandle = {
+          dispatchId: "dispatch-process-failure",
+          events: Stream.empty,
+          inject: () => Effect.void,
+          pause: Effect.void,
+          resume: Effect.void,
+          stop: () => Effect.void,
+          controlState: Effect.succeed({ _tag: "Running" }),
+          interrupt: Effect.void,
+          result: Effect.never,
+          messages: Effect.succeed([]),
+        };
+        yield* supervisor.registerDispatch(
+          {
+            workNodeId,
+            missionId: "mission-process-failure",
+            capsuleId: "capsule-process-failure",
+            kind: "dispatch",
+            relation: "root",
+            label: "process-failure",
+            state: "running",
+            control: WorkControlDescriptors.dispatch("running"),
+          },
+          handle,
+        );
+        yield* supervisor.forkProcess(workNodeId, "failing-process", Effect.die("boom"));
+        return yield* bus
+          .streamMission("mission-process-failure")
+          .pipe(Stream.take(2), Stream.runCollect);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    const events = Array.from(observed);
+    expect(events.map((event) => event._tag)).toEqual([
+      "RuntimeProcessFailed",
+      "WorkNodeStateChanged",
+    ]);
+    expect(events[1]?._tag === "WorkNodeStateChanged" && events[1].state).toBe("failed");
+  });
+
+  test("dispatch completion process failure reconciles persisted dispatch work state", async () => {
+    const { layer } = runtimeLayer(
+      [textParts("completion side effect fails")],
+      failingSnapshotStore,
+    );
+
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "dispatch-completion-failure",
+          goal: "Reconcile completion failure",
+          criteria: ["work becomes failed"],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        const eventsFiber = yield* collectRuntimeEvents(started.events).pipe(Effect.forkChild);
+        const result = yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
+        const events = yield* Fiber.join(eventsFiber);
+        const workTree = yield* RuntimeQueries.getMissionWorkTree(runtime, mission.missionId);
+        return { events, result, session: started.session, workTree };
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(observed.result.content).toBe("completion side effect fails");
+    expect(observed.events.some((event) => event._tag === "RuntimeProcessFailed")).toBe(true);
+    expect(
+      observed.events.some(
+        (event) =>
+          event._tag === "WorkNodeStateChanged" &&
+          event.workNodeId === observed.session.workNodeId &&
+          event.state === "failed",
+      ),
+    ).toBe(true);
+    expect(observed.workTree[0]?.state).toBe("failed");
+  });
+
+  test("capsule event query reports corrupt persisted JSON as a typed decode failure", async () => {
+    const { layer, dbPath } = runtimeLayer([]);
+
+    const mission = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeCommands.createMission(runtime, {
+          slug: "corrupt-capsule-json",
+          goal: "Corrupt capsule query",
+          criteria: [],
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* TheseusDb;
+        yield* Effect.sync(() => {
+          db.db
+            .prepare(
+              "INSERT INTO capsule_events (capsule_id, type, at, by, data_json) VALUES (?, ?, ?, ?, ?)",
+            )
+            .run(mission.capsuleId, "bad.event", "2026-04-29T00:00:00.000Z", "test", "{");
+        });
+      }).pipe(Effect.provide(TheseusDbLive(dbPath))),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeQueries.getCapsuleEvents(runtime, mission.capsuleId).pipe(
+          Effect.as(undefined),
+          Effect.catchTag("RuntimeProjectionDecodeFailed", (error) => Effect.succeed(error)),
+        );
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(failure).toBeInstanceOf(RuntimeProjectionDecodeFailed);
+  });
+
+  test("dispatch event query reports corrupt persisted JSON as a typed decode failure", async () => {
+    const { layer, dbPath } = runtimeLayer([textParts("dispatch event corruption target")]);
+
+    const dispatchId = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        const mission = yield* RuntimeCommands.createMission(runtime, {
+          slug: "corrupt-dispatch-event-json",
+          goal: "Corrupt dispatch event query",
+          criteria: [],
+        });
+        const started = yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "finish",
+        });
+        const eventsFiber = yield* collectRuntimeEvents(started.events).pipe(Effect.forkChild);
+        yield* RuntimeQueries.getResult(runtime, started.session.dispatchId);
+        yield* Fiber.join(eventsFiber);
+        return started.session.dispatchId;
+      }).pipe(Effect.provide(layer)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* TheseusDb;
+        yield* Effect.sync(() => {
+          db.db
+            .prepare(
+              "INSERT INTO dispatch_events (dispatch_id, timestamp, event_tag, event_json) VALUES (?, ?, ?, ?)",
+            )
+            .run(dispatchId, 1, "Done", "{");
+        });
+      }).pipe(Effect.provide(TheseusDbLive(dbPath))),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeQueries.getDispatchEvents(runtime, dispatchId).pipe(
+          Effect.as(undefined),
+          Effect.catchTag("RuntimeProjectionDecodeFailed", (error) => Effect.succeed(error)),
+        );
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(failure).toBeInstanceOf(RuntimeProjectionDecodeFailed);
+  });
+
+  test("continueFrom reports corrupt persisted snapshot JSON as a typed decode failure", async () => {
+    const { layer, dbPath } = runtimeLayer([]);
+    const dispatchId = "corrupt-snapshot-dispatch";
+
+    const mission = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeCommands.createMission(runtime, {
+          slug: "corrupt-snapshot-json",
+          goal: "Corrupt snapshot restore",
+          criteria: [],
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* TheseusDb;
+        yield* Effect.sync(() => {
+          db.db
+            .prepare(
+              "INSERT INTO dispatch_snapshots (dispatch_id, iteration, timestamp, messages_json, usage_json) VALUES (?, ?, ?, ?, ?)",
+            )
+            .run(dispatchId, 0, 1, "[", JSON.stringify({ inputTokens: 1, outputTokens: 2 }));
+        });
+      }).pipe(Effect.provide(TheseusDbLive(dbPath))),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          continueFrom: dispatchId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "continue",
+        }).pipe(
+          Effect.as(undefined),
+          Effect.catchTag("RuntimeProjectionDecodeFailed", (error) => Effect.succeed(error)),
+        );
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(failure).toBeInstanceOf(RuntimeProjectionDecodeFailed);
+  });
+
+  test("continueFrom reports corrupt persisted usage JSON as a typed decode failure", async () => {
+    const { layer, dbPath } = runtimeLayer([]);
+    const dispatchId = "corrupt-usage-dispatch";
+
+    const mission = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeCommands.createMission(runtime, {
+          slug: "corrupt-usage-json",
+          goal: "Corrupt usage restore",
+          criteria: [],
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* TheseusDb;
+        yield* Effect.sync(() => {
+          db.db
+            .prepare(
+              "INSERT INTO dispatch_snapshots (dispatch_id, iteration, timestamp, messages_json, usage_json) VALUES (?, ?, ?, ?, ?)",
+            )
+            .run(dispatchId, 0, 1, JSON.stringify([]), JSON.stringify({ inputTokens: "bad" }));
+        });
+      }).pipe(Effect.provide(TheseusDbLive(dbPath))),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* TheseusRuntime;
+        return yield* RuntimeCommands.startMissionDispatch(runtime, {
+          missionId: mission.missionId,
+          continueFrom: dispatchId,
+          spec: {
+            name: "coordinator",
+            systemPrompt: "Return final text.",
+            tools: [],
+          },
+          task: "continue",
+        }).pipe(
+          Effect.as(undefined),
+          Effect.catchTag("RuntimeProjectionDecodeFailed", (error) => Effect.succeed(error)),
+        );
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(failure).toBeInstanceOf(RuntimeProjectionDecodeFailed);
+  });
+
+  test("dispatch store list reports corrupt model request JSON as a typed decode failure", async () => {
+    const dbPath = join(mkdtempSync(join(tmpdir(), "theseus-runtime-")), "theseus.db");
+    const layer = Layer.provide(SqliteDispatchStore, TheseusDbLive(dbPath));
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* TheseusDb;
+        yield* Effect.sync(() => {
+          db.db
+            .prepare(
+              "INSERT INTO dispatch_records (dispatch_id, name, task, parent_dispatch_id, model_request_json) VALUES (?, ?, ?, ?, ?)",
+            )
+            .run("corrupt-model-request", "coordinator", "finish", null, "{");
+        });
+      }).pipe(Effect.provide(TheseusDbLive(dbPath))),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Dispatch.DispatchStore;
+        return yield* store.list().pipe(
+          Effect.as(undefined),
+          Effect.catchTag("DispatchStoreDecodeFailed", (error) => Effect.succeed(error)),
+        );
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(failure).toBeInstanceOf(Dispatch.DispatchStoreDecodeFailed);
   });
 
   test("root runtime import does not export live assembly", async () => {

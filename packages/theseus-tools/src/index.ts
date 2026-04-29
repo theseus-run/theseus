@@ -9,6 +9,7 @@ export { glob } from "./glob.ts";
 export { grep } from "./grep.ts";
 export { listDir } from "./list_dir.ts";
 export { outline } from "./outline/index.ts";
+export { ToolPlatform, ToolPlatformBunLive, ToolPlatformLive } from "./platform.ts";
 export { readFile } from "./read_file.ts";
 export { searchReplace } from "./search_replace.ts";
 export { shell } from "./shell.ts";
@@ -26,16 +27,10 @@ import { shell } from "./shell.ts";
 import { writeFile } from "./write_file.ts";
 
 /** Read-only tools — safe for planner/atlas agents. */
-export const readonlyTools: ReadonlyArray<Tool.ToolAnyWith<never>> = [
-  readFile,
-  listDir,
-  glob,
-  grep,
-  outline,
-];
+export const readonlyTools: ReadonlyArray<Tool.ToolAny> = [readFile, listDir, glob, grep, outline];
 
 /** All tools — full access for coder/forge agents. */
-export const allTools: ReadonlyArray<Tool.ToolAnyWith<never>> = [
+export const allTools: ReadonlyArray<Tool.ToolAny> = [
   readFile,
   listDir,
   glob,

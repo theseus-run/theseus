@@ -1,16 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
-import { ServerEnv } from "../env.ts";
+import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { CopilotConfig, CopilotConfigDefaults, CopilotConfigLive } from "./copilot/config.ts";
 import { OpenAIConfig, OpenAIConfigDefaults, OpenAIConfigLive } from "./openai/config.ts";
 
-const envLayer = (values: Readonly<Record<string, string | undefined>>) =>
-  Layer.succeed(ServerEnv)({
-    get: (key) => values[key],
-  });
+const envLayer = (values: Readonly<Record<string, string>>) =>
+  ConfigProvider.layer(ConfigProvider.fromEnv({ env: values }));
 
 describe("provider config resolution", () => {
-  test("resolves Copilot defaults through ServerEnv", async () => {
+  test("resolves Copilot defaults through Effect Config", async () => {
     const config = await Effect.runPromise(
       Effect.service(CopilotConfig).pipe(
         Effect.provide(Layer.provide(CopilotConfigLive, envLayer({}))),
@@ -20,7 +17,7 @@ describe("provider config resolution", () => {
     expect(config).toEqual(CopilotConfigDefaults);
   });
 
-  test("resolves OpenAI defaults through ServerEnv", async () => {
+  test("resolves OpenAI defaults through Effect Config", async () => {
     const config = await Effect.runPromise(
       Effect.service(OpenAIConfig).pipe(
         Effect.provide(Layer.provide(OpenAIConfigLive, envLayer({}))),
@@ -37,7 +34,7 @@ describe("provider config resolution", () => {
     });
   });
 
-  test("resolves OpenAI overrides through ServerEnv", async () => {
+  test("resolves OpenAI overrides through Effect Config", async () => {
     const config = await Effect.runPromise(
       Effect.service(OpenAIConfig).pipe(
         Effect.provide(
@@ -57,7 +54,7 @@ describe("provider config resolution", () => {
     );
 
     expect(config).toEqual({
-      apiKey: "test-key",
+      apiKey: Redacted.make("test-key"),
       apiUrl: "https://api.openai.test",
       model: "gpt-test",
       maxOutputTokens: 512,

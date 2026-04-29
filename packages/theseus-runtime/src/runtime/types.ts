@@ -146,6 +146,8 @@ export interface DispatchSession extends WorkNodeSession {
   readonly usage: Dispatch.Usage;
 }
 
+export type WorkTreeNodeSession = WorkNodeSession | DispatchSession;
+
 export interface MissionDispatchInput {
   readonly spec: SerializedDispatchSpec;
   readonly task: string;
@@ -271,7 +273,7 @@ export type RuntimeQueryResult =
     }
   | {
       readonly _tag: "MissionWorkTree";
-      readonly nodes: ReadonlyArray<WorkNodeSession>;
+      readonly nodes: ReadonlyArray<WorkTreeNodeSession>;
     }
   | {
       readonly _tag: "DispatchResult";

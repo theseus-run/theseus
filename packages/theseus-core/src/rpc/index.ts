@@ -41,4 +41,5 @@ export {
   UsageSchema,
   WorkControlCommandSchema,
   WorkNodeSessionSchema,
+  WorkTreeNodeSessionSchema,
 } from "./schemas.ts";

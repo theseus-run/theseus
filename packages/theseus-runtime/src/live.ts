@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-bun";
 import * as Agent from "@theseus.run/core/Agent";
 import * as Dispatch from "@theseus.run/core/Dispatch";
 import * as Satellite from "@theseus.run/core/Satellite";
@@ -24,6 +25,7 @@ export const TheseusRuntimeLive = Effect.gen(function* () {
     eventBus: yield* RuntimeEventBus,
     workSupervisor: yield* WorkSupervisor,
     db: yield* TheseusDb,
+    sql: yield* SqliteClient.SqliteClient,
   };
 
   return TheseusRuntime.of(makeRuntimeHost(deps));

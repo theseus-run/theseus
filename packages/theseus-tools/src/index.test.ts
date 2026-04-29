@@ -3,7 +3,7 @@ import { mkdtemp, readFile as readDiskFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Tool from "@theseus.run/core/Tool";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   allTools,
   grep,
@@ -12,6 +12,8 @@ import {
   readonlyTools,
   searchReplace,
   shell,
+  ToolPlatform,
+  ToolPlatformBunLive,
   writeFile,
 } from "./index.ts";
 import { allToolMeta, TOOL_META } from "./metadata.ts";
@@ -34,7 +36,7 @@ const callText = async (tool: Tool.ToolAny, raw: unknown) => {
     Tool.ToolRuntimeError,
     never
   >;
-  const result = await Effect.runPromise(effect);
+  const result = await Effect.runPromise(effect.pipe(Effect.provide(ToolPlatformBunLive)));
   return result.presentation.content
     .map((content) => (content._tag === "text" ? content.text : ""))
     .join("");
@@ -46,7 +48,7 @@ const callError = async (tool: Tool.ToolAny, raw: unknown) => {
     Tool.ToolRuntimeError,
     never
   >;
-  return await Effect.runPromise(Effect.flip(effect));
+  return await Effect.runPromise(Effect.flip(effect.pipe(Effect.provide(ToolPlatformBunLive))));
 };
 
 describe("@theseus.run/tools metadata", () => {
@@ -107,6 +109,24 @@ describe("@theseus.run/tools filesystem tools", () => {
 
     expect(offsetError._tag).toBe("ToolInputError");
     expect(limitError._tag).toBe("ToolInputError");
+  });
+
+  test("read_file can run against a fake tool platform", async () => {
+    const FakePlatform = Layer.succeed(ToolPlatform)({
+      exists: (path) => Effect.succeed(path === "virtual.txt"),
+      readFileString: () => Effect.succeed("alpha\nbeta"),
+    });
+
+    const effect = Tool.callTool(readFile, { path: "virtual.txt" }) as Effect.Effect<
+      Tool.ToolOutcome<unknown, unknown, unknown>,
+      Tool.ToolRuntimeError,
+      typeof ToolPlatform
+    >;
+    const result = await Effect.runPromise(effect.pipe(Effect.provide(FakePlatform)));
+
+    expect(
+      result.presentation.content.map((content) => (content._tag === "text" ? content.text : "")),
+    ).toContain("1\talpha\n2\tbeta");
   });
 
   test("grep rejects out-of-range context_lines at schema boundary", async () => {

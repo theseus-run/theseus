@@ -6,12 +6,18 @@
  * `CurrentDispatch`.
  */
 
-import { Clock, Context, Effect, Layer, Random, Ref } from "effect";
+import { Clock, Context, Data, Effect, Layer, Random, Ref } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { ModelRequest } from "./model-gateway.ts";
 import type { DispatchEvent, DispatchOptions, Usage } from "./types.ts";
 
 export type DispatchId = string & { readonly _brand: unique symbol };
+
+export class DispatchStoreDecodeFailed extends Data.TaggedError("DispatchStoreDecodeFailed")<{
+  readonly source: string;
+  readonly reason: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DispatchCreate {
   readonly name: string;
@@ -66,11 +72,15 @@ export class DispatchStore extends Context.Service<
       messages: ReadonlyArray<Prompt.MessageEncoded>,
       usage: Usage,
     ) => Effect.Effect<void>;
-    readonly events: (dispatchId?: string) => Effect.Effect<ReadonlyArray<DispatchEventEntry>>;
-    readonly restore: (dispatchId: string) => Effect.Effect<DispatchOptions | undefined>;
+    readonly events: (
+      dispatchId?: string,
+    ) => Effect.Effect<ReadonlyArray<DispatchEventEntry>, DispatchStoreDecodeFailed>;
+    readonly restore: (
+      dispatchId: string,
+    ) => Effect.Effect<DispatchOptions | undefined, DispatchStoreDecodeFailed>;
     readonly list: (options?: {
       readonly limit?: number;
-    }) => Effect.Effect<ReadonlyArray<DispatchSummary>>;
+    }) => Effect.Effect<ReadonlyArray<DispatchSummary>, DispatchStoreDecodeFailed>;
   }
 >()("DispatchStore") {}
 

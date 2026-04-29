@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Redacted, Stream } from "effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -12,7 +12,7 @@ const prompt = {
 } as unknown as Prompt.Prompt;
 
 const config = OpenAIConfig.of({
-  apiKey: "test-key",
+  apiKey: Redacted.make("test-key"),
   apiUrl: "https://api.openai.test",
   model: "gpt-5.5",
   maxOutputTokens: 128,

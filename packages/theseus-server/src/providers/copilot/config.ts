@@ -1,5 +1,4 @@
-import { Context, Effect, Layer } from "effect";
-import { getEnvInt, ServerEnv } from "../../env.ts";
+import { Config, ConfigProvider, Context, Effect, Layer } from "effect";
 
 export const CopilotConfigDefaults = {
   model: "gpt-5.4",
@@ -20,12 +19,20 @@ export class CopilotConfig extends Context.Service<
 
 export const CopilotConfigLive = Layer.effect(CopilotConfig)(
   Effect.gen(function* () {
-    const env = yield* ServerEnv;
+    const provider = yield* ConfigProvider.ConfigProvider;
     return CopilotConfig.of({
-      model: env.get("THESEUS_MODEL") ?? CopilotConfigDefaults.model,
-      maxTokens: getEnvInt(env, "THESEUS_MAX_TOKENS", CopilotConfigDefaults.maxTokens),
-      copilotAuthUrl: env.get("THESEUS_COPILOT_AUTH_URL") ?? CopilotConfigDefaults.copilotAuthUrl,
-      copilotApiUrl: env.get("THESEUS_COPILOT_API_URL") ?? CopilotConfigDefaults.copilotApiUrl,
+      model: yield* Config.string("THESEUS_MODEL")
+        .pipe(Config.withDefault(CopilotConfigDefaults.model))
+        .parse(provider),
+      maxTokens: yield* Config.number("THESEUS_MAX_TOKENS")
+        .pipe(Config.withDefault(CopilotConfigDefaults.maxTokens))
+        .parse(provider),
+      copilotAuthUrl: yield* Config.string("THESEUS_COPILOT_AUTH_URL")
+        .pipe(Config.withDefault(CopilotConfigDefaults.copilotAuthUrl))
+        .parse(provider),
+      copilotApiUrl: yield* Config.string("THESEUS_COPILOT_API_URL")
+        .pipe(Config.withDefault(CopilotConfigDefaults.copilotApiUrl))
+        .parse(provider),
     });
   }),
 );

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type * as AiTool from "effect/unstable/ai/Tool";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -38,7 +38,7 @@ export const buildResponsesRequest = (
 
     return HttpClientRequest.post(`${config.apiUrl}/v1/responses`).pipe(
       HttpClientRequest.setHeaders({
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${Redacted.value(config.apiKey)}`,
         "Content-Type": "application/json",
         Accept: streaming ? "text/event-stream" : "application/json",
       }),

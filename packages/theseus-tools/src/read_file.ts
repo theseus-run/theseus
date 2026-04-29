@@ -1,22 +1,20 @@
 /**
  * read_file — Read file contents with offset/limit.
  *
- * Uses Bun.file() for lazy loading, MIME type binary detection, and size pre-check.
+ * Uses ToolPlatform for filesystem access.
  * Returns line-numbered content with truncation indicator.
  *
- * Effect.gen pipeline: exists check → binary detection → read → format.
- * Distinct errors: not-found (fail), binary (succeed with info), read error (fail).
+ * Effect.gen pipeline: exists check -> read -> format.
+ * Distinct errors: not-found (fail), read error (fail).
  */
 
 import * as Tool from "@theseus.run/core/Tool";
 import { Effect, Schema } from "effect";
 import { ToolFailure } from "./failure.ts";
+import { ToolPlatform } from "./platform.ts";
 
 const MAX_LINES = 2000;
 const MAX_LINE_LENGTH = 2000;
-
-/** MIME types we treat as text even though they don't start with "text/" */
-const TEXT_MIMES = ["json", "xml", "javascript", "typescript", "ecmascript"];
 
 const Input = Schema.Struct({
   path: Schema.String,
@@ -38,14 +36,6 @@ const ensureExists = (exists: boolean, path: string): Effect.Effect<void, ToolFa
 const formatLine = (line: string): string => {
   if (line.length <= MAX_LINE_LENGTH) return line;
   return `${line.slice(0, MAX_LINE_LENGTH)}...`;
-};
-
-const binaryDescription = (file: Pick<Bun.BunFile, "type" | "size">): string | undefined => {
-  const mime = file.type;
-  if (!mime || mime.startsWith("text/") || TEXT_MIMES.some((t) => mime.includes(t))) {
-    return undefined;
-  }
-  return `Binary file (${mime}, ${file.size} bytes)`;
 };
 
 const formatContent = (content: string, offset?: number, limit?: number): string => {
@@ -71,21 +61,6 @@ const formatContent = (content: string, offset?: number, limit?: number): string
   return formatted;
 };
 
-const readTextFile = (
-  file: Bun.BunFile,
-  path: string,
-  offset?: number,
-  limit?: number,
-): Effect.Effect<string, ToolFailure> => {
-  const binary = binaryDescription(file);
-  if (binary) return Effect.succeed(binary);
-
-  return Effect.tryPromise({
-    try: () => file.text(),
-    catch: (e) => new ToolFailure({ message: `Cannot read ${path}: ${e}` }),
-  }).pipe(Effect.map((content) => formatContent(content, offset, limit)));
-};
-
 export const readFile = Tool.defineTool({
   name: "read_file",
   description:
@@ -96,15 +71,11 @@ export const readFile = Tool.defineTool({
   policy: { interaction: "observe" },
   execute: ({ path, offset, limit }) =>
     Effect.gen(function* () {
-      const file = Bun.file(path);
-
-      // Step 1: existence check
-      const exists = yield* Effect.tryPromise({
-        try: () => file.exists(),
-        catch: (e) => new ToolFailure({ message: `Cannot access ${path}: ${e}` }),
-      });
+      const platform = yield* ToolPlatform;
+      const exists = yield* platform.exists(path);
       yield* ensureExists(exists, path);
 
-      return yield* readTextFile(file, path, offset, limit);
+      const content = yield* platform.readFileString(path);
+      return formatContent(content, offset, limit);
     }),
 });

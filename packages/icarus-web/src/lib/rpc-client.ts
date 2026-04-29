@@ -5,8 +5,17 @@
  * schema codecs, and stream lifecycle are delegated to Effect RPC.
  */
 
-import { TheseusRpc } from "@theseus.run/core/Rpc";
-import { Effect, Exit, Layer, Scope, Stream } from "effect";
+import {
+  type DispatchEventEntrySchema,
+  type DispatchEventSchema,
+  type DispatchSessionSchema,
+  type MissionSessionSchema,
+  type ResearchPocEventSchema,
+  type RuntimeDispatchEventSchema,
+  TheseusRpc,
+  type WorkTreeNodeSessionSchema,
+} from "@theseus.run/core/Rpc";
+import { Effect, Exit, Layer, type Schema, Scope, Stream } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as Socket from "effect/unstable/socket/Socket";
 
@@ -14,168 +23,18 @@ import * as Socket from "effect/unstable/socket/Socket";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Serialized dispatch event matching DispatchEventSchema */
-export interface CortexSignal {
-  readonly id: string;
-  readonly nodeId: string;
-  readonly slot:
-    | "harness"
-    | "workspace"
-    | "mission"
-    | "work-node"
-    | "observations"
-    | "history"
-    | "recall";
-  readonly authority: "system" | "developer" | "user" | "assistant" | "tool";
-  readonly priority: number;
-  readonly text: string;
-}
-
-export interface DispatchEvent {
-  readonly _tag: string;
-  readonly name?: string;
-  readonly iteration?: number;
-  readonly signals?: ReadonlyArray<CortexSignal>;
-  readonly historyMessageCount?: number;
-  readonly cortexMessageCount?: number;
-  readonly promptMessageCount?: number;
-  readonly tool?: string;
-  readonly content?: string;
-  readonly structured?: unknown;
-  readonly args?: unknown;
-  readonly error?: unknown;
-  readonly isError?: boolean;
-  readonly satellite?: string;
-  readonly phase?: string;
-  readonly action?: string;
-  readonly injection?: string;
-  readonly detail?: string | null;
-  readonly reason?: string;
-  readonly result?: {
-    readonly dispatchId: string;
-    readonly name: string;
-    readonly content: string;
-    readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
-  };
-}
-
-export interface DispatchEventEntry {
-  readonly dispatchId: string;
-  readonly timestamp: number;
-  readonly event: DispatchEvent;
-}
-
-export interface MissionSession {
-  readonly missionId: string;
-  readonly capsuleId: string;
-  readonly goal: string;
-  readonly criteria: ReadonlyArray<string>;
-  readonly state: "pending" | "running" | "done" | "failed";
-}
-
-export interface DispatchSession {
-  readonly workNodeId: string;
-  readonly parentWorkNodeId?: string | null;
-  readonly kind: "dispatch";
-  readonly relation: WorkNodeRelation;
-  readonly label: string;
-  readonly control: WorkNodeControlDescriptor;
-  readonly dispatchId: string;
-  readonly missionId: string;
-  readonly capsuleId: string;
-  readonly name: string;
-  readonly modelRequest?: ModelRequest | null;
-  readonly iteration: number;
-  readonly state: WorkNodeState;
-  readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
-}
-
-export interface WorkNodeSession {
-  readonly workNodeId: string;
-  readonly missionId: string;
-  readonly capsuleId: string;
-  readonly parentWorkNodeId?: string | null;
-  readonly kind: "dispatch" | "task" | "external";
-  readonly relation: WorkNodeRelation;
-  readonly label: string;
-  readonly state: WorkNodeState;
-  readonly control: WorkNodeControlDescriptor;
-  readonly startedAt?: number | null;
-  readonly completedAt?: number | null;
-}
-
-export type WorkNodeRelation = "root" | "delegated" | "continued" | "branched";
-export type WorkNodeState =
-  | "pending"
-  | "running"
-  | "paused"
-  | "blocked"
-  | "done"
-  | "failed"
-  | "aborted";
-export type WorkControlCapability =
-  | { readonly _tag: "Supported" }
-  | { readonly _tag: "Unsupported"; readonly reason: string };
-export interface WorkNodeControlDescriptor {
-  readonly interrupt: WorkControlCapability;
-  readonly injectGuidance: WorkControlCapability;
-  readonly pause: WorkControlCapability;
-  readonly resume: WorkControlCapability;
-  readonly stop: WorkControlCapability;
-  readonly requestStatus: WorkControlCapability;
-}
-export type ModelRequest =
-  | {
-      readonly provider: "openai";
-      readonly model: string;
-      readonly maxOutputTokens?: number | null;
-      readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh" | null;
-      readonly textVerbosity?: "low" | "medium" | "high" | null;
-    }
-  | {
-      readonly provider: "copilot";
-      readonly model: string;
-      readonly maxTokens?: number | null;
-    };
-
-export type RuntimeDispatchEvent =
-  | {
-      readonly _tag: "WorkNodeStarted";
-      readonly node: WorkNodeSession;
-    }
-  | {
-      readonly _tag: "DispatchSessionStarted";
-      readonly session: DispatchSession;
-    }
-  | {
-      readonly _tag: "DispatchEvent";
-      readonly workNodeId: string;
-      readonly dispatchId: string;
-      readonly missionId: string;
-      readonly capsuleId: string;
-      readonly event: DispatchEvent;
-    }
-  | {
-      readonly _tag: "WorkNodeStateChanged";
-      readonly workNodeId: string;
-      readonly missionId: string;
-      readonly state: WorkNodeState;
-      readonly reason?: string | null;
-    }
-  | {
-      readonly _tag: "RuntimeProcessFailed";
-      readonly workNodeId: string;
-      readonly missionId: string;
-      readonly process: string;
-      readonly reason: string;
-    };
-
-export type ResearchPocEvent =
-  | {
-      readonly _tag: "MissionCreated";
-      readonly mission: MissionSession;
-    }
-  | RuntimeDispatchEvent;
+export type DispatchEvent = Schema.Schema.Type<typeof DispatchEventSchema>;
+export type DispatchEventEntry = Schema.Schema.Type<typeof DispatchEventEntrySchema>;
+export type MissionSession = Schema.Schema.Type<typeof MissionSessionSchema>;
+export type DispatchSession = Schema.Schema.Type<typeof DispatchSessionSchema>;
+export type WorkNodeSession = Schema.Schema.Type<typeof WorkTreeNodeSessionSchema>;
+export type WorkNodeRelation = WorkNodeSession["relation"];
+export type WorkNodeState = WorkNodeSession["state"];
+export type WorkControlCapability = WorkNodeSession["control"]["pause"];
+export type WorkNodeControlDescriptor = WorkNodeSession["control"];
+export type ModelRequest = NonNullable<DispatchSession["modelRequest"]>;
+export type RuntimeDispatchEvent = Schema.Schema.Type<typeof RuntimeDispatchEventSchema>;
+export type ResearchPocEvent = Schema.Schema.Type<typeof ResearchPocEventSchema>;
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type ConnectionListener = (state: ConnectionState) => void;

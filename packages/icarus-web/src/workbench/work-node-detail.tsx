@@ -222,5 +222,6 @@ function WorkNodeDebug({
 }
 
 function failureFromEvents(events: ReadonlyArray<DispatchEventEntry>): string | undefined {
-  return [...events].reverse().find((entry) => entry.event._tag === "Failed")?.event.reason;
+  const failed = [...events].reverse().find((entry) => entry.event._tag === "Failed")?.event;
+  return failed?._tag === "Failed" ? failed.reason : undefined;
 }

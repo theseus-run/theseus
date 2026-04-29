@@ -18,8 +18,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/sql-sqlite-bun": "catalog:effect",
     "@theseus.run/core": "workspace:*",
-    "effect": "4.0.0-beta.50"
+    "effect": "catalog:effect"
   },
   "devDependencies": {
     "@types/bun": "^1.3.10",

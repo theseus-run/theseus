@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as Dispatch from "@theseus.run/core/Dispatch";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -9,6 +9,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { parseLanguageModelProvider, ServerConfig, ServerConfigError } from "../config.ts";
 import { CopilotConfig, CopilotConfigDefaults } from "./copilot/config.ts";
 import { ServerLanguageModelGatewayLive } from "./language-model.ts";
+import { ModelConcurrencyLive } from "./model-concurrency.ts";
 import { OpenAIConfig, OpenAIConfigDefaults } from "./openai/config.ts";
 
 const prompt = {
@@ -81,6 +82,7 @@ describe("ServerLanguageModelGatewayLive", () => {
             Layer.mergeAll(
               Layer.succeed(HttpClient.HttpClient)(http),
               TestClock.layer(),
+              ModelConcurrencyLive,
               Layer.succeed(ServerConfig)({
                 port: 4800,
                 languageModelProvider: "copilot",
@@ -89,7 +91,7 @@ describe("ServerLanguageModelGatewayLive", () => {
                 ...CopilotConfigDefaults,
               }),
               Layer.succeed(OpenAIConfig)({
-                apiKey: "test-key",
+                apiKey: Redacted.make("test-key"),
                 apiUrl: OpenAIConfigDefaults.apiUrl,
                 model: "gpt-default",
                 maxOutputTokens: OpenAIConfigDefaults.maxOutputTokens,
