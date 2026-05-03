@@ -10,8 +10,7 @@ import { makeOpenAILanguageModel } from "./openai-lm.ts";
 
 type LanguageModelService = (typeof LanguageModel.LanguageModel)["Service"];
 
-interface ProviderBinding<Provider extends LanguageModelProvider = LanguageModelProvider> {
-  readonly provider: Provider;
+interface ProviderBinding {
   readonly resolve: (
     request: Dispatch.ModelRequest | undefined,
   ) => Effect.Effect<LanguageModelResolution>;
@@ -71,7 +70,6 @@ export const LanguageModelProviderRegistryLive = Layer.effect(LanguageModelProvi
 
     const bindings = {
       copilot: {
-        provider: "copilot",
         resolve: (request) => {
           const providerRequest = Match.value(request).pipe(
             Match.when({ provider: "copilot" }, (matched) => matched),
@@ -91,7 +89,6 @@ export const LanguageModelProviderRegistryLive = Layer.effect(LanguageModelProvi
         },
       },
       openai: {
-        provider: "openai",
         resolve: (request) => {
           const providerRequest = Match.value(request).pipe(
             Match.when({ provider: "openai" }, (matched) => matched),
@@ -110,7 +107,7 @@ export const LanguageModelProviderRegistryLive = Layer.effect(LanguageModelProvi
           );
         },
       },
-    } satisfies { readonly [Provider in LanguageModelProvider]: ProviderBinding<Provider> };
+    } satisfies { readonly [Provider in LanguageModelProvider]: ProviderBinding };
 
     return LanguageModelProviderRegistry.of({
       resolve: (request, fallback) => {
